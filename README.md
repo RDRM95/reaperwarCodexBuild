@@ -68,4 +68,6 @@ Architecture, lore sourcing, AU rules, known issues and the changelog are docume
 
 ## Deployment
 
-`.github/workflows/deploy.yml` builds with `VITE_BASE=/<repo>/` and publishes `dist/` to GitHub Pages on every push to `main` (or manually via *workflow_dispatch*). One-time setup in the repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**. `.github/workflows/ci.yml` runs typecheck, unit tests, the production build and the Playwright suite on every branch.
+`.github/workflows/deploy.yml` builds with `VITE_BASE=/<repo>/` and publishes `dist/` to GitHub Pages on every push to `main` or `codex/apex-combat-overhaul` (or manually via *workflow_dispatch*). One-time setup in the repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**. `.github/workflows/ci.yml` runs typecheck, unit tests, the production build and the Playwright suite on every branch.
+
+If the site shows plain, unstyled “INITIALISING COMBAT SIMULATION…” text, it is serving the source `index.html` instead of the compiled application. Select **Source: GitHub Actions**, then run **Actions → Deploy to GitHub Pages → Run workflow** on the branch containing the updated project. The workflow publishes `dist/`; publishing the repository root does not compile TypeScript or load its imported styles.

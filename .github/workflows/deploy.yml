@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/apex-combat-overhaul]
   workflow_dispatch:
 
 permissions:
@@ -31,9 +31,6 @@ jobs:
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
       - uses: actions/configure-pages@v5
-        with:
-          # Try to switch the repository to Pages-from-Actions automatically on first run.
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
