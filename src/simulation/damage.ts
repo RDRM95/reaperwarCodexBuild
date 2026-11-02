@@ -13,6 +13,8 @@ export interface DamageOutcome {
   /** Subsystem knocked down (if any). */
   subsystem?: { name: keyof Subsystems; level: number };
   destroyed: boolean;
+  internalDetonated?: boolean;
+  internalWarheadDamage?: number;
 }
 
 /**
@@ -70,6 +72,27 @@ export function applyDamage(target: ShipState, raw: number, weapon: EffectiveWea
     out.destroyed = true;
   }
   return out;
+}
+
+/** A HADES penetrator must first reach the hull. Its reserved warhead then
+ * detonates inside, bypassing the exterior barrier/armour. Both stages share
+ * the existing shot budget; this is not an extra arbitrary damage multiplier.
+ */
+export function applyProjectileDamage(target: ShipState, raw: number, weapon: EffectiveWeapon, rng: Rng, now: number): DamageOutcome {
+  const fraction = weapon.kind === 'mass_accelerator' ? Math.max(0, Math.min(0.8, weapon.internalWarheadFraction ?? 0)) : 0;
+  if (fraction === 0) return applyDamage(target, raw, weapon, rng, now);
+  const kinetic = applyDamage(target, raw * (1 - fraction), weapon, rng, now);
+  if (kinetic.hullDamage <= 0) return kinetic;
+  const internal = applyDamage(target, raw * fraction, { ...weapon, damageType: 'warhead', armourBypass: 1, barrierEfficiencyMultiplier: 0 }, rng, now);
+  return {
+    hullDamage: kinetic.hullDamage + internal.hullDamage,
+    barrierDamage: kinetic.barrierDamage,
+    barriersCollapsed: kinetic.barriersCollapsed,
+    destroyed: kinetic.destroyed || internal.destroyed,
+    subsystem: internal.subsystem ?? kinetic.subsystem,
+    internalDetonated: true,
+    internalWarheadDamage: internal.hullDamage,
+  };
 }
 
 /**

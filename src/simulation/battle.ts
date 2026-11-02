@@ -22,7 +22,7 @@ import type { FactionId } from '@/data/types';
 import { WEAPONS, getWeapon } from '@/data/weapons';
 import { applyRulesToShip, applyRulesToWeapon, cloneRules, type EffectiveWeapon, type RuleSet } from '@/timelines/rules';
 import { fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
-import { applyDamage, hitProbability } from './damage';
+import { applyDamage, applyProjectileDamage, hitProbability } from './damage';
 import { assignSlots } from './formations';
 import { summarise } from './results';
 import { BATTLESPACE_SCALE as S } from './constants';
@@ -844,7 +844,7 @@ export class BattleSimulation implements AiContext {
   }
 
   private applyHit(shooter: ShipState, target: ShipState, weapon: EffectiveWeapon, damage: number, pos: Vec3): void {
-    const out = applyDamage(target, damage, weapon, this.rng, this.time);
+    const out = applyProjectileDamage(target, damage, weapon, this.rng, this.time);
     shooter.stats.hits++;
     shooter.stats.damageDealt += out.hullDamage + out.barrierDamage;
     this.emit({
@@ -858,6 +858,8 @@ export class BattleSimulation implements AiContext {
       hullDamage: out.hullDamage,
       pos,
     });
+    if (out.internalDetonated) this.emit({ t: this.time, type: 'hades_detonation', shipId: shooter.id, targetId: target.id, weaponId: weapon.id,
+      internalDamage: out.internalWarheadDamage ?? 0, payloadDamage: damage * (weapon.internalWarheadFraction ?? 0), pos: clone(target.pos) });
     if (out.barriersCollapsed) this.emit({ t: this.time, type: 'barriers_down', shipId: target.id });
     if (out.subsystem) this.emit({ t: this.time, type: 'subsystem_disabled', shipId: target.id, subsystem: out.subsystem.name, level: out.subsystem.level });
     if (out.destroyed) this.destroyShip(target, shooter);

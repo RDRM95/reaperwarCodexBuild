@@ -242,6 +242,9 @@ export class BattleController {
         else if (e.kind === 'disruptor_torpedo') audio.play('torpedo', d, 0.5);
         break;
       }
+      case 'hades_detonation':
+        audio.play('hades_internal', dist(e.pos), Math.min(1, Math.sqrt(e.payloadDamage / 1000)));
+        break;
       case 'projectile_impact': {
         if (e.damage < 100) break;
         const d = dist(e.pos);

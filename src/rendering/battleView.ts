@@ -397,6 +397,14 @@ export class BattleView {
           this.effects.impact(pos, e.barrierDamage, e.hullDamage, v ? v.built.lengthUnits * 0.55 : 2, () => (v && !v.removed ? v.built.group.position : undefined), e.damageType);
           break;
         }
+        case 'hades_detonation': {
+          const ship = this.sim.getShip(e.targetId);
+          const visual = ship ? this.visuals.get(ship.id) : undefined;
+          if (!ship || !visual || visual.removed) break;
+          this.effects.hadesBurst(new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM), visual.built.lengthUnits,
+            e.payloadDamage, new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z), new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM));
+          break;
+        }
         case 'barriers_down': {
           const ship = this.sim.getShip(e.shipId);
           const visual = ship ? this.visuals.get(ship.id) : undefined;

@@ -147,3 +147,30 @@ test('battery diagnostics stay observational and the clean HUD cycle hides all n
   await expect(page.locator('[data-action="hold-primary-fire"]')).toBeVisible();
   await expect(page.locator('[data-action="ship-battery-status"]')).toBeVisible();
 });
+
+
+test('a real HADES penetrating impact drives the nuclear flash and shock-ring renderer', async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('console', m => { if (m.type() === 'error' && /webgl|shader|three|program/i.test(m.text())) errors.push(m.text()); });
+  await launchBattery(page);
+  await expect(page.locator('[data-action="hades-payload-note"]')).toContainText('internal nuclear warheads');
+  const result = await page.evaluate(() => {
+    const b = (window as unknown as { reaperwar: App }).reaperwar.battle!;
+    const shooter = b.sim.ships.find(s => s.fleetId === 'battery-a')!;
+    const target = b.sim.ships.find(s => s.side === 'B')!;
+    const gun = shooter.weapons.find(w => w.def.antiCapital && w.def.kind === 'mass_accelerator')!;
+    b.view.followId = target.id; b.setCamera('follow');
+    for (let i = 0; i < 60; i++) b.view.update(1 / 60, 1);
+    target.barriers = 0; target.hull = target.maxHull = 1000000;
+    b.sim.projectiles.push({ id: 999000, shooterId: shooter.id, side: shooter.side,
+      weapon: { ...gun.def, damage: 2000 }, pos: { x: target.pos.x, y: target.pos.y, z: target.pos.z - target.radiusKm - 0.1 },
+      prevPos: { ...target.pos }, vel: { x: 0, y: 0, z: gun.def.projectileSpeed }, ttl: 2, intendedTargetId: target.id });
+    b.sim.step(); b.view.update(0.01, 1); b.view.render();
+    return { detonations: b.sim.events.filter(e => e.type === 'hades_detonation').length, rings: b.view.effects.nuclearRingCount,
+      glError: b.view.renderer.getContext().getError() };
+  });
+  expect(result).toEqual({ detonations: 1, rings: 1, glError: 0 });
+  await page.screenshot({ path: testInfo.outputPath('hades-internal-detonation.png') });
+  expect(errors).toEqual([]);
+});

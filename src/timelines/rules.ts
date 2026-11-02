@@ -218,6 +218,8 @@ export interface EffectiveWeapon extends WeaponDef {
   armourBypass: number;
   /** Multiplier on barrier efficiency against this weapon (HADES lowers it). */
   barrierEfficiencyMultiplier: number;
+  /** AU simulation estimate: fraction of the existing shot budget reserved for an internal HADES warhead. */
+  internalWarheadFraction?: number;
   /** Original weapon id if this one was substituted by a rule. */
   substitutedFrom?: string;
 }
@@ -284,6 +286,7 @@ export function applyRulesToWeapon(
     accuracy: Math.min(0.99, w.accuracy * t.accuracy),
     armourBypass: hades ? 0.5 : 0,
     barrierEfficiencyMultiplier: hades ? 0.6 : 1,
+    internalWarheadFraction: hades ? 0.35 : 0,
     substitutedFrom,
   };
 }

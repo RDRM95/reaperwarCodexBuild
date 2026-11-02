@@ -129,9 +129,10 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       el('div', { class: 'row', style: { marginBottom: '8px' } }, [el('label', { class: 'field', style: { flex: '1' } }, ['Formation', formationSel]), el('label', { class: 'field', style: { flex: '1' } }, ['Priority', prioritySel])]),
       ordersPanel,
       el('div', { class: 'spinal-fire-controls' }, [
-        el('label', { class: 'field' }, ['Spinal fire scope', fireScope]),
+        el('label', { class: 'field' }, [rules.special.hadesRounds ? 'HADES battery scope (AU)' : 'Spinal fire scope', fireScope]),
         el('div', { class: 'orders', style: { marginTop: '6px' } }, [holdPrimaryBtn, releasePrimaryBtn]),
         batteryReadiness,
+        rules.special.hadesRounds ? el('div', { class: 'dim', 'data-action': 'hades-payload-note', style: { fontSize: '10px' } }, 'HADES penetrators carry internal nuclear warheads. Concentrated battery salvos create successive internal detonations after penetration.') : null,
         el('div', { class: 'dim', style: { fontSize: '10px' } }, 'Scope applies to spinal fire only. Movement and other orders command all player fleets. Secondary weapons and point defence remain active.'),
       ]),
       el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Right-click enemy: attack · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD'),

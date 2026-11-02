@@ -10,6 +10,7 @@ export type SoundId =
   | 'alert'
   | 'ma_small'
   | 'ma_large'
+  | 'hades_internal'
   | 'thanix'
   | 'reaper_beam'
   | 'impact_barrier'
@@ -157,6 +158,11 @@ export class AudioEngine {
         this.tone('sawtooth', 110, 28, 0.5, 0.45 * att, bus);
         this.tone('sine', 55, 30, 0.7, 0.4 * att, bus);
         this.noise(0.08, 'highpass', 3000, 1, 0.3 * att, bus);
+        break;
+      case 'hades_internal':
+        this.noise(0.055, 'highpass', 2600, 1, 0.3 * att, bus);
+        this.tone('sine', 78, 23, 1.5, 0.55 * att, bus, 0.16);
+        this.noise(1.2, 'lowpass', 280, 0.6, 0.55 * att, bus, 0.16, 1.2);
         break;
       case 'thanix':
         this.noise(1.6, 'bandpass', 700, 3, 0.35 * att, bus, 0, 1.4);

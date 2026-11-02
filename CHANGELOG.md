@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.1 — HADES internal nuclear payloads
+
+- HADES rounds resolve kinetic entry followed by an internal nuclear burst only after confirmed hull penetration. The existing shot budget is split 65% kinetic / 35% warhead (AU simulation estimate), rather than adding a free damage multiplier; the internal burst bypasses exterior barriers and armour. Canon ammunition is unchanged.
+- Confirmed detonations drive a white flash, bounded expanding shock rings, incandescent venting/smoke and a procedural crack followed by a delayed bass impact. Small warheads and massive salvos respect effect/audio budgets.
+- The fleet control panel identifies the HADES battery and its nuclear penetrators. Existing hold/release commands concentrate successive penetrations without ignoring readiness or forcing hits.
+- Added deterministic payload, shield-stop, canonical isolation and real-collision-to-WebGL regression checks.
+
 ## 0.12.0 — Fleet command and cinematic polish
 
 - Added scoped Hold/Resume spinal fire and Release Volley commands. Organic dreadnoughts fire one ready salvo; heat, ammunition, arcs and cooldowns still apply, and escorts/PD keep defending. Reapers remain relentless.

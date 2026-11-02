@@ -55,6 +55,10 @@ export class EffectsSystem {
   private debris: Debris[] = [];
   readonly barriers = new HullBarriers();
   private spritePool: THREE.Sprite[] = [];
+  private nuclearRings: { mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; life: number; size: number }[] = [];
+  private ringPool: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
+  private readonly nuclearRingGeometry = new THREE.TorusGeometry(1, 0.025, 5, 64);
+  get nuclearRingCount(): number { return this.nuclearRings.length; }
 
   // Tracers (instanced).
   private readonly tracerMax = 1024;
@@ -121,6 +125,7 @@ export class EffectsSystem {
     }
     const m = s.material as THREE.SpriteMaterial;
     m.map = tex;
+    m.depthTest = true;
     m.color.setHex(color);
     m.opacity = 1;
     m.needsUpdate = true;
@@ -163,6 +168,31 @@ export class EffectsSystem {
         this.spark(pos, v, 0.5 + this.rng.next() * 0.5, size * 0.25, size * 0.04, this.fireTex, 0xffb060);
       }
       if (hullDamage > 400) this.spark(pos, new THREE.Vector3(0, 0.5, 0), 2.5, size * 0.8, size * 2.6, this.smokeTex, 0x888888);
+    }
+  }
+
+  /** Confirmed internal HADES burst: white flash, expanding shock ring and
+   * incandescent vent jets. Render work is capped during mass battery salvos. */
+  hadesBurst(position: THREE.Vector3, length: number, payloadDamage: number, heading: THREE.Vector3, velocity = new THREE.Vector3()): void {
+    if (this.sparks.length >= 900) return;
+    const yieldScale = Math.min(1.5, Math.sqrt(Math.max(0, payloadDamage) / 1000));
+    const size = Math.max(0.3, Math.min(6, length * 0.22) * yieldScale);
+    const core = this.getSprite(this.blueTex, 0xffffff);
+    core.position.copy(position); core.scale.setScalar(size);
+    (core.material as THREE.SpriteMaterial).depthTest = false;
+    this.sparks.push({ sprite: core, vel: velocity.clone(), life: 0.14, maxLife: 0.14, startScale: size * 0.5, endScale: size * 2.5, color: new THREE.Color(0xffffff) });
+    if (payloadDamage >= 200 && this.nuclearRings.length < 12) {
+      const mesh = this.ringPool.pop() ?? new THREE.Mesh(this.nuclearRingGeometry, new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      mesh.visible = true; mesh.position.copy(position); mesh.scale.setScalar(size * 0.4);
+      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), heading.clone().normalize());
+      this.group.add(mesh); this.nuclearRings.push({ mesh, life: 0.85, size });
+      this.flashLight.position.copy(position); this.flashLight.intensity = Math.max(this.flashLight.intensity, size * 6); this.flashLightLife = 0.2;
+    }
+    for (let i = 0; i < (payloadDamage >= 200 ? 10 : 3); i++) {
+      const jet = new THREE.Vector3(this.rng.gaussian(), this.rng.gaussian(), this.rng.gaussian()).normalize();
+      const origin = position.clone().addScaledVector(jet, Math.min(size * 0.5, length * 0.08));
+      this.spark(origin, jet.multiplyScalar(size * 1.8).add(velocity), 1.0 + this.rng.next() * 1.4, size * 0.22, size * 0.04, this.fireTex, 0xffd6a0);
+      if (i < 3) this.spark(origin, velocity.clone().add(new THREE.Vector3(0, size * 0.18, 0)), 2.0 + this.rng.next(), size * 0.4, size * 1.6, this.smokeTex, 0x8f99a6);
     }
   }
 
@@ -333,6 +363,15 @@ export class EffectsSystem {
   }
 
   update(dt: number): void {
+    const rings = [];
+    for (const ring of this.nuclearRings) {
+      ring.life -= dt;
+      if (ring.life <= 0) { this.group.remove(ring.mesh); ring.mesh.visible = false; this.ringPool.push(ring.mesh); continue; }
+      ring.mesh.scale.setScalar(ring.size * (0.4 + (1 - ring.life / 0.85) * 4.5));
+      ring.mesh.material.opacity = 0.7 * ring.life / 0.85;
+      rings.push(ring);
+    }
+    this.nuclearRings = rings;
     // Sparks.
     const keep: Spark[] = [];
     for (const s of this.sparks) {
@@ -407,6 +446,8 @@ export class EffectsSystem {
     for (const texture of [this.flashTex, this.fireTex, this.smokeTex, this.blueTex, this.redTex]) texture.dispose();
     for (const geometry of this.debrisGeo) geometry.dispose();
     this.debrisMat.dispose();
+    this.nuclearRingGeometry.dispose();
+    for (const ring of this.ringPool) ring.material.dispose();
   }
 
   clear(): void {
@@ -415,6 +456,8 @@ export class EffectsSystem {
     for (const d of this.debris) this.removeDebris(d.mesh);
     this.debris = [];
     this.barriers.clear();
+    for (const ring of this.nuclearRings) { this.group.remove(ring.mesh); ring.mesh.visible = false; this.ringPool.push(ring.mesh); }
+    this.nuclearRings = [];
     this.setBeams([]);
     this.setPointDefence([]);
     this.tracerMesh.count = 0;

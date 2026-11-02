@@ -31,7 +31,7 @@ The matching trace had zero persistent overlaps at 120 seconds; one transient ne
 
 ## Intentional limits
 
-This is a focused V2 pass, not all items in the design pack. Frigates, fighters, carriers and other faction hull families retain their previous models; only the listed capital/cruiser silhouettes received this pass. There is no rigid-body collision/obstacle solver, independently commanded persistent squadrons, Oculus roster, true internal nuclear HADES damage, cinematic arrival scheduler, spatial combat aggregation or performance governor in this release. Those remain separate work.
+This is a focused V2 pass, not all items in the design pack. Frigates, fighters, carriers and other faction hull families retain their previous models; only the listed capital/cruiser silhouettes received this pass. There is no rigid-body collision/obstacle solver, independently commanded persistent squadrons, Oculus roster, cinematic arrival scheduler, spatial combat aggregation or performance governor in this release. Those remain separate work.
 
 Manual commands are deterministic when given the same input schedule; the existing replay reruns the initial configuration and does not record interactive order history. Preferred standoff can still compress under enemy pressure; no indefinite kiting or forced victory was introduced. Automatic fire remains the default. Transient overlaps can occur under extreme crowding or damage; local avoidance is a bounded manoeuvring controller, not a mathematical no-collision guarantee.
 
@@ -43,3 +43,11 @@ Seed 42 on the current cloud machine; each shot bucket covers 30 simulated secon
 | --- | --- | --- | --- | --- |
 | 92 | 82.85 s | 1.193 / 24.812 ms | 2087, 6158, 2602 | 56 |
 | 368 | 120.05 s | 7.511 / 28.331 ms | 6566, 23504, 20051, 12291 | 224 |
+
+## HADES follow-up — 0.12.1
+
+HADES now resolves a kinetic entry stage followed by an internal nuclear warhead only when the penetrator actually reaches the hull. The nominal shot budget is redistributed 65%/35% (an AU tuning estimate); no arbitrary extra damage is added. This changes the distribution between shield loading and internal hull damage, so APEX casualties/timing can change. Canon rounds remain identical. The burst is a direct internal hit, not an external area-of-effect weapon, and a stopped penetrator cannot detonate inside a target.
+
+Actual penetration events drive bounded flash/ring/vent effects and a procedural delayed impact sound. The effect does not claim physical nuclear yield, postprocessed refraction, or a galaxy-wide shockwave. The fleet's manual HADES release can concentrate multiple legitimate nuclear penetrations; it cannot force hits or bypass weapon cooldowns.
+
+Validation: all 168 unit tests and 14 browser tests passed, including a real penetrating projectile driving the nuclear renderer with no WebGL errors. Production build/typecheck passed. The nuclear-impact screenshot was visually inspected.
