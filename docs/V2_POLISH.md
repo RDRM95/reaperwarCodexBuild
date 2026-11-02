@@ -75,4 +75,4 @@ Isolated 0.12.2 simulation benchmark, same seed/configurations as the earlier ta
 
 These are simulation timings, not renderer FPS. Wider fronts and the payload change alter engagement timing and casualties; neither a formation choice nor selecting APEX guarantees victory in arbitrary custom battles.
 
-CI runs these CPU-heavy deterministic simulations with at most two Vitest workers; the 2,400-tick battlegroup setup has a 60-second hook budget. All 177 assertions also passed with `CI=true` under that worker limit. No gameplay assertions or extraction conditions were relaxed to address runner timeouts.
+CI runs these CPU-heavy deterministic simulations with at most two Vitest workers; the 2,400-tick battlegroup setup has a 60-second hook budget. A real Node event-loop turn between tests lets Vitest receive its pending worker-report acknowledgments: long chains of synchronous simulations otherwise starved those acknowledgments past the runner's separate 60-second RPC deadline. All 177 assertions also passed with `CI=true` under this harness. No simulation step, gameplay assertion or extraction condition was changed to address reporting timeouts.

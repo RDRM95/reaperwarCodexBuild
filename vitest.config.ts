@@ -11,6 +11,7 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     environment: 'node',
     testTimeout: 60_000,
+    setupFiles: ['./tests/setup.ts'],
     // Deterministic fleet battles are CPU-bound. Keep shared CI runners from
     // oversubscribing long simulations and starving worker IPC updates.
     maxWorkers: 2,
