@@ -74,3 +74,5 @@ Isolated 0.12.2 simulation benchmark, same seed/configurations as the earlier ta
 | 368 | 120.05 s | 9.028 / 32.067 ms | 2704, 5576, 3829, 2999 | 190 |
 
 These are simulation timings, not renderer FPS. Wider fronts and the payload change alter engagement timing and casualties; neither a formation choice nor selecting APEX guarantees victory in arbitrary custom battles.
+
+CI runs these CPU-heavy deterministic simulations with at most two Vitest workers; the 2,400-tick battlegroup setup has a 60-second hook budget. All 177 assertions also passed with `CI=true` under that worker limit. No gameplay assertions or extraction conditions were relaxed to address runner timeouts.
