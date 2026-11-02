@@ -38,7 +38,9 @@ describe('battlegroup shape during actual engagement', () => {
     expect(sim.ships).toHaveLength(120);
     for (const role of roles) starting.set(role, extent(sim, role));
     for (let i = 0; i < Math.round(120 / SIM_DT); i++) sim.step();
-  });
+    // This intentionally runs 120 ships for 2,400 real simulation ticks.
+    // Match the test suite's simulation budget on slower shared CI runners.
+  }, 60_000);
 
   it('retains broad organic wings and ordered Reaper wings through approach and sustained fire', () => {
     expect(sim.finished).toBe(false);
