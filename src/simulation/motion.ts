@@ -23,6 +23,11 @@ export function advanceMotion(ship: ShipState, goal: MovementGoal, dt: number): 
   let force: Vec3 = sub(scale(error, omega * omega), scale(ship.vel, 2 * omega));
   const forceLength = length(force);
   if (forceLength > acceleration) force = scale(force, acceleration / forceLength);
+  if (goal.avoidanceAcceleration) {
+    force = add(force, goal.avoidanceAcceleration);
+    const combined = length(force);
+    if (combined > acceleration) force = scale(force, acceleration / combined);
+  }
   const before = ship.vel;
   let velocity = addScaled(before, force, dt);
   const speed = length(velocity);
@@ -34,7 +39,7 @@ export function advanceMotion(ship: ShipState, goal: MovementGoal, dt: number): 
   const dv = sub(velocity, before);
   const dvLength = length(dv);
   if (dvLength > acceleration * dt) velocity = addScaled(before, dv, acceleration * dt / dvLength);
-  if (dist < 0.002 && length(velocity) < acceleration * dt) {
+  if (dist < 0.002 && length(velocity) < acceleration * dt && (!goal.avoidanceAcceleration || length(goal.avoidanceAcceleration) < acceleration * 0.01)) {
     ship.pos = { ...goal.position };
     ship.vel = v3();
   } else {

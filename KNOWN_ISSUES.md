@@ -2,10 +2,11 @@
 
 ## Visual
 
-- Reaper models are recognisable (ridged body, swept arms, red seams, forward aperture) but still simpler than the source silhouette; hood plating and arm articulation need another pass.
+- Reaper and Alliance capitals have a silhouette/detail pass, with catalogue-consistent Reaper scale, but remain original procedural fan models. Other faction families have not received the same new pass; no exact screen-model match is claimed.
 - All organic hulls have limited surface detail (panel strips, turrets); no textures, only materials. Asari fleets have no frigates; the Citadel's wards are simplified boxes.
 - Fighters are rendered at 2× scale for visibility.
 - Earth is at compressed scale; cloud layer is baked into the surface texture (no separate cloud sphere).
+- Manual fire commands are deterministic under identical command schedules, but the existing replay feature reruns the initial battle configuration and does not record/reapply interactive order history.
 - Beam cylinders are flat-shaded; very close to the camera they look like ribbons.
 - Level of detail hides detail meshes and glow sprites by distance and draws far ships as points; there are no intermediate simplified hull meshes, so mid-range ships still cost two draw calls each (about 590 draw calls for a 206-ship Final Battle in the tactical view).
 
@@ -13,7 +14,7 @@
 
 - Torpedo magazines are finite (8 per tube, 2 per fighter) and fighters rearm alongside their carrier, but carriers themselves never run out of torpedoes to issue; mass accelerator rounds are treated as unlimited (canon describes very large slug magazines).
 - Fighters under canon rules still die quickly to Reaper point defence; the new burst recovery helps only marginally.
-- Fleets compress to a single formation anchor per fleet; sub-groups (squadrons) are not modelled.
+- Fleets retain one anchor with role layers and local clearance; independent persistent squadrons are not modelled.
 - Point defence will scorch nearby hulls with GARDIAN lasers when no small targets exist (low priority, low damage).
 - No automatic fleet-wide withdrawal. Damaged organics can recover behind the line; only explicit organic Retreat orders escape. Reapers ignore Retreat/Withdraw and fight until destroyed.
 - Standoff recovery is bounded to prevent endless kiting; a deliberately closing enemy can compress the range. Hull motion is kinematic, without physical collision response or obstacle navigation.

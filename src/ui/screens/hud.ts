@@ -8,6 +8,9 @@ import { FORMATION_LABELS } from '@/simulation/types';
 import { assessReapers } from '@/simulation/reaperIntel';
 import { CAMERA_MODE_LABELS, type CameraMode } from '@/rendering/cameras';
 import type { ComparisonReport } from '@/scenarios/comparison';
+import { engagementBand, shipEngagementRange } from '@/simulation/ai';
+import { BATTLESPACE_SCALE } from '@/simulation/constants';
+import { distance } from '@/core/vec3';
 
 export interface Hud {
   root: HTMLElement;
@@ -46,6 +49,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   const clock = el('div', { class: 'hud-clock' });
   const speedRow = el('div', { class: 'row hud-speed' });
   const cameraRow = el('div', { class: 'row' });
+  const watchBtn = el('button', { class: 'btn small', 'data-action': 'watch-battle', onclick: () => ctrl.toggleWatch() }, 'Watch battle');
   const shipList = el('div', { class: 'ship-list scroll' });
   const enemyList = el('div', { class: 'ship-list scroll' });
   const targetPanel = el('div', { class: 'target-panel' });
@@ -57,6 +61,18 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   const subtitle = el('div', { class: 'subtitle', style: { display: 'none' } });
   const toastHost = el('div');
   const statusLine = el('div', { class: 'mono dim', style: { fontSize: '10px', letterSpacing: '0.15em' } });
+  const fireScope = el('select', { 'data-action': 'fire-control-scope', 'aria-label': 'Spinal fire command scope' }, [
+    el('option', { value: 'all' }, 'All commanded fleets'),
+  ]);
+  const batteryReadiness = el('div', { class: 'battery-readiness mono', 'data-action': 'fleet-battery-status', 'aria-live': 'polite' });
+  const fireFleetId = () => fireScope.value === 'all' ? undefined : fireScope.value;
+  const scopedFireFleets = () => ctrl.fireControlFleetIds.filter((id) => fireScope.value === 'all' || id === fireScope.value);
+  const holdPrimaryBtn = el('button', { class: 'btn', 'data-action': 'hold-primary-fire', onclick: () => {
+    const statuses = scopedFireFleets().map((id) => sim().fleetBatteryStatus(id)).filter((s) => s && s.total > 0);
+    ctrl.setPrimaryFire(!statuses.length || !statuses.every((s) => s!.held), fireFleetId());
+  } }, 'Hold spinal fire');
+  const releasePrimaryBtn = el('button', { class: 'btn', 'data-action': 'release-primary-volley', onclick: () => ctrl.releasePrimaryVolley(fireFleetId()) }, 'Release volley');
+  fireScope.addEventListener('change', () => ctrl.hud.refresh());
 
   for (const f of Object.keys(FORMATION_LABELS) as FormationType[]) formationSel.append(el('option', { value: f }, FORMATION_LABELS[f]));
   for (const p of PRIORITIES) prioritySel.append(el('option', { value: p.id }, p.label));
@@ -95,7 +111,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       statusLine,
     ]),
     el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'SIMULATION'), speedRow, el('button', { class: 'btn small hud-panels-toggle', 'data-action': 'toggle-panels', style: { marginTop: '6px' }, onclick: () => root.classList.toggle('panels-open') }, 'Panels')]),
-    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'CAMERA'), cameraRow]),
+    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'CAMERA'), cameraRow, watchBtn]),
     el('div', { class: 'spacer' }),
     el('div', { class: 'panel orange hud-timeline', style: { maxWidth: '260px' } }, [el('div', { class: 'panel-title' }, 'TIMELINE'), el('div', { style: { fontSize: '13px' } }, rules.name), el('div', { class: 'dim', style: { fontSize: '11px' } }, rules.tagline)]),
     el('button', { class: 'btn', 'data-action': 'menu', onclick: () => toggleMenu() }, 'Menu'),
@@ -112,9 +128,15 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       el('div', { class: 'panel-title' }, 'FLEET ORDERS'),
       el('div', { class: 'row', style: { marginBottom: '8px' } }, [el('label', { class: 'field', style: { flex: '1' } }, ['Formation', formationSel]), el('label', { class: 'field', style: { flex: '1' } }, ['Priority', prioritySel])]),
       ordersPanel,
+      el('div', { class: 'spinal-fire-controls' }, [
+        el('label', { class: 'field' }, ['Spinal fire scope', fireScope]),
+        el('div', { class: 'orders', style: { marginTop: '6px' } }, [holdPrimaryBtn, releasePrimaryBtn]),
+        batteryReadiness,
+        el('div', { class: 'dim', style: { fontSize: '10px' } }, 'Scope applies to spinal fire only. Movement and other orders command all player fleets. Secondary weapons and point defence remain active.'),
+      ]),
       el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Right-click enemy: attack · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD'),
     ]),
-    el('div', { class: 'panel red', style: { flex: '1', minHeight: '0', overflow: 'auto' } }, [el('div', { class: 'panel-title' }, 'REAPER INTELLIGENCE ASSESSMENT'), intelBox]),
+    el('div', { class: 'panel red', style: { flex: '1', minHeight: '100px', overflow: 'auto' } }, [el('div', { class: 'panel-title' }, 'REAPER INTELLIGENCE ASSESSMENT'), intelBox]),
   ]);
 
   const bottom = el('div', { class: 'hud-bottom' }, [
@@ -141,7 +163,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
           } }, ctrl.hudLevel === 'full' ? 'HUD: minimal (H)' : ctrl.hudLevel === 'minimal' ? 'HUD: none for recording (H)' : 'HUD: full (H)'),
           el('button', { class: 'btn', onclick: () => {
             app.prefs.showOverlay = !app.prefs.showOverlay;
-            ctrl.overlay.visible = app.prefs.showOverlay;
+            ctrl.overlay.visible = !ctrl.hudHidden && app.prefs.showOverlay;
             void app.savePrefs();
             buildMenu();
           } }, `Tactical overlay: ${app.prefs.showOverlay ? 'ON' : 'OFF'}`),
@@ -235,8 +257,36 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     const s = sim().getShip(ids[0]);
     if (!s) return;
     const cls = getShipClass(s.classId);
-    const target = s.targetId ? sim().getShip(s.targetId) : undefined;
+    const battery = sim().primaryBatteryStatus(s.id);
+    const targetId = battery?.targetId ?? s.targetId;
+    const target = targetId ? sim().getShip(targetId) : undefined;
+    const band = engagementBand(s);
+    const reasons: Record<string, string> = {
+      ready: 'Ready', held: 'Fire held', cooling: 'Reloading', coordinating: 'Coordinating salvo',
+      out_of_range: 'Out of range', aligning: 'Aligning spinal gun', overheated: 'Overheated',
+      out_of_ammo: 'Out of ammunition', no_target: 'No target', retreating: 'Retreating',
+      destroyed: 'Destroyed', escaped: 'Escaped',
+    };
+    let batteryText = battery && battery.total > 0 ? reasons[battery.reason] ?? battery.reason.replaceAll('_', ' ') : 'No spinal battery';
+    if (battery?.reason === 'cooling') batteryText += ` ${battery.cooldownRemaining.toFixed(1)}s`;
+    if (battery && battery.total > 0) batteryText += ` · ${battery.ready}/${battery.total} ready`;
+    if (battery && battery.volleyRemaining > 0) batteryText += ` · RELEASE ${battery.volleyRemaining.toFixed(1)}s`;
+    const fleet = sim().fleets.get(s.fleetId);
+    const movement = !s.alive ? 'Destroyed' : s.escaped ? 'Escaped' : s.rearming ? 'Rearming' : s.withdrawing ? 'Recovering'
+      : fleet?.orders.order === 'retreat' ? 'Retreating' : fleet?.orders.order === 'withdraw' ? 'Withdrawing'
+      : fleet?.orders.order === 'escort' || s.escortId ? 'Escorting'
+      : fleet?.orders.order === 'hold_formation' || fleet?.orders.order === 'defend_position' ? 'Holding'
+      : !target?.alive || target.escaped ? 'Seeking target'
+      : s.engagementMode === 'approach' ? 'Closing' : s.engagementMode === 'reposition' ? 'Repositioning' : 'On station';
+    const nominalKm = (value: number) => (value / BATTLESPACE_SCALE).toFixed(1);
+    const targetDistance = battery?.distance ?? (target?.alive && !target.escaped ? distance(s.pos, target.pos) : undefined);
+    const rangeText = `${targetDistance === undefined ? '—' : nominalKm(targetDistance)} / ${nominalKm(battery?.range ?? shipEngagementRange(s))} km · band ${nominalKm(band.min)}–${nominalKm(band.max)} km`;
     const stat = (k: string, v: string) => el('div', { class: 'stat' }, [el('b', {}, k), el('span', { class: 'mono' }, v)]);
+    const feedbackStat = (k: string, v: string, action: string) => {
+      const row = stat(k, v);
+      row.dataset.action = action;
+      return row;
+    };
     targetPanel.replaceChildren(
       el('div', { style: { fontSize: '14px', marginBottom: '6px', color: FACTIONS[s.faction].colour } }, s.name),
       el('div', { class: 'dim', style: { fontSize: '11px', marginBottom: '8px' } }, `${cls.name} · ${FACTIONS[s.faction].name}`),
@@ -250,11 +300,13 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       ...(s.weapons.some((w) => w.def.burst)
         ? [stat('Point defence', s.weapons.filter((w) => w.def.burst).every((w) => (w.burstLeft ?? 1) <= 0) ? 'RECOVERING' : `${s.weapons.filter((w) => w.def.burst && (w.burstLeft ?? 1) > 0).length} / ${s.weapons.filter((w) => w.def.burst).length} mounts ready`)]
         : []),
-      stat('Speed', `${(Math.hypot(s.vel.x, s.vel.y, s.vel.z) * 1000).toFixed(0)} m/s`),
+      stat('Speed', `${(Math.hypot(s.vel.x, s.vel.y, s.vel.z) * 1000 / BATTLESPACE_SCALE).toFixed(0)} m/s`),
       stat('Subsystems', `ENG ${fmtNum(s.subsystems.engines * 100)}% · WPN ${fmtNum(s.subsystems.weapons * 100)}% · SNS ${fmtNum(s.subsystems.sensors * 100)}%`),
       stat('Target', target ? target.name : '—'),
+      feedbackStat('Main battery', batteryText, 'ship-battery-status'),
+      feedbackStat('Range / max', rangeText, 'ship-engagement-range'),
       stat('Record', `${s.stats.shotsFired} fired · ${s.stats.hits} hits · ${s.stats.kills} kills`),
-      stat('Status', !s.alive ? 'DESTROYED' : s.withdrawing ? 'WITHDRAWING' : 'ENGAGED'),
+      feedbackStat('Status', movement, 'ship-motion-state'),
       el('div', { class: 'row', style: { marginTop: '8px' } }, [
         el('button', { class: 'btn small', onclick: () => {
           ctrl.view.followId = s.id;
@@ -281,6 +333,8 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   cameraRow.append(...cameraBtns);
 
   const renderControls = () => {
+    watchBtn.textContent = ctrl.view.rig.mode === 'cinematic' && ctrl.hudLevel !== 'full' ? 'Return to command' : 'Watch battle';
+    watchBtn.classList.toggle('active', ctrl.view.rig.mode === 'cinematic' && ctrl.hudLevel !== 'full');
     pauseBtn.classList.toggle('active', ctrl.paused);
     pauseBtn.textContent = ctrl.paused ? '▶' : '❚❚';
     speedBtns.forEach((b, i) => b.classList.toggle('active', i === ctrl.speedIndex && !ctrl.paused));
@@ -296,6 +350,34 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       protectBtn.classList.toggle('active', f.orders.protectCapitals);
       pdBtn.classList.toggle('active', f.orders.pointDefenceMissiles);
     }
+    const fleetIds = ctrl.fireControlFleetIds;
+    const optionIds = Array.from(fireScope.options).slice(1).map((o) => o.value);
+    if (fleetIds.length !== optionIds.length || fleetIds.some((id, i) => id !== optionIds[i])) {
+      const previous = fireScope.value;
+      fireScope.replaceChildren(
+        el('option', { value: 'all' }, 'All commanded fleets'),
+        ...fleetIds.map((id) => el('option', { value: id }, sim().fleets.get(id)!.spec.name)),
+      );
+      fireScope.value = fleetIds.includes(previous) ? previous : 'all';
+    }
+    const statuses = scopedFireFleets().map((id) => sim().fleetBatteryStatus(id)).filter((s) => s && s.total > 0);
+    const ready = statuses.reduce((n, s) => n + s!.ready, 0);
+    const total = statuses.reduce((n, s) => n + s!.total, 0);
+    const cooling = statuses.reduce((n, s) => n + s!.cooling, 0);
+    const held = statuses.length > 0 && statuses.every((s) => s!.held);
+    const anyHeld = statuses.some((s) => s!.held);
+    const releaseRemaining = statuses.reduce((n, s) => Math.max(n, s!.volleyRemaining), 0);
+    const disabled = sim().finished || total === 0;
+    fireScope.disabled = fleetIds.length === 0 || sim().finished;
+    holdPrimaryBtn.disabled = disabled;
+    holdPrimaryBtn.classList.toggle('active', held);
+    holdPrimaryBtn.setAttribute('aria-pressed', String(held));
+    holdPrimaryBtn.textContent = held ? 'Resume spinal fire' : 'Hold spinal fire';
+    releasePrimaryBtn.disabled = disabled || ready === 0 || releaseRemaining > 0;
+    releasePrimaryBtn.classList.toggle('active', releaseRemaining > 0);
+    batteryReadiness.textContent = total > 0
+      ? `${ready}/${total} guns ready · ${cooling} reloading · ${held ? 'FIRE HELD' : anyHeld ? 'MIXED FIRE' : 'FREE FIRE'}${releaseRemaining > 0 ? ` · RELEASE ${releaseRemaining.toFixed(1)}s` : ''}`
+      : 'No commanded spinal batteries available.';
   };
 
   const renderIntel = () => {

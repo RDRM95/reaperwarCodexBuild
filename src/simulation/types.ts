@@ -42,6 +42,8 @@ export interface FleetOrders {
   position?: Vec3;
   formation: FormationType;
   focusFire: boolean;
+  /** Hold organic dreadnought spinal guns; PD, escorts and Reapers stay active. */
+  primaryFire?: 'free' | 'hold';
   priority: TargetPriority;
   protectCapitals: boolean;
   fightersDeployed: boolean;
@@ -276,6 +278,7 @@ export type BattleEvent =
   | { t: number; type: 'battle_start'; name: string }
   | { t: number; type: 'ship_deployed'; shipId: string; classId: string; faction: FactionId; side: Side; name: string }
   | { t: number; type: 'fleet_arrived'; fleetId: string }
+  | { t: number; type: 'primary_volley_issued'; fleetId: string; side: Side }
   | { t: number; type: 'weapon_fired'; shipId: string; weaponId: string; targetId: string; weaponIndex: number; kind: string }
   | { t: number; type: 'projectile_impact'; shipId: string; targetId: string; damage: number; damageType: DamageType; barrierDamage: number; hullDamage: number; pos: Vec3 }
   | { t: number; type: 'barrier_damaged'; shipId: string; remaining: number }

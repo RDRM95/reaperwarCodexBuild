@@ -106,6 +106,45 @@ export class BattleController {
     return this.config.fleets.filter((f) => f.playerControlled).map((f) => f.id);
   }
 
+  /** Active organic fleets whose spinal batteries the player may command. */
+  get fireControlFleetIds(): string[] {
+    return this.playerFleetIds.filter((id) => {
+      const fleet = this.sim.fleets.get(id);
+      return fleet?.spec.side === this.config.perspectiveSide && fleet.spec.faction !== 'reaper';
+    });
+  }
+
+  /** Fire-control scope is separate from the existing general fleet orders. */
+  setPrimaryFire(held: boolean, fleetId?: string): void {
+    if (this.sim.finished) return;
+    const permitted = this.fireControlFleetIds;
+    const ids = fleetId ? permitted.filter((id) => id === fleetId) : permitted;
+    let accepted = 0;
+    for (const id of ids) {
+      if (!this.sim.fleetBatteryStatus(id)?.total) continue;
+      this.sim.issueOrders(id, { primaryFire: held ? 'hold' : 'free' });
+      accepted++;
+    }
+    this.hud.refresh();
+    if (accepted > 0) {
+      this.app.playUi('ui_confirm');
+      this.hud.toast(held ? 'SPINAL BATTERIES: HOLD FIRE' : 'SPINAL BATTERIES: FREE FIRE');
+    }
+  }
+
+  releasePrimaryVolley(fleetId?: string): void {
+    if (this.sim.finished) return;
+    const permitted = this.fireControlFleetIds;
+    const ids = fleetId ? permitted.filter((id) => id === fleetId) : permitted;
+    let released = 0;
+    for (const id of ids) if (this.sim.releasePrimaryVolley(id)) released++;
+    this.hud.refresh();
+    if (released > 0) {
+      this.app.playUi('ui_confirm');
+      this.hud.toast(`SPINAL VOLLEY: ${released} ${released === 1 ? 'FLEET' : 'FLEETS'}`);
+    }
+  }
+
   setSpeed(i: number): void {
     this.speedIndex = Math.max(0, Math.min(SPEEDS.length - 1, i));
     this.hud.refresh();
@@ -126,6 +165,16 @@ export class BattleController {
     this.hud.root.classList.toggle('hidden', this.hudHidden);
     this.hud.root.classList.toggle('none', this.hudLevel === 'none');
     this.overlay.visible = !this.hudHidden && this.app.prefs.showOverlay;
+  }
+
+  /** One-click viewing mode keeps the top controls accessible and removes
+   * tactical annotations; it never changes simulation speed or pause state. */
+  toggleWatch(): void {
+    const watching = this.view.rig.mode === 'cinematic' && this.hudLevel !== 'full';
+    this.view.rig.setMode(watching ? 'tactical' : 'cinematic');
+    const desired = watching ? 'full' : 'minimal';
+    while (this.hudLevel !== desired) this.toggleHud();
+    this.hud.refresh();
   }
 
   /** Issue a fleet order to all player fleets (or one fleet). */

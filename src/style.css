@@ -145,6 +145,12 @@ td.num { font-family: var(--mono); text-align: right; }
 .orders .btn { padding: 6px 8px; font-size: 10px; letter-spacing: 0.08em; }
 .target-panel .stat { display: grid; grid-template-columns: 110px 1fr; gap: 6px; font-size: 12px; margin-bottom: 3px; }
 .target-panel .stat b { font-family: var(--mono); font-weight: normal; color: var(--text-dim); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; }
+.target-panel .stat span { overflow-wrap: anywhere; }
+.hud-right { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; pointer-events: auto; }
+.hud-right > .panel { flex-shrink: 0; }
+.spinal-fire-controls { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.spinal-fire-controls select { width: 100%; min-width: 0; }
+.battery-readiness { color: var(--cyan); font-size: 10px; line-height: 1.6; margin: 6px 0; }
 .intel { font-family: var(--mono); font-size: 11px; line-height: 1.6; }
 .intel .headline { color: var(--red); letter-spacing: 0.15em; margin-bottom: 6px; }
 .intel .level { float: right; }

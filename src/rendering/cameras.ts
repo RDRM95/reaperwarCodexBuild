@@ -160,13 +160,15 @@ export class CameraRig {
           const mid = from.position.clone().add(to.position).multiplyScalar(0.5);
           const line = to.position.clone().sub(from.position);
           const dist = line.length();
-          const side = new THREE.Vector3().crossVectors(line.normalize(), new THREE.Vector3(0, 1, 0)).normalize();
-          const drift = Math.sin(c.age * 0.25) * 0.4;
-          const back = Math.max(from.size * 3, dist * 0.45, 20);
-          this.desiredPos.copy(from.position).addScaledVector(side, back * (0.8 + drift)).add(new THREE.Vector3(0, back * 0.35, 0)).addScaledVector(line, -from.size * 1.5);
-          this.desiredLook.copy(mid).lerp(from.position, 0.35);
+          const side = new THREE.Vector3().crossVectors(line.normalize(), new THREE.Vector3(0, 1, 0));
+          if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
+          else side.normalize();
+          const drift = Math.sin(c.age * 0.10) * 0.07;
+          const back = Math.max(from.size * 3, to.size * 3, dist * (0.72 + Math.abs(line.y) * 0.60), 20);
+          this.desiredPos.copy(mid).addScaledVector(side, back * (1 + drift)).add(new THREE.Vector3(0, back * 0.30, 0)).addScaledVector(line, -dist * 0.12);
+          this.desiredLook.copy(mid);
         } else {
-          const ang = c.age * 0.12 + this.yaw;
+          const ang = this.yaw + Math.sin(c.age * 0.08) * 0.25;
           const r = from.size * 3.2 + 8;
           this.desiredPos.copy(from.position).add(new THREE.Vector3(Math.sin(ang) * r, from.size * 1.0 + 3, Math.cos(ang) * r));
           this.desiredLook.copy(from.position);

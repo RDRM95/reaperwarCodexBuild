@@ -23,7 +23,10 @@ interface ReaperOpts {
 }
 
 export function buildReaper(opts: ReaperOpts): BuiltShip {
-  const p = paletteFor('reaper');
+  const base = paletteFor('reaper');
+  // Harbinger alone uses amber illumination; never mutate the shared palette.
+  const p = opts.tint ? { ...base, engine: base.engine.clone(), windows: base.windows.clone() } : base;
+  if (opts.tint) { p.engine.color.setHex(opts.tint); p.engine.emissive.setHex(opts.tint); p.windows.color.setHex(opts.tint); p.windows.emissive.setHex(opts.tint); }
   const L = opts.length;
   const R = L * opts.bodyRadiusFactor;
   const group = new THREE.Group();
@@ -108,14 +111,14 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   const n = opts.arms;
   for (let i = 0; i < n; i++) {
     // Distribute arms around the lower 240° of the hull so the top stays clear (hooded look).
-    const spread = Math.PI * 1.35;
+    const spread = opts.arms === 4 ? Math.PI * 1.65 : Math.PI * 1.35;
     const ang = -Math.PI / 2 - spread / 2 + (spread * (i + 0.5)) / n;
     const rootR = R * 0.78;
     const root = new THREE.Vector3(Math.cos(ang) * rootR, Math.sin(ang) * rootR * 0.8, L * 0.1);
     const outward = new THREE.Vector3(Math.cos(ang), Math.sin(ang) * 0.8, 0).normalize();
-    const c1 = root.clone().add(outward.clone().multiplyScalar(R * 0.9)).add(new THREE.Vector3(0, 0, armLen * 0.25));
-    const c2 = root.clone().add(outward.clone().multiplyScalar(R * 1.25)).add(new THREE.Vector3(0, 0, armLen * 0.62));
-    const tip = root.clone().add(outward.clone().multiplyScalar(R * 0.95)).add(new THREE.Vector3(0, -R * 0.25, armLen));
+    const c1 = root.clone().add(outward.clone().multiplyScalar(R * (n === 4 ? 1.8 : 1.15))).add(new THREE.Vector3(0, 0, armLen * 0.18));
+    const c2 = root.clone().add(outward.clone().multiplyScalar(R * (n === 4 ? 2.0 : 1.6))).add(new THREE.Vector3(0, 0, armLen * 0.56));
+    const tip = root.clone().add(outward.clone().multiplyScalar(R * (n === 4 ? 1.7 : 1.1))).add(new THREE.Vector3(0, -R * 0.35, armLen));
     const curve = new THREE.CatmullRomCurve3([root, c1, c2, tip]);
     const baseR = R * 0.34;
     // Segmented, tapering arm with plated ridges.
@@ -131,6 +134,7 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   }
   const armMesh = new THREE.Mesh(merge(armGeoms), p.hullDark);
   armMesh.name = 'arms';
+  armMesh.userData.armCount = n;
   group.add(armMesh);
   const seamMesh = new THREE.Mesh(merge(seamGeoms), p.windows);
   seamMesh.name = 'seams';
@@ -138,7 +142,7 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
 
   // --- Weapon aperture: the "eye" in the hood, lower-forward.
   const eyeZ = L * 0.2;
-  const eyeY = -R * 0.45;
+  const eyeY = -R * 0.85;
   const eye = new THREE.Mesh(new THREE.SphereGeometry(R * 0.16, 14, 10), p.engine);
   eye.position.set(0, eyeY, eyeZ);
   eye.name = 'eye';
@@ -184,14 +188,26 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   lightMesh.name = 'lights';
   group.add(lightMesh);
 
+  group.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(group);
+  const overall = opts.arms === 4 ? 1.6 : opts.spines ? 24 : 20;
+  const fit = overall / Math.max(1e-6, bounds.max.z - bounds.min.z);
+  const centreZ = (bounds.max.z + bounds.min.z) / 2;
+  // Bake scaling into original geometry: renderer and hit silhouette agree.
+  group.traverse(object => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.geometry.translate(0, 0, -centreZ).scale(fit, fit, fit);
+    mesh.position.multiplyScalar(fit);
+  });
+  const point = (x: number, y: number, z: number) => new THREE.Vector3(x * fit, y * fit, (z - centreZ) * fit);
   return {
     group,
-    // The aperture is listed as a glow node so the view adds a red bloom to the eye.
-    engineNodes: [new THREE.Vector3(0, 0, -L * 0.46), new THREE.Vector3(0, eyeY, eyeZ + R * 0.1)],
-    glowScales: [1, 2.2],
-    lengthUnits: L * 0.5 + armLen + L * 0.1,
-    muzzle: new THREE.Vector3(0, eyeY, eyeZ + R * 0.15),
-    glowColor: opts.tint ?? 0xff2a10,
+    engineNodes: [point(0, 0, -L * 0.46), point(0, eyeY, eyeZ + R * 0.1)],
+    glowScales: [0.1, 1.25],
+    lengthUnits: overall,
+    muzzle: point(0, eyeY, eyeZ + R * 0.15),
+    glowColor: opts.tint ?? 0xff2038,
   };
 }
 
@@ -208,10 +224,10 @@ function sampleRadius(profile: { z: number; r: number }[], z: number): number {
 }
 
 /** Sovereign-class capital ship: body ≈ 1.1 km, arms reach to ≈ 2 km overall. */
-export const buildReaperCapital = (): BuiltShip => buildReaper({ length: 11, arms: 6, armLengthFactor: 0.8, bodyRadiusFactor: 0.16 });
+export const buildReaperCapital = (): BuiltShip => buildReaper({ length: 11, arms: 6, armLengthFactor: 0.8, bodyRadiusFactor: 0.10 });
 
 /** Reaper destroyer: 160 m, four heavy arms. */
 export const buildReaperDestroyer = (): BuiltShip => buildReaper({ length: 0.95, arms: 4, armLengthFactor: 0.75, bodyRadiusFactor: 0.2 });
 
 /** Harbinger: larger, spined, and with a brighter aperture. */
-export const buildHarbinger = (): BuiltShip => buildReaper({ length: 13.2, arms: 6, armLengthFactor: 0.8, bodyRadiusFactor: 0.165, spines: true, tint: 0xffa040 });
+export const buildHarbinger = (): BuiltShip => buildReaper({ length: 13.2, arms: 6, armLengthFactor: 0.8, bodyRadiusFactor: 0.115, spines: true, tint: 0xffa040 });

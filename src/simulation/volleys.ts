@@ -1,13 +1,12 @@
 import type { ShipState, WeaponState } from './types';
+import { isCommandedBattery } from './fireControl';
 
 /** A little time to assemble a battery; subsequent windows share one fleet clock. */
 export const HADES_ASSEMBLY_SECONDS = 0.6;
 export const HADES_RELEASE_SECONDS = 0.5;
 
 export function isHadesSpinal(ship: ShipState, weapon: WeaponState): boolean {
-  const d = weapon.def;
-  return ship.faction !== 'reaper' && ship.role === 'dreadnought' &&
-    d.kind === 'mass_accelerator' && d.antiCapital && d.arc <= 20 && d.armourBypass > 0;
+  return isCommandedBattery(ship, weapon) && weapon.def.armourBypass > 0;
 }
 
 interface VolleyClock {
@@ -27,6 +26,20 @@ interface VolleyClock {
  */
 export class HadesVolleyCoordinator {
   private clocks = new Map<string, VolleyClock>();
+
+  /** Read-only timing observation. In particular, opening a HUD panel cannot
+   * initialise a clock or move its next release. */
+  secondsUntilRelease(time: number, fleetId: string, ship: ShipState, weapon: WeaponState): number {
+    if (!isHadesSpinal(ship, weapon)) return 0;
+    const clock = this.clocks.get(fleetId);
+    if (!clock) return HADES_ASSEMBLY_SECONDS;
+    let releaseAt = clock.releaseAt;
+    if (time > releaseAt + HADES_RELEASE_SECONDS + 1e-8) {
+      const cycles = Math.ceil((time - releaseAt - HADES_RELEASE_SECONDS) / clock.period);
+      releaseAt += cycles * clock.period;
+    }
+    return Math.max(0, releaseAt - time);
+  }
 
   canFire(time: number, fleetId: string, ship: ShipState, weapon: WeaponState): boolean {
     if (!isHadesSpinal(ship, weapon)) return true;

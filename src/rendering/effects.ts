@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Rng } from '@/core/rng';
 import { KM } from './geometry';
+import { HullBarriers } from './barriers';
 
 /**
  * Pooled visual effects: tracer projectiles, beams, impact flashes, barrier
@@ -41,13 +42,6 @@ interface Debris {
   maxLife: number;
 }
 
-interface ShieldFlash {
-  mesh: THREE.Mesh;
-  life: number;
-  maxLife: number;
-  follow?: () => THREE.Vector3 | undefined;
-}
-
 export class EffectsSystem {
   readonly group = new THREE.Group();
   private readonly rng = new Rng('fx');
@@ -59,7 +53,7 @@ export class EffectsSystem {
 
   private sparks: Spark[] = [];
   private debris: Debris[] = [];
-  private shields: ShieldFlash[] = [];
+  readonly barriers = new HullBarriers();
   private spritePool: THREE.Sprite[] = [];
 
   // Tracers (instanced).
@@ -70,7 +64,7 @@ export class EffectsSystem {
   // Beams.
   private readonly beamPool: { core: THREE.Mesh; glow: THREE.Mesh; used: boolean }[] = [];
   private readonly beamCoreMatReaper = new THREE.MeshBasicMaterial({ color: 0xfff0e0, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
-  private readonly beamGlowMatReaper = new THREE.MeshBasicMaterial({ color: 0xff3010, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
+  private readonly beamGlowMatReaper = new THREE.MeshBasicMaterial({ color: 0xff1738, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false });
   private readonly beamCoreMatThanix = new THREE.MeshBasicMaterial({ color: 0xf0f8ff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
   private readonly beamGlowMatThanix = new THREE.MeshBasicMaterial({ color: 0x4fa0ff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false });
 
@@ -82,17 +76,6 @@ export class EffectsSystem {
 
   // Missiles (instanced points).
   private readonly missileMesh: THREE.InstancedMesh;
-
-  private readonly shieldMat = new THREE.ShaderMaterial({
-    uniforms: { color: { value: new THREE.Color(0x6fb0ff) }, opacity: { value: 0.5 } },
-    vertexShader: `varying vec3 vN; varying vec3 vV; void main(){ vN = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position,1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `uniform vec3 color; uniform float opacity; varying vec3 vN; varying vec3 vV; void main(){ float rim = 1.0 - abs(dot(vN, vV)); float a = pow(rim, 2.2) * opacity; gl_FragColor = vec4(color, a); }`,
-    transparent: true,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.FrontSide,
-  });
-  private readonly shieldGeo = new THREE.IcosahedronGeometry(1, 3);
 
   private readonly debrisGeo = [new THREE.BoxGeometry(1, 0.4, 1.6), new THREE.TetrahedronGeometry(0.8), new THREE.BoxGeometry(0.5, 0.5, 2.5)];
   private readonly debrisMat = new THREE.MeshStandardMaterial({ color: 0x55585f, metalness: 0.7, roughness: 0.5, emissive: 0x401000, emissiveIntensity: 0.6 });
@@ -125,7 +108,7 @@ export class EffectsSystem {
     this.missileMesh.count = 0;
     this.group.add(this.missileMesh);
 
-    this.group.add(this.flashLight);
+    this.group.add(this.flashLight, this.barriers.group);
   }
 
   // ------------------------------------------------------------ primitives
@@ -170,17 +153,6 @@ export class EffectsSystem {
     const total = barrierDamage + hullDamage;
     const size = Math.min(8, 0.4 + Math.sqrt(total) * 0.09);
     if (barrierDamage > hullDamage && barrierDamage > 3) {
-      // Barrier shimmer around the ship (fresnel shell).
-      if (this.shields.length < 60) {
-        const mat = this.shieldMat.clone();
-        mat.uniforms = { color: { value: new THREE.Color(0x6fb0ff) }, opacity: { value: Math.min(0.9, 0.3 + barrierDamage / 2500) } };
-        const m = new THREE.Mesh(this.shieldGeo, mat);
-        m.scale.setScalar(targetRadiusUnits * 1.15);
-        const p = targetPos();
-        if (p) m.position.copy(p);
-        this.group.add(m);
-        this.shields.push({ mesh: m, life: 0.3, maxLife: 0.3, follow: targetPos });
-      }
       this.spark(pos, new THREE.Vector3(), 0.2, size * 0.6, size * 1.4, this.blueTex, 0x9fd0ff);
     } else if (total > 0) {
       const tex = damageType === 'reaper_beam' ? this.redTex : this.fireTex;
@@ -381,7 +353,7 @@ export class EffectsSystem {
     for (const d of this.debris) {
       d.life -= dt;
       if (d.life <= 0) {
-        this.group.remove(d.mesh);
+        this.removeDebris(d.mesh);
         continue;
       }
       d.mesh.position.addScaledVector(d.vel, dt);
@@ -393,7 +365,7 @@ export class EffectsSystem {
         d.mesh.scale.multiplyScalar(Math.max(0.6, 1 - dt * 0.3));
         d.mesh.traverse((o) => {
           const m = (o as THREE.Mesh).material as THREE.Material | undefined;
-          if (m && 'opacity' in m) {
+          if (m && m !== this.debrisMat && 'opacity' in m) {
             (m as THREE.Material).transparent = true;
             (m as THREE.Material).opacity = f;
           }
@@ -402,24 +374,7 @@ export class EffectsSystem {
       keepD.push(d);
     }
     this.debris = keepD;
-    // Shield flashes.
-    const keepS: ShieldFlash[] = [];
-    for (const s of this.shields) {
-      s.life -= dt;
-      if (s.life <= 0) {
-        this.group.remove(s.mesh);
-        (s.mesh.material as THREE.Material).dispose();
-        continue;
-      }
-      const p = s.follow?.();
-      if (p) s.mesh.position.copy(p);
-      const t = s.life / s.maxLife;
-      const mat = s.mesh.material as THREE.ShaderMaterial;
-      if (mat.uniforms?.opacity) mat.uniforms.opacity.value *= 0.88;
-      s.mesh.scale.multiplyScalar(1 + dt * 0.3 * t);
-      keepS.push(s);
-    }
-    this.shields = keepS;
+    this.barriers.update(dt);
     if (this.flashLightLife > 0) {
       this.flashLightLife -= dt;
       this.flashLight.intensity *= Math.max(0, 1 - dt * 3);
@@ -427,13 +382,39 @@ export class EffectsSystem {
     }
   }
 
+  private removeDebris(object: THREE.Object3D): void {
+    this.group.remove(object);
+    object.traverse(child => {
+      const mesh = child as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) if (m !== this.debrisMat) m.dispose();
+      // Debris pieces share ship-template or pooled geometry: never dispose it here.
+    });
+  }
+
+  dispose(): void {
+    this.clear();
+    this.barriers.dispose();
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    this.group.traverse(object => {
+      const mesh = object as THREE.Mesh;
+      if (mesh.geometry) geometries.add(mesh.geometry);
+      if (mesh.material) for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) materials.add(m);
+    });
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of materials) material.dispose();
+    for (const texture of [this.flashTex, this.fireTex, this.smokeTex, this.blueTex, this.redTex]) texture.dispose();
+    for (const geometry of this.debrisGeo) geometry.dispose();
+    this.debrisMat.dispose();
+  }
+
   clear(): void {
     for (const s of this.sparks) this.releaseSprite(s.sprite);
     this.sparks = [];
-    for (const d of this.debris) this.group.remove(d.mesh);
+    for (const d of this.debris) this.removeDebris(d.mesh);
     this.debris = [];
-    for (const s of this.shields) this.group.remove(s.mesh);
-    this.shields = [];
+    this.barriers.clear();
     this.setBeams([]);
     this.setPointDefence([]);
     this.tracerMesh.count = 0;

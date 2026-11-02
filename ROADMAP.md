@@ -17,6 +17,10 @@ Phases follow the project brief. ✅ done · 🔶 partial · ⬜ not started.
 | 11 | Campaign progression and strategic AI | 🔶 Reaper target selection with competence, allied reinforcement AI, final push on the Citadel |
 | 12 | Advanced cinematics, optimisation, polish | 🔶 cinematic director, distance LOD with a shared far-point cloud, draw-call counter; instanced hull meshes and simplified mid-range hulls pending |
 
+## Shipped V2 slice — 0.12.0
+
+Scoped spinal volley commands and real readiness feedback; predictive local fleet clearance; bounded tactical annotations; Watch Battle mode and calmer cinematic framing; Alliance/Reaper capital silhouette and scale fixes; hull-shaped impact barriers and effect cleanup. Validation and remaining V2 work are recorded in [V2 polish notes](docs/V2_POLISH.md).
+
 ## Next recommended tasks
 
 1. **Campaign depth**: bilateral negotiation with individual governments, krogan and quarian political chains, Cerberus coup events.

@@ -25,6 +25,8 @@ export interface MovementGoal {
   speedFraction: number;
   /** Facing is independent of translation: spinal guns can track while braking. */
   face?: Vec3;
+  /** Shared local-clearance thrust, combined within class acceleration limits. */
+  avoidanceAcceleration?: Vec3;
 }
 
 export const doctrineOf = (ship: ShipState): FactionDoctrine => FACTIONS[ship.faction].doctrine;

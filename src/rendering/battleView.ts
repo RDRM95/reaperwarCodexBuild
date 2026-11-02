@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { Rng } from '@/core/rng';
+import { cinematicPair } from './director';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { BattleSimulation } from '@/simulation/battle';
 import { SIM_DT } from '@/simulation/battle';
@@ -52,8 +54,10 @@ export class BattleView {
   selectedIds = new Set<string>();
   followId?: string;
   /** Cinematic director state. */
-  private cine: { fromId?: string; toId?: string; age: number; hold: number } = { age: 0, hold: 0 };
+  private directorRng = new Rng(1);
+  private cine: { fromId?: string; toId?: string; age: number; hold: number; wreck?: boolean } = { age: 0, hold: 0 };
   private projectileTrack?: { id: number };
+  private nextBeamShieldAt = new Map<string, number>();
   private readonly glowTex: THREE.Texture;
   private sunLight: THREE.DirectionalLight;
   private fillLight: THREE.DirectionalLight;
@@ -124,6 +128,7 @@ export class BattleView {
     for (const v of this.visuals.values()) this.scene.remove(v.built.group);
     this.visuals.clear();
     this.effects.clear();
+    this.nextBeamShieldAt.clear();
     if (this.env) this.scene.remove(this.env.group);
     this.env = buildEnvironment(sim.config.environment);
     this.scene.add(this.env.group);
@@ -135,6 +140,7 @@ export class BattleView {
     this.selectedIds.clear();
     this.followId = undefined;
     this.cine = { age: 0, hold: 0 };
+    this.directorRng = new Rng(`director-${sim.config.seed}`);
     // Frame the player's fleet.
     const centre = this.sideCentre(sim.config.perspectiveSide);
     this.rig.focus.copy(centre);
@@ -149,7 +155,7 @@ export class BattleView {
     const built = instantiateShip(ship.classId);
     const glows: THREE.Sprite[] = [];
     if (this.settings.showEngineGlow) {
-      const color = getFaction(ship.faction).engineColourHex;
+      const color = ship.faction === 'reaper' ? built.glowColor : getFaction(ship.faction).engineColourHex;
       built.engineNodes.forEach((node, i) => {
         const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 }));
         sp.position.copy(node);
@@ -277,6 +283,13 @@ export class BattleView {
           else start = new THREE.Vector3(w.beamStart.x * KM, w.beamStart.y * KM, w.beamStart.z * KM);
           const t = w.beamTargetId ? sim.getShip(w.beamTargetId) : undefined;
           const end = w.beamHit && t ? new THREE.Vector3(t.pos.x * KM, t.pos.y * KM, t.pos.z * KM) : new THREE.Vector3(w.beamEnd.x * KM, w.beamEnd.y * KM, w.beamEnd.z * KM);
+          if (w.beamHit && t?.alive && t.barriers > 0 && sim.time >= (this.nextBeamShieldAt.get(t.id) ?? 0)) {
+            const victim = this.visuals.get(t.id);
+            if (victim && !victim.removed) {
+              this.effects.barriers.hit(t.id, t.classId, victim.built.group, end, w.def.damage * 0.25);
+              this.nextBeamShieldAt.set(t.id, sim.time + 0.25);
+            }
+          }
           const intensity = kind === 'reaper_beam' ? (ship.role === 'reaper_capital' ? 1.3 : 0.7) : 0.9;
           beams.push({ start, end, kind, intensity });
         }
@@ -337,7 +350,9 @@ export class BattleView {
       for (const child of [...v.built.group.children]) {
         if ((child as THREE.Mesh).isMesh) {
           const mesh = child as THREE.Mesh;
-          mesh.material = (mesh.material as THREE.Material).clone();
+          const original = mesh.material as THREE.Material;
+          mesh.material = original.clone();
+          if (v.tinted && mesh.name === 'hull') original.dispose();
           pieces.push(mesh);
         }
       }
@@ -371,7 +386,6 @@ export class BattleView {
           const world = v.built.group.localToWorld(local);
           const dir = new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z);
           this.effects.muzzleFlash(world, dir, big ? 6 : 1.4, ship.faction === 'reaper');
-          if (big && this.rig.mode === 'cinematic' && this.cine.age > 4 && Math.random() < 0.2) this.cine.hold = 0;
           if (big && this.rig.mode === 'projectile') this.projectileTrack = { id: this.sim.projectiles[this.sim.projectiles.length - 1]?.id ?? 0 };
           break;
         }
@@ -379,7 +393,14 @@ export class BattleView {
           const t = this.sim.getShip(e.targetId);
           const v = t ? this.visuals.get(t.id) : undefined;
           const pos = new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM);
+          if (v && e.barrierDamage > 3) this.effects.barriers.hit(t!.id, t!.classId, v.built.group, pos, e.barrierDamage);
           this.effects.impact(pos, e.barrierDamage, e.hullDamage, v ? v.built.lengthUnits * 0.55 : 2, () => (v && !v.removed ? v.built.group.position : undefined), e.damageType);
+          break;
+        }
+        case 'barriers_down': {
+          const ship = this.sim.getShip(e.shipId);
+          const visual = ship ? this.visuals.get(ship.id) : undefined;
+          if (ship && visual) this.effects.barriers.hit(ship.id, ship.classId, visual.built.group, visual.built.group.position, 0, true);
           break;
         }
         case 'missile_intercepted': {
@@ -388,9 +409,9 @@ export class BattleView {
         }
         case 'ship_destroyed': {
           const v = this.visuals.get(e.shipId);
-          if (v && (e.role === 'dreadnought' || e.role === 'reaper_capital' || e.role === 'carrier')) {
+          if (v && this.rig.mode === 'cinematic' && this.cine.age >= 5 && (e.role === 'dreadnought' || e.role === 'reaper_capital' || e.role === 'carrier')) {
             // Cinematic director jumps to capital ship deaths.
-            this.cine = { fromId: e.shipId, toId: undefined, age: 0, hold: 7 };
+            this.cine = { fromId: e.shipId, toId: undefined, age: 0, hold: 7, wreck: true };
           }
           break;
         }
@@ -452,7 +473,7 @@ export class BattleView {
     if (this.rig.mode === 'cinematic') {
       this.cine.hold -= dt;
       const from = this.cine.fromId ? sim.getShip(this.cine.fromId) : undefined;
-      if (this.cine.hold <= 0 || !from || !from.alive) this.pickCinematicShot();
+      if (this.cine.hold <= 0 || !from || (!from.alive && !this.cine.wreck)) this.pickCinematicShot();
       const f = this.cine.fromId ? sim.getShip(this.cine.fromId) : undefined;
       const t = this.cine.toId ? sim.getShip(this.cine.toId) : undefined;
       const fs = this.subjectFor(f);
@@ -485,15 +506,9 @@ export class BattleView {
   }
 
   private pickCinematicShot(): void {
-    const sim = this.sim;
-    const alive = sim.ships.filter((s) => s.alive && !s.escaped && s.role !== 'fighter');
-    if (alive.length === 0) return;
-    // Prefer ships that are currently firing beams, then big ships with a target.
-    const beaming = alive.filter((s) => s.weapons.some((w) => w.beamRemaining > 0));
-    const pool = beaming.length > 0 && Math.random() < 0.6 ? beaming : alive.filter((s) => s.targetId && (s.role === 'dreadnought' || s.role === 'reaper_capital' || s.role === 'reaper_destroyer' || s.role === 'cruiser'));
-    const from = (pool.length > 0 ? pool : alive)[Math.floor(Math.random() * (pool.length > 0 ? pool : alive).length)];
-    const to = from.targetId ? sim.getShip(from.targetId) : undefined;
-    this.cine = { fromId: from.id, toId: to && to.alive ? to.id : undefined, age: 0, hold: 11 + Math.random() * 7 };
+    const pair = cinematicPair(this.sim.ships, this.directorRng, this.cine.fromId);
+    if (!pair) return;
+    this.cine = { ...pair, age: 0, hold: 11 + this.directorRng.next() * 7 };
   }
 
   // ------------------------------------------------------------ picking
@@ -540,6 +555,17 @@ export class BattleView {
   }
 
   dispose(): void {
+    this.effects.dispose();
+    this.glowTex.dispose();
+    for (const v of this.visuals.values()) {
+      for (const glow of v.glows) glow.material.dispose();
+      if (v.tinted && !v.removed) v.built.group.traverse(object => {
+        const mesh = object as THREE.Mesh;
+        if (mesh.isMesh && mesh.name === 'hull') (mesh.material as THREE.Material).dispose();
+      });
+    }
+    this.farPoints.geometry.dispose();
+    (this.farPoints.material as THREE.Material).dispose();
     this.renderer.dispose();
   }
 }

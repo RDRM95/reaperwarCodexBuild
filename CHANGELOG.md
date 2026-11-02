@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0 — Fleet command and cinematic polish
+
+- Added scoped Hold/Resume spinal fire and Release Volley commands. Organic dreadnoughts fire one ready salvo; heat, ammunition, arcs and cooldowns still apply, and escorts/PD keep defending. Reapers remain relentless.
+- Added live battery readiness, reload/aim/range reasons, movement state and nominal-distance readouts. Tactical annotations use priority-based non-overlapping labels, at most eight target lines, and range envelopes for one inspected ship.
+- Fixed ships converging onto the same firing station with deterministic local predictive clearance. Thrust and braking limits remain authoritative; nearby ships take clear passing lanes rather than merging or orbiting.
+- Added Watch Battle mode with an uncluttered cinematic view. The director weights actual engagements, holds shots rather than cutting on every gun flash, frames stacked duels, and retains capital wreck shots instead of immediately abandoning them.
+- Rebuilt Alliance dreadnought/cruiser silhouettes and Omaha's unique heavy spinal hull. Refined Reaper proportions, six-arm capitals/four-leg destroyers, blue-black plating, and Harbinger-only amber illumination. Reaper render lengths now agree with existing catalogue/physics dimensions.
+- Replaced spherical barrier flashes with cached hull-shaped impact ripples and collapse pulses, including continuous beam hits. Effect materials and pooled geometry clean up on battle disposal; debris fade no longer changes every fragment's shared material.
+- Added simulation, camera, geometry, overlay and browser regressions. Existing timeline, campaign and weapon-damage rules remain unchanged. See `docs/V2_POLISH.md` for validation and remaining limits.
+
 ## Unreleased — Disciplined fleet combat (2026-11-01)
 
 - Replaced moving orbit/harassment goals with stable firing stations, class-specific primary-weapon engagement bands, and acceleration-limited, critically damped arrival. Existing hull acceleration, speed, turn limits and firing arcs remain authoritative.

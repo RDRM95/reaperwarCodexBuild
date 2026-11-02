@@ -27,7 +27,13 @@ import { assignSlots } from './formations';
 import { summarise } from './results';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
-import { HadesVolleyCoordinator, isHadesSpinal } from './volleys';
+import { SeparationField } from './separation';
+import { HadesVolleyCoordinator } from './volleys';
+import {
+  batteryIntent, inWeaponArc, isCommandedBattery, PrimaryVolleyControl,
+  weaponTarget, weaponWorldOffset,
+  type FleetBatteryStatus, type PrimaryBatteryReason, type PrimaryBatteryStatus,
+} from './fireControl';
 
 /** Hangar time for a fighter to reload torpedoes alongside its carrier. */
 const REARM_SECONDS = 12;
@@ -51,6 +57,7 @@ const DEFAULT_ORDERS: FleetOrders = {
   order: 'attack',
   formation: 'line_abreast',
   focusFire: true,
+  primaryFire: 'free',
   priority: 'default',
   protectCapitals: false,
   fightersDeployed: true,
@@ -85,6 +92,8 @@ export class BattleSimulation implements AiContext {
   private heavyLossesAnnounced = new Set<Side>();
   private engagementAnnounced = new Set<string>();
   private hadesVolleys = new HadesVolleyCoordinator();
+  private separationField?: SeparationField;
+  private primaryVolleys = new PrimaryVolleyControl();
   /** Listener for events (renderer/UI). */
   onEvent?: (e: BattleEvent) => void;
 
@@ -115,7 +124,10 @@ export class BattleSimulation implements AiContext {
       commsCooldown: 0,
       coordinationPenalty: 0,
     };
-    if (spec.faction === 'reaper' && (fleet.orders.order === 'retreat' || fleet.orders.order === 'withdraw')) fleet.orders.order = 'attack';
+    if (spec.faction === 'reaper') {
+      if (fleet.orders.order === 'retreat' || fleet.orders.order === 'withdraw') fleet.orders.order = 'attack';
+      fleet.orders.primaryFire = 'free';
+    }
     this.fleets.set(spec.id, fleet);
     const created: ShipState[] = [];
     for (const group of spec.ships) {
@@ -287,7 +299,10 @@ export class BattleSimulation implements AiContext {
   issueOrders(fleetId: string, patch: Partial<FleetOrders>): void {
     const fleet = this.fleets.get(fleetId);
     if (!fleet) return;
-    if (fleet.spec.faction === 'reaper' && (patch.order === 'retreat' || patch.order === 'withdraw')) patch = { ...patch, order: 'attack' };
+    if (fleet.spec.faction === 'reaper') {
+      if (patch.order === 'retreat' || patch.order === 'withdraw') patch = { ...patch, order: 'attack' };
+      if (patch.primaryFire === 'hold') patch = { ...patch, primaryFire: 'free' };
+    }
     const prevFormation = fleet.orders.formation;
     fleet.orders = { ...fleet.orders, ...patch, ...(patch.position ? { position: scale(patch.position, S) } : {}) };
     if (patch.formation && patch.formation !== prevFormation) this.reassignSlots(fleet);
@@ -316,6 +331,95 @@ export class BattleSimulation implements AiContext {
       .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
       .join(', ');
     this.emit({ t: this.time, type: 'order_issued', fleetId, order: label });
+  }
+
+  /** Release one short, non-queued salvo without changing the current fire
+   * policy. Every readiness and firing-solution constraint still applies. */
+  releasePrimaryVolley(fleetId: string): boolean {
+    const fleet = this.fleets.get(fleetId);
+    if (this.finished || !fleet || fleet.spec.faction === 'reaper') return false;
+    const eligible = this.ships.some(ship => ship.fleetId === fleetId && ship.alive && !ship.escaped && ship.weapons.some(w => isCommandedBattery(ship, w)));
+    if (!eligible || !this.primaryVolleys.open(this.time, fleetId)) return false;
+    this.emit({ t: this.time, type: 'primary_volley_issued', fleetId, side: fleet.spec.side });
+    return true;
+  }
+
+  /** Pure HUD observation: reads the same live targeting and firing geometry
+   * as tryFire, without touching target commitments, RNG or salvo clocks. */
+  primaryBatteryStatus(shipId: string): PrimaryBatteryStatus | undefined {
+    const ship = this.shipById.get(shipId);
+    if (!ship) return undefined;
+    const fleet = this.fleets.get(ship.fleetId);
+    if (!fleet) return undefined;
+    // Avoid refreshing the simulation's side cache from a UI read.
+    const enemies = this.ships.filter(s => s.side !== ship.side && s.alive && !s.escaped);
+    return this.observePrimaryBattery(ship, fleet, enemies);
+  }
+
+  private observePrimaryBattery(ship: ShipState, fleet: FleetState, enemies: readonly ShipState[]): PrimaryBatteryStatus | undefined {
+    const mounts = ship.weapons.filter(w => isCommandedBattery(ship, w));
+    if (!mounts.length) return undefined;
+    const shipId = ship.id;
+    const getShip = (id: string) => this.shipById.get(id);
+    const held = fleet.orders.primaryFire === 'hold';
+    const volleyRemaining = this.primaryVolleys.remaining(this.time, ship.fleetId);
+    let ready = 0, cooling = 0;
+    const observations = mounts.map(w => {
+      const origin = weaponWorldOffset(ship, w);
+      const solution = weaponTarget(ship, fleet, w, getShip, enemies);
+      const intended = solution ?? batteryIntent(ship, fleet, getShip, enemies);
+      const targetDistance = intended ? distance(origin, intended.pos) : undefined;
+      const cooldown = Math.max(0, w.cooldown / (0.4 + 0.6 * ship.subsystems.weapons));
+      let reason: PrimaryBatteryReason = 'ready';
+      if (!ship.alive) reason = 'destroyed';
+      else if (ship.escaped) reason = 'escaped';
+      else if (fleet.orders.order === 'retreat') reason = 'retreating';
+      else if (w.ammo !== undefined && w.ammo <= 0) reason = 'out_of_ammo';
+      else if (ship.overheated && w.def.heat > 0) reason = 'overheated';
+      else if (cooldown > 0) { reason = 'cooling'; cooling++; }
+      else if (!solution) {
+        if (!intended) reason = 'no_target';
+        else if (targetDistance! > w.def.range) reason = 'out_of_range';
+        else reason = 'aligning';
+      }
+      if (reason === 'ready') {
+        ready++;
+        if (volleyRemaining > 1e-8) {
+          if (!this.primaryVolleys.allows(this.time, ship.fleetId, ship, w)) reason = 'coordinating';
+        } else if (held) reason = 'held';
+        else if (fleet.orders.focusFire && this.hadesVolleys.secondsUntilRelease(this.time, ship.fleetId, ship, w) > 1e-8) reason = 'coordinating';
+      }
+      return { reason, cooldown, range: w.def.range, distance: targetDistance, targetId: intended?.id };
+    });
+    const rank: Record<PrimaryBatteryReason, number> = {
+      ready: 0, held: 1, coordinating: 2, cooling: 3, overheated: 4,
+      out_of_range: 5, aligning: 6, no_target: 7, out_of_ammo: 8,
+      retreating: 9, escaped: 10, destroyed: 11,
+    };
+    observations.sort((a, b) => rank[a.reason] - rank[b.reason] || a.cooldown - b.cooldown);
+    const best = observations[0];
+    return { shipId, reason: best.reason, ready, cooling, total: mounts.length, volleyRemaining,
+      cooldownRemaining: best.cooldown, range: best.range, distance: best.distance,
+      targetId: best.targetId, held };
+  }
+
+  fleetBatteryStatus(fleetId: string): FleetBatteryStatus {
+    const fleet = this.fleets.get(fleetId);
+    const result: FleetBatteryStatus = { fleetId, ready: 0, cooling: 0, total: 0,
+      volleyRemaining: this.primaryVolleys.remaining(this.time, fleetId), held: fleet?.orders.primaryFire === 'hold' };
+    if (!fleet) return result;
+    // One shared enemy snapshot per fleet read, without a persistent cache:
+    // paused commands and inspection can change state without advancing a tick.
+    const enemies = this.ships.filter(s => s.side !== fleet.spec.side && s.alive && !s.escaped);
+    for (const ship of this.ships) {
+      if (ship.fleetId !== fleetId || !ship.alive || ship.escaped) continue;
+      const status = this.observePrimaryBattery(ship, fleet, enemies);
+      if (!status) continue;
+      result.ready += status.ready;
+      result.cooling += status.cooling;
+      result.total += status.total;
+    }
+    return result;
   }
 
   /** Order a single ship (or selection) to attack a target. */
@@ -364,6 +468,7 @@ export class BattleSimulation implements AiContext {
       fleetDecision(this, fleet, dt);
     }
 
+    this.separationField = new SeparationField(this.ships);
     for (const ship of this.ships) {
       if (!ship.alive || ship.escaped) continue;
       ship.prevPos = clone(ship.pos);
@@ -403,6 +508,7 @@ export class BattleSimulation implements AiContext {
 
   private updateMovement(ship: ShipState, fleet: FleetState, dt: number): void {
     const goal = movementGoal(this, ship, fleet);
+    goal.avoidanceAcceleration = this.separationField?.acceleration(ship);
     const engineFactor = 0.25 + 0.75 * ship.subsystems.engines;
     const maxSpeed = ship.maxSpeed * engineFactor;
     advanceMotion(ship, goal, dt);
@@ -498,20 +604,11 @@ export class BattleSimulation implements AiContext {
   // ---------------------------------------------------------------- weapons
 
   private weaponWorldOffset(ship: ShipState, w: WeaponState): Vec3 {
-    const yaw = Math.atan2(ship.heading.x, ship.heading.z);
-    return add(ship.pos, rotateY(w.offset, yaw));
+    return weaponWorldOffset(ship, w);
   }
 
   private inArc(ship: ShipState, w: WeaponState, target: Vec3): boolean {
-    if (w.def.arc >= 360) return true;
-    const yaw = Math.atan2(ship.heading.x, ship.heading.z) + w.facing;
-    const facing = v3(Math.sin(yaw), 0, Math.cos(yaw));
-    const to = normalize(sub(target, ship.pos));
-    // Compare in the horizontal plane plus a generous vertical tolerance.
-    const flatTo = normalize(v3(to.x, 0, to.z));
-    const cosA = dot(facing, flatTo);
-    const halfArc = ((w.def.arc / 2) * Math.PI) / 180;
-    return cosA >= Math.cos(halfArc + 0.05) && Math.abs(to.y) < 0.6;
+    return inWeaponArc(ship, w, target);
   }
 
   private updateWeapons(ship: ShipState, fleet: FleetState, dt: number): void {
@@ -606,34 +703,20 @@ export class BattleSimulation implements AiContext {
       }
       if (!missile && !target) return;
     } else {
-      let primary = ship.targetId ? this.shipById.get(ship.targetId) : undefined;
-      if (fleet.orders.focusFire && isHadesSpinal(ship, w) && !ship.forcedTargetId) {
-        const focus = fleet.focusTargetId ? this.shipById.get(fleet.focusTargetId) : undefined;
-        if (focus?.alive && !focus.escaped && focus.side !== ship.side && distance(origin, focus.pos) <= def.range && this.inArc(ship, w, focus.pos)) primary = focus;
-      }
-      if (primary && primary.alive && !primary.escaped && distance(origin, primary.pos) <= def.range && this.inArc(ship, w, primary.pos)) {
-        target = primary;
-      } else {
-        // Secondary target of opportunity in arc.
-        let best = -Infinity;
-        for (const e of this.enemiesOf(ship.side)) {
-          if (!e.alive || e.escaped) continue;
-          if (e.role === 'fighter') continue;
-          const d = distance(origin, e.pos);
-          if (d > def.range || !this.inArc(ship, w, e.pos)) continue;
-          const s = (def.antiCapital ? Math.log2(1 + e.pointValue) : 1) * (1 - d / def.range) + (1 - e.hull / e.maxHull) * 0.5;
-          if (s > best) {
-            best = s;
-            target = e;
-          }
-        }
-        // A reachable firing solution must not be randomly suppressed while
-        // the hull turns toward another target.
-      }
+      target = weaponTarget(ship, fleet, w, id => this.shipById.get(id), this.enemiesOf(ship.side));
       if (!target) return;
     }
 
-    if (fleet.orders.focusFire && !this.hadesVolleys.canFire(this.time, fleet.spec.id, ship, w)) return;
+    const commanded = isCommandedBattery(ship, w);
+    const manualWindow = commanded && this.primaryVolleys.remaining(this.time, fleet.spec.id) > 1e-8;
+    if (commanded) {
+      if (manualWindow && !this.primaryVolleys.allows(this.time, fleet.spec.id, ship, w)) return;
+      if (!manualWindow && fleet.orders.primaryFire === 'hold') return;
+    }
+    // A manual command releases ready spinal mounts immediately. It never
+    // resets a cooldown, creates a firing solution, or moves the HADES clock.
+    if (!manualWindow && fleet.orders.focusFire && !this.hadesVolleys.canFire(this.time, fleet.spec.id, ship, w)) return;
+    if (manualWindow) this.primaryVolleys.fired(fleet.spec.id, ship, w);
 
     // Fire.
     w.cooldown = def.cooldown * (0.95 + 0.1 * this.rng.next());

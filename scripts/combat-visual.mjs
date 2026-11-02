@@ -30,7 +30,11 @@ try {
   for (const time of [20, 50, 90]) {
     samples.push(await page.evaluate(t => {
       const b = window.reaperwar.battle;
-      while (!b.sim.finished && b.sim.time < t) b.sim.step();
+      while (!b.sim.finished && b.sim.time < t) {
+        b.sim.step();
+        b.view.update(0.05, 1);
+        if (b.sim.tick % 16 === 0) b.view.render();
+      }
       b.setCamera('tactical');
       b.view.rig.distance = 430;
       b.view.rig.pitch = 0.38;

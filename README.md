@@ -71,3 +71,7 @@ Architecture, lore sourcing, AU rules, known issues and the changelog are docume
 `.github/workflows/deploy.yml` builds with `VITE_BASE=/<repo>/` and publishes `dist/` to GitHub Pages on every push to `main` or `codex/apex-combat-overhaul` (or manually via *workflow_dispatch*). One-time setup in the repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**. `.github/workflows/ci.yml` runs typecheck, unit tests, the production build and the Playwright suite on every branch.
 
 If the site shows plain, unstyled “INITIALISING COMBAT SIMULATION…” text, it is serving the source `index.html` instead of the compiled application. Select **Source: GitHub Actions**, then run **Actions → Deploy to GitHub Pages → Run workflow** on the branch containing the updated project. The workflow publishes `dist/`; publishing the repository root does not compile TypeScript or load its imported styles.
+
+## V2 command and viewing controls
+
+In battle, **Spinal fire** controls apply to the selected command scope: hold/resume organic dreadnought guns or **Release volley** when ready. Escorts and point defence keep fighting. Select a ship to see its actual firing/range state. **Watch battle** switches to a quieter cinematic view; **Return to command** restores the tactical HUD. H still cycles full/minimal/clean HUD. See [V2 polish notes](docs/V2_POLISH.md) for validation and limitations.
