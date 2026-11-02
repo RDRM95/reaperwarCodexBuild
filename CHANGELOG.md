@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.2 — Swept battlegroups and fleet cinematics
+
+- Large formations deploy mixed capital/escort battlegroups along staggered, swept fronts, with bounded organic spacing variation and cleaner Reaper pressure waves. Setup-time local clearance moves hulls laterally instead of building vertical towers. Small fleet layouts and the selected line/wedge/screen/column meanings remain.
+- Replaced per-hull radial approach goals that squeezed wings onto the same target sphere with shared forward role advances and bounded range corrections. The same formation geometry now survives the approach; Reapers retain their no-reverse guard.
+- Fast screens can intercept an explicitly retreating enemy at their own weapon standoff, preventing a formation tether from leaving them in a permanent chase behind the capital line.
+- Cinematic mode alternates held combat shots with occasional wide passes over a bounded group of living fleetmates. Deployment camera distance now accounts for fleet size; camera decisions use no simulation randomness.
+- Fixed a repeat-battle WebGL error at its source: stale texture-unpack state is reset before disposing the previous renderer.
+- Added deployment, camera framing and repeat-launch regressions; automated and visual validation is recorded in `docs/V2_POLISH.md`.
+
 ## 0.12.1 — HADES internal nuclear payloads
 
 - HADES rounds resolve kinetic entry followed by an internal nuclear burst only after confirmed hull penetration. The existing shot budget is split 65% kinetic / 35% warhead (AU simulation estimate), rather than adding a free damage multiplier; the internal burst bypasses exterior barriers and armour. Canon ammunition is unchanged.

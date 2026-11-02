@@ -96,6 +96,31 @@ test('large selections respect real overlay budgets and clean HUD hides every ta
   expect(await overlayCounts(page)).toEqual({ labels: 0, targetLines: 0, rangeRings: 0 });
 });
 
+test('large-battle cinematics hold a visible battlegroup without advancing a paused battle', async ({ page }, testInfo) => {
+  await launchFleet(page, true);
+  await page.locator('[data-action="watch-battle"]').click();
+  const result = await page.evaluate(() => {
+    const ctrl = (window as unknown as { reaperwar: App }).reaperwar.battle!;
+    const state = { time: ctrl.sim.time, rng: ctrl.sim.rng.getState() };
+    const director = ctrl.view as unknown as { cine: { members?: string[] } };
+    ctrl.view.update(0.01, 1);
+    const members = [...(director.cine.members ?? [])];
+    for (let i = 0; i < 240; i++) ctrl.view.update(1 / 60, 1);
+    ctrl.view.render(); ctrl.view.rig.camera.updateMatrixWorld();
+    const visible = members.filter(id => {
+      const visual = ctrl.view.visuals.get(id)!;
+      const screen = visual.built.group.position.clone().project(ctrl.view.rig.camera);
+      return Math.abs(screen.x) < 0.95 && Math.abs(screen.y) < 0.95 && screen.z > -1 && screen.z < 1;
+    }).length;
+    return { count: members.length, visible, stable: JSON.stringify(director.cine.members) === JSON.stringify(members),
+      unchanged: state.time === ctrl.sim.time && state.rng === ctrl.sim.rng.getState(), glError: ctrl.view.renderer.getContext().getError() };
+  });
+  expect(result.count).toBeGreaterThanOrEqual(6); expect(result.count).toBeLessThanOrEqual(12);
+  expect(result.visible).toBe(result.count); expect(result.stable).toBe(true); expect(result.unchanged).toBe(true); expect(result.glError).toBe(0);
+  await page.keyboard.press('h');
+  await page.screenshot({ path: testInfo.outputPath('cinematic-battlegroup.png') });
+});
+
 test('actual hull barrier shells render without WebGL shader errors', async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));

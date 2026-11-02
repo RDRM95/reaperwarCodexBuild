@@ -31,3 +31,15 @@ export function cinematicPair(ships: readonly ShipState[], rng: Rng, previousId?
   }
   return { fromId: chosen.ship.id, toId: enemy?.id };
 }
+
+/** A bounded neighbourhood for a fleet pass. Membership is chosen only when
+ * the shot changes; the camera follows these hulls rather than chasing the
+ * changing centroid of an entire battle. */
+export function cinematicWing(ships: readonly ShipState[], leaderId: string): string[] {
+  const leader = ships.find(s => s.id === leaderId && s.alive && !s.escaped);
+  if (!leader) return [];
+  const members = ships.filter(s => s.alive && !s.escaped && s.fleetId === leader.fleetId && s.role !== 'fighter')
+    .sort((a, b) => distance(a.pos, leader.pos) - distance(b.pos, leader.pos) || a.id.localeCompare(b.id))
+    .slice(0, 12);
+  return members.length >= 6 ? members.map(s => s.id) : [];
+}

@@ -51,3 +51,26 @@ HADES now resolves a kinetic entry stage followed by an internal nuclear warhead
 Actual penetration events drive bounded flash/ring/vent effects and a procedural delayed impact sound. The effect does not claim physical nuclear yield, postprocessed refraction, or a galaxy-wide shockwave. The fleet's manual HADES release can concentrate multiple legitimate nuclear penetrations; it cannot force hits or bypass weapon cooldowns.
 
 Validation: all 168 unit tests and 14 browser tests passed, including a real penetrating projectile driving the nuclear renderer with no WebGL errors. Production build/typecheck passed. The nuclear-impact screenshot was visually inspected.
+
+## Fleet silhouettes and cinematics — 0.12.2
+
+Large fleets use mixed-role battlegroups arranged in swept wings and shallow staggered waves. Each group retains a capital gun line with cruisers and frigates screening ahead; organic groups have bounded differences in spacing and depth, while Reaper waves remain more ordered. Broad lines, screens, wedges, columns and dispersed orders retain different silhouettes. Hull-clearance searches stay local and lateral instead of turning crowded fleets into vertical stacks. Placement is deterministic and runs at deployment or formation changes, not every frame.
+
+Combat approach now uses forward role advances from cached deployment references, with limited corrections for unusable firing envelopes. The previous per-hull radial goals contracted a Reaper capital front to 57% of its starting width in the 120-ship, 120-second harmless trace; the new controller retained 90%, while organic frigate height retention improved from 57% to 89%. All five roles still fired after 90 seconds, and no Reaper withdrew or escaped. These figures describe that deterministic regression, not a universal formation guarantee under casualties or every custom order.
+
+The retreat regression exposed an escort tether: a fast Reaper destroyer could remain below and behind a fleeing cruiser while following the capital line's pace. Fast screens now intercept explicitly retreating enemies at their own weapon standoff, retaining acceleration/braking limits and the Reaper no-reverse guard. Normal engagements still use the shared formation advance; extraction thresholds and the original retreat assertion remain unchanged.
+
+The director opens large battles with a held fleet pass, returning to a wide group shot every third normal shot. Up to 12 nearby living hulls are framed together from a rear quarter, with slow drift; duel and destruction shots remain. Camera framing never changes simulation state or RNG. A hundred capital ships intentionally span a much wider and shallower front than the previous 40-km cube; large columns remain deep, so all ships cannot occupy the same weapon-range band at once. Battlegroups are spatial groupings under the existing fleet orders, not independently commanded squadrons.
+
+The multi-battle visual review also reproduced `INVALID_OPERATION` on second and later launches: the reused WebGL context retained a texture flip flag incompatible with the new renderer's 3D placeholder upload. Resetting renderer state during disposal addresses the source.
+
+Validation: 177 unit tests across 23 files passed, including the unchanged retreat assertion. All 16 browser checks passed, covering bounded wide-shot framing, unchanged paused simulation state, repeated battle construction, real HADES impacts and existing campaign/replay/control flows. Production build/typecheck passed. A 137-ship real-renderer review captured both sides of four deployment formations and sustained combat at 35 and 70 seconds; all samples had zero WebGL errors and no Reaper escaped. Wide cinematic and formation screenshots were visually inspected. The final retreat targeting fix also has dedicated simulation coverage; CI reruns the complete browser suite on the published commit.
+
+Isolated 0.12.2 simulation benchmark, same seed/configurations as the earlier table (including the intervening HADES payload change):
+
+| Ships | Simulated duration | Average / maximum step | Shots per successive 30 s | Destroyed |
+| --- | --- | --- | --- | --- |
+| 92 | 113.15 s | 0.979 / 8.190 ms | 1241, 1537, 696, 106 | 64 |
+| 368 | 120.05 s | 9.028 / 32.067 ms | 2704, 5576, 3829, 2999 | 190 |
+
+These are simulation timings, not renderer FPS. Wider fronts and the payload change alter engagement timing and casualties; neither a formation choice nor selecting APEX guarantees victory in arbitrary custom battles.

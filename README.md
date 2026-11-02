@@ -8,7 +8,7 @@ A browser-based, real-time 3D naval warfare simulator set during the Reaper War 
 
 ## Play
 
-- **Live site:** deployed by GitHub Actions to GitHub Pages from the `main` branch at `https://<owner>.github.io/reaperwar/` once Pages is enabled (see *Deployment*).
+- **Live site:** [Play the simulator](https://rdrm95.github.io/reaperwarCodexBuild/), published by GitHub Actions from `codex/apex-combat-overhaul` (see *Deployment*).
 - **Local:**
 
 ```bash
@@ -16,7 +16,7 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-## What works today (v0.4.0)
+## What works today (v0.12.2)
 
 - **Galactic campaign**: interactive galaxy map with 15 systems and relay corridors, weekly turns, Reaper offensives and harvest, a ground war per system (ground forces slow the harvest; krogan reinforce Earth and Palaven when the genophage is cured), allied production from intact industry, eight research projects that change fleet technology in engagements, refugee pressure on the Citadel, Council war summits with decisions, political events (indoctrinated officials, shipyard sabotage, Terminus mercenaries, STG intelligence), 2183 world states (Destiny Ascension and Council composition, rachni queen), fleet movement with cooperation constraints, Crucible construction, indoctrination pressure, morale, Reaper strategic assessment, autosave and Load Game. Engagements involving your fleets can be fought in the 3D simulator or auto-resolved; outcomes feed back into the war.
 - **Post-war reconstruction** (Cerberus Ascendant, alternate continuity, 2186–2206): quarterly turns, twelve budget programmes, progressive Reaper dismantlement gated by conventional fleet strength and Sol defence, Council and Alliance politics, victory and defeat outcomes. Start it from campaign setup or continue into it after a Cerberus Ascendant campaign victory.
@@ -75,3 +75,5 @@ If the site shows plain, unstyled “INITIALISING COMBAT SIMULATION…” text, 
 ## V2 command and viewing controls
 
 In battle, **Spinal fire** controls apply to the selected command scope: hold/resume organic dreadnought guns or **Release volley** when ready. Escorts and point defence keep fighting. Select a ship to see its actual firing/range state. **Watch battle** switches to a quieter cinematic view; **Return to command** restores the tactical HUD. H still cycles full/minimal/clean HUD. See [V2 polish notes](docs/V2_POLISH.md) for validation and limitations.
+
+Large fleets deploy in staggered mixed battlegroups with varied organic spacing and more ordered Reaper fronts. Cinematics mix combat shots with held wide passes showing those formations. Under HADES-enabled AU rules, rounds that penetrate the hull trigger internal nuclear bursts with flashes, shock rings and delayed impact audio; coordinated battery releases still obey real range, arcs, heat and reloads.

@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { Rng } from '@/core/rng';
-import { cinematicPair } from './director';
+import { cinematicPair, cinematicWing } from './director';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { BattleSimulation } from '@/simulation/battle';
 import { SIM_DT } from '@/simulation/battle';
 import type { BattleEvent, ShipState } from '@/simulation/types';
 import { getFaction } from '@/data/factions';
-import { CameraRig, type CameraSubject } from './cameras';
+import { CameraRig, type CameraSubject, type CinematicFrame } from './cameras';
 import { EffectsSystem } from './effects';
 import { buildEnvironment, type EnvironmentBuild } from './environment';
 import { KM } from './geometry';
@@ -55,7 +55,8 @@ export class BattleView {
   followId?: string;
   /** Cinematic director state. */
   private directorRng = new Rng(1);
-  private cine: { fromId?: string; toId?: string; age: number; hold: number; wreck?: boolean } = { age: 0, hold: 0 };
+  private cine: { fromId?: string; toId?: string; age: number; hold: number; wreck?: boolean; members?: string[] } = { age: 0, hold: 0 };
+  private cineShot = 0;
   private projectileTrack?: { id: number };
   private nextBeamShieldAt = new Map<string, number>();
   private readonly glowTex: THREE.Texture;
@@ -140,11 +141,16 @@ export class BattleView {
     this.selectedIds.clear();
     this.followId = undefined;
     this.cine = { age: 0, hold: 0 };
+    this.cineShot = 0;
     this.directorRng = new Rng(`director-${sim.config.seed}`);
     // Frame the player's fleet.
     const centre = this.sideCentre(sim.config.perspectiveSide);
     this.rig.focus.copy(centre);
-    this.rig.distance = 320;
+    let deploymentRadius = 0;
+    for (const ship of sim.ships) if (ship.side === sim.config.perspectiveSide && ship.role !== 'fighter' && ship.alive && !ship.escaped) {
+      deploymentRadius = Math.max(deploymentRadius, this.tmpA.set(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM).distanceTo(centre) + ship.lengthKm * KM * 0.6);
+    }
+    this.rig.distance = Math.max(320, deploymentRadius * 2.6);
     this.rig.yaw = Math.PI + 0.6;
     this.rig.pitch = 0.42;
   }
@@ -477,7 +483,7 @@ export class BattleView {
       }
       subject = this.subjectFor(ship);
     }
-    let cinematic: { from: CameraSubject; to?: CameraSubject; age: number } | undefined;
+    let cinematic: CinematicFrame | undefined;
     if (this.rig.mode === 'cinematic') {
       this.cine.hold -= dt;
       const from = this.cine.fromId ? sim.getShip(this.cine.fromId) : undefined;
@@ -485,7 +491,18 @@ export class BattleView {
       const f = this.cine.fromId ? sim.getShip(this.cine.fromId) : undefined;
       const t = this.cine.toId ? sim.getShip(this.cine.toId) : undefined;
       const fs = this.subjectFor(f);
-      if (fs) cinematic = { from: fs, to: this.subjectFor(t && t.alive ? t : undefined), age: this.cine.age };
+      if (fs) {
+        cinematic = { from: fs, to: this.subjectFor(t && t.alive ? t : undefined), age: this.cine.age };
+        const members = (this.cine.members ?? []).map(id => sim.getShip(id)).filter((s): s is ShipState => !!s && s.alive && !s.escaped);
+        if (members.length >= 3) {
+          const centre = new THREE.Vector3();
+          for (const ship of members) centre.add(this.tmpA.set(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM));
+          centre.multiplyScalar(1 / members.length);
+          let radius = fs.size;
+          for (const ship of members) radius = Math.max(radius, this.tmpA.set(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM).distanceTo(centre) + ship.lengthKm * KM * 0.6);
+          cinematic.group = { centre, radius, heading: fs.heading };
+        }
+      }
     }
     let projectile: CameraSubject | undefined;
     if (this.rig.mode === 'projectile') {
@@ -516,7 +533,9 @@ export class BattleView {
   private pickCinematicShot(): void {
     const pair = cinematicPair(this.sim.ships, this.directorRng, this.cine.fromId);
     if (!pair) return;
-    this.cine = { ...pair, age: 0, hold: 11 + this.directorRng.next() * 7 };
+    const wide = this.cineShot++ % 3 === 0 && this.sim.ships.filter(s => s.alive && !s.escaped && s.role !== 'fighter').length >= 24;
+    this.cine = { ...pair, age: 0, hold: 11 + this.directorRng.next() * 7,
+      members: wide ? cinematicWing(this.sim.ships, pair.fromId) : undefined };
   }
 
   // ------------------------------------------------------------ picking
@@ -574,6 +593,9 @@ export class BattleView {
     }
     this.farPoints.geometry.dispose();
     (this.farPoints.material as THREE.Material).dispose();
+    // The next battle reuses this canvas/context. Clear texture unpack flags
+    // before its renderer creates typed-array 3D placeholder textures.
+    this.renderer.resetState();
     this.renderer.dispose();
   }
 }

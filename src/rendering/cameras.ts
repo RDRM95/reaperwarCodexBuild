@@ -24,6 +24,13 @@ export interface CameraSubject {
   size: number;
 }
 
+export interface CinematicFrame {
+  from: CameraSubject;
+  to?: CameraSubject;
+  age: number;
+  group?: { centre: THREE.Vector3; radius: number; heading: THREE.Vector3 };
+}
+
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
   mode: CameraMode = 'tactical';
@@ -104,7 +111,7 @@ export class CameraRig {
    * modes; `cinematic` supplies a framing pair; `projectile` is the tracked
    * round. Any may be undefined, in which case the rig falls back to tactical.
    */
-  update(dt: number, opts: { subject?: CameraSubject; cinematic?: { from: CameraSubject; to?: CameraSubject; age: number }; projectile?: CameraSubject; fleetCentre: THREE.Vector3 }): void {
+  update(dt: number, opts: { subject?: CameraSubject; cinematic?: CinematicFrame; projectile?: CameraSubject; fleetCentre: THREE.Vector3 }): void {
     const cam = this.camera;
     let instant = false;
     switch (this.mode) {
@@ -155,7 +162,17 @@ export class CameraRig {
         if (!c) return this.fallback(dt, opts.fleetCentre);
         const from = c.from;
         const to = c.to;
-        if (to) {
+        if (c.group) {
+          const g = c.group;
+          const forward = g.heading.clone().setY(0).normalize();
+          if (forward.lengthSq() < 1e-6) forward.set(0, 0, 1);
+          const side = new THREE.Vector3(forward.z, 0, -forward.x);
+          const drift = Math.sin(c.age * 0.08) * 0.06;
+          const back = Math.max(30, g.radius * 2.9 / Math.min(1, cam.aspect));
+          const offset = forward.clone().negate().addScaledVector(side, 0.50 + drift).add(new THREE.Vector3(0, 0.35, 0)).normalize();
+          this.desiredPos.copy(g.centre).addScaledVector(offset, back);
+          this.desiredLook.copy(g.centre).addScaledVector(forward, g.radius * 0.12);
+        } else if (to) {
           // Frame both subjects from a point off the line between them.
           const mid = from.position.clone().add(to.position).multiplyScalar(0.5);
           const line = to.position.clone().sub(from.position);

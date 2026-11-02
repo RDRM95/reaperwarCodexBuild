@@ -1,6 +1,6 @@
 # APEX combat overhaul — 2026-11-01
 
-Historical notes for the first combat fix. Version 0.12.0 adds live fleet controls, local clearance, updated capital silhouettes, hull-shaped effects and cinematic polish; see [V2 polish notes](V2_POLISH.md).
+Historical notes for the first combat fix. Subsequent 0.12 releases add live fleet controls, local clearance, capital silhouettes, hull-shaped effects, HADES internal nuclear payloads and swept battlegroups. The later payload and formation changes supersede the corresponding historical descriptions below; see [V2 polish notes](V2_POLISH.md).
 
 The supplied archive is the implementation baseline. The configured Git remote was empty when work began; the source was imported into `/workspace/reaperwarCodexBuild` without replacing user work. The updated project is delivered on `codex/apex-combat-overhaul`; no existing `main` branch was modified. Existing scenarios, campaign/save formats, timeline multipliers, weapon damage and default canon fleets are preserved.
 

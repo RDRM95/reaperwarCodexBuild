@@ -6,7 +6,7 @@ const formations = Object.keys(FORMATION_LABELS) as FormationType[];
 const group = (count: number, role: SlotShip['role'], lengthKm: number): SlotShip[] =>
   Array.from({ length: count }, (_, i) => ({ id: `${role}-${i}`, role, lengthKm }));
 
-describe('compact fleet formations', () => {
+describe('fleet formations', () => {
   for (const formation of formations) {
     it(`${formation}: keeps small mixed fleets finite, unique and repeatable`, () => {
       const ships = [...group(4, 'dreadnought', 0.888), ...group(6, 'cruiser', 0.55), ...group(8, 'frigate', 0.18), ...group(12, 'fighter', 0.018)];
@@ -17,14 +17,16 @@ describe('compact fleet formations', () => {
       for (const p of slots.values()) expect(Number.isFinite(p.x + p.y + p.z)).toBe(true);
     });
 
-    it(`${formation}: packs a hundred 2 km capitals into connected ranks/layers`, () => {
+    it(`${formation}: keeps a hundred 2 km capitals in clear, connected battlegroup waves`, () => {
       const ships = group(100, 'reaper_capital', 2);
       const slots = assignSlots(ships, formation);
       const positions = [...slots.values()];
-      for (const axis of ['x', 'y', 'z'] as const) {
-        const extent = Math.max(...positions.map((p) => p[axis])) - Math.min(...positions.map((p) => p[axis]));
-        expect(extent).toBeLessThan(40);
-      }
+      const extent = (axis: 'x' | 'y' | 'z') => Math.max(...positions.map(p => p[axis])) - Math.min(...positions.map(p => p[axis]));
+      // A hundred two-kilometre hulls should span a broad front or a deliberate
+      // column, rather than being packed into the old 40 x 40 x 40 km box.
+      expect(extent('y')).toBeLessThan(8);
+      expect(extent('x')).toBeLessThan(formation === 'dispersed' ? 170 : 120);
+      expect(extent('z')).toBeLessThan(formation === 'capital_column' ? 150 : formation === 'dispersed' ? 100 : 60);
       let minimumDistance = Infinity;
       let largestNearest = 0;
       for (let i = 0; i < positions.length; i++) {
@@ -39,7 +41,7 @@ describe('compact fleet formations', () => {
         largestNearest = Math.max(largestNearest, nearest);
       }
       expect(minimumDistance).toBeGreaterThanOrEqual(2.2 - 1e-8);
-      expect(largestNearest).toBeLessThan(6);
+      expect(largestNearest).toBeLessThan(8);
     });
 
     it(`${formation}: prevents overlapping hull slots in massive mixed fleets`, () => {

@@ -43,14 +43,15 @@ const CHUNK_LIMITS = [8, 12, 16, 24];
 const SLOT_SCALE = Math.max(BATTLESPACE_SCALE, 0.55);
 
 export function assignSlots(ships: SlotShip[], formation: FormationType): Map<string, Vec3> {
-  const raw = assignSlotsNominal(ships, formation);
+  const counts = [0, 0, 0, 0];
+  for (const ship of ships) counts[tier(ship.role)]++;
+  const large = counts.some((count, i) => count > CHUNK_LIMITS[i]);
+  const raw = large ? assignBattleGroups(ships, formation) : assignSlotsNominal(ships, formation);
   // Spacing between ships compresses with the battlespace, but never below
   // what keeps hulls from overlapping.
   const slots = new Map<string, Vec3>();
   for (const [id, v] of raw) slots.set(id, v3(v.x * SLOT_SCALE, v.y * SLOT_SCALE, v.z * SLOT_SCALE));
-  const counts = [0, 0, 0, 0];
-  for (const ship of ships) counts[tier(ship.role)]++;
-  if (counts.some((count, i) => count > CHUNK_LIMITS[i])) separateLargeFormation(ships, slots);
+  if (large) separateLargeFormation(ships, slots);
   return slots;
 }
 
@@ -63,7 +64,7 @@ function separateLargeFormation(ships: SlotShip[], slots: Map<string, Vec3>): vo
   const ordered = ships.map((ship, index) => ({ ship, index })).sort((a, b) => tier(a.ship.role) - tier(b.ship.role) || a.index - b.index);
   for (const { ship } of ordered) {
     const pos = slots.get(ship.id)!;
-    const originalY = pos.y;
+    const origin = { ...pos };
     const radius = Math.max(0.01, ship.lengthKm * 0.55);
     const step = Math.max(0.08, ship.lengthKm * 1.1);
     let attempt = 0;
@@ -89,65 +90,100 @@ function separateLargeFormation(ships: SlotShip[], slots: Map<string, Vec3>): vo
         cells.set(k, cell);
         break;
       }
-      pos.y = originalY + spreadIndex(++attempt) * step;
+      // Search nearby lateral stations instead of stacking displaced escorts
+      // into a vertical tower. This runs only on assignment, never per frame.
+      const angle = ++attempt * 2.399963229728653;
+      const searchRadius = Math.sqrt(attempt) * step;
+      pos.x = origin.x + Math.cos(angle) * searchRadius;
+      pos.z = origin.z + Math.sin(angle) * searchRadius;
+      pos.y = origin.y + Math.sin(attempt * 1.7) * step * 0.35;
     }
   }
 }
 
-/** Repeat compact nominal patterns in ranks/layers instead of extending a line indefinitely. */
-function assignChunkedTier(ships: SlotShip[], formation: FormationType, limit: number): Map<string, Vec3> {
-  const axes = ['y', 'z', 'x'] as const;
-  const chunks: { slots: Map<string, Vec3>; centre: Vec3; size: Vec3 }[] = [];
-  const maxSize = v3();
-  for (let i = 0; i < ships.length; i += limit) {
-    const slots = assignSlotsNominal(ships.slice(i, i + limit), formation);
-    const positions = [...slots.values()];
-    const centre = v3(), size = v3();
-    for (const axis of axes) {
-      const low = Math.min(...positions.map((p) => p[axis]));
-      const high = Math.max(...positions.map((p) => p[axis]));
-      centre[axis] = (low + high) / 2;
-      size[axis] = high - low;
-      maxSize[axis] = Math.max(maxSize[axis], size[axis]);
-    }
-    chunks.push({ slots, centre, size });
+/** Small mixed-role battlegroups retain their own gun line and escort screen.
+ * Their centres follow broad swept fronts rather than repeating boxes in xyz.
+ * All variation is deterministic and assigned once: no drift or simulation RNG.
+ */
+function assignBattleGroups(ships: SlotShip[], formation: FormationType): Map<string, Vec3> {
+  const members: SlotShip[][] = [[], [], [], []];
+  for (const ship of ships) members[tier(ship.role)].push(ship);
+  const limits = [4, 6, 8, 12];
+  const count = Math.max(...members.map((group, i) => Math.ceil(group.length / limits[i])));
+  const groups: SlotShip[][] = Array.from({ length: count }, () => []);
+  for (const roleShips of members) roleShips.forEach((ship, i) => groups[i % count].push(ship));
+  const reapers = ships.some(ship => ship.role === 'reaper_capital' || ship.role === 'reaper_destroyer');
+  const layouts = groups.map(group => assignSlotsNominal(group, formation));
+  let width = 0, depth = 0;
+  for (const layout of layouts) {
+    const positions = [...layout.values()];
+    width = Math.max(width, Math.max(...positions.map(p => p.x)) - Math.min(...positions.map(p => p.x)));
+    depth = Math.max(depth, Math.max(...positions.map(p => p.z)) - Math.min(...positions.map(p => p.z)));
   }
-  const [layerAxis, rankAxis] = [...axes].sort((a, b) => maxSize[a] - maxSize[b]);
-  const clearance = Math.max(0.5, ...ships.map((ship) => ship.lengthKm * 1.7)) / SLOT_SCALE;
-  const layerStride = maxSize[layerAxis] + clearance;
-  const rankStride = maxSize[rankAxis] + clearance;
-  // Balance physical footprint rather than simply choosing a square number of chunks.
-  const layers = Math.min(chunks.length, Math.ceil(Math.sqrt(chunks.length * rankStride / layerStride)));
-  const ranks = Math.ceil(chunks.length / layers);
-  const origin = chunks[0].centre;
-  const result = new Map<string, Vec3>();
-  chunks.forEach((chunk, i) => {
-    const offset = v3();
-    offset[layerAxis] = ((i % layers) - (layers - 1) / 2) * layerStride;
-    offset[rankAxis] = (Math.floor(i / layers) - (ranks - 1) / 2) * rankStride;
-    for (const [id, p] of chunk.slots) result.set(id, v3(
-      p.x - chunk.centre.x + origin.x + offset.x,
-      p.y - chunk.centre.y + origin.y + offset.y,
-      p.z - chunk.centre.z + origin.z + offset.z,
-    ));
+  const clearance = Math.max(1.8, ...ships.map(ship => ship.lengthKm * 2.5)) / SLOT_SCALE;
+  const lateralStride = width + clearance;
+  const rearStride = Math.max(depth + clearance, lateralStride * 0.42);
+  // Several wings form each shallow wave; no groups are stacked in height.
+  const wings = Math.max(1, Math.ceil(Math.sqrt(count * 1.6)));
+  const slots = new Map<string, Vec3>();
+  layouts.forEach((layout, index) => {
+    const wave = Math.floor(index / wings);
+    const waveCount = Math.min(wings, count - wave * wings);
+    const column = index % wings;
+    const mean = Array.from({ length: waveCount }, (_, i) => spreadIndex(i)).reduce((a, b) => a + b, 0) / waveCount;
+    const wing = spreadIndex(column) - mean;
+    const phase = index * 2.399963229728653;
+    let x = wing * lateralStride;
+    let z = -wave * rearStride;
+    let y = Math.sin(wing * 0.7) * clearance * 0.18;
+    switch (formation) {
+      case 'strike_wedge': z -= Math.abs(x) * 0.32; break;
+      case 'defensive_screen': z -= wing * wing * lateralStride * 0.09; break;
+      case 'fighter_screen': z -= Math.abs(x) * 0.12; break;
+      case 'line_abreast': z -= wing * wing * lateralStride * 0.035; break;
+      case 'capital_column': {
+        const columns = Math.min(3, Math.ceil(Math.sqrt(count)));
+        x = spreadIndex(index % columns) * lateralStride * 0.8;
+        z = -Math.floor(index / columns) * rearStride;
+        break;
+      }
+      case 'dispersed': {
+        const radius = Math.sqrt(index) * lateralStride * 0.74;
+        x = Math.cos(phase) * radius * 1.25;
+        z = Math.sin(phase) * radius * 0.65;
+        break;
+      }
+    }
+    if (reapers) {
+      // Ordered, offset pressure waves, without Cartesian stacks of capitals.
+      x += (wave % 2) * lateralStride * 0.2;
+      y += (wave % 2) * clearance * 0.22;
+    } else {
+      x += Math.sin(phase) * clearance * 0.18;
+      z += Math.cos(phase * 0.73) * clearance * 0.3;
+      y += Math.sin(phase * 0.57) * clearance * 0.24;
+    }
+    const local = [...layout.values()];
+    const centreX = (Math.min(...local.map(p => p.x)) + Math.max(...local.map(p => p.x))) / 2;
+    [...layout].forEach(([id, p], localIndex) => {
+      // Keep neat Reaper wings; organics get bounded differences between hulls,
+      // not a new random destination or an oscillating movement command.
+      const trim = reapers ? 0 : Math.sin((index + 1) * 1.71 + localIndex * 2.41);
+      const localX = p.x - centreX;
+      slots.set(id, v3(
+        x + localX + trim * clearance * 0.08,
+        y + p.y + trim * clearance * 0.07,
+        z + p.z - Math.abs(localX) * 0.06 + trim * clearance * 0.12,
+      ));
+    });
   });
-  return result;
+  return slots;
 }
 
 function assignSlotsNominal(ships: SlotShip[], formation: FormationType): Map<string, Vec3> {
   const slots = new Map<string, Vec3>();
   const byTier: SlotShip[][] = [[], [], [], []];
   for (const s of ships) byTier[tier(s.role)].push(s);
-  if (byTier.some((members, i) => members.length > CHUNK_LIMITS[i])) {
-    for (let i = 0; i < byTier.length; i++) {
-      if (byTier[i].length === 0) continue;
-      const tierSlots = byTier[i].length > CHUNK_LIMITS[i]
-        ? assignChunkedTier(byTier[i], formation, CHUNK_LIMITS[i])
-        : assignSlotsNominal(byTier[i], formation);
-      for (const [id, slot] of tierSlots) slots.set(id, slot);
-    }
-    return slots;
-  }
   const [caps, cruisers, frigates, fighters] = byTier;
 
   const capSpacing = Math.max(3.2, ...caps.map((c) => (c.lengthKm * 1.7) / Math.max(BATTLESPACE_SCALE, 0.55)));

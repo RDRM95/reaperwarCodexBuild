@@ -1,5 +1,5 @@
 import type { Rng } from '@/core/rng';
-import { add, distance, dot, lengthSq, normalize, scale, sub, v3, type Vec3 } from '@/core/vec3';
+import { add, clampLength, distance, dot, lengthSq, normalize, scale, sub, v3, type Vec3 } from '@/core/vec3';
 import { FACTIONS, type FactionDoctrine } from '@/data/factions';
 import type { RuleSet } from '@/timelines/rules';
 import { slotToWorld } from './formations';
@@ -118,9 +118,15 @@ export function scoreTarget(ctx: AiContext, shooter: ShipState, fleet: FleetStat
   // Reachable targets dominate remote threats, even when the latter are the
   // fleet focus. This keeps flank escorts firing instead of crossing the line.
   const relativeRange = dist / Math.max(mainRange, S);
-  score *= relativeRange <= 1 ? 1.15 : 1 / (relativeRange * relativeRange);
+  const intercepting = (shooter.role === 'frigate' || shooter.role === 'reaper_destroyer' || shooter.role === 'fighter') &&
+    ctx.fleets.get(target.fleetId)?.orders.order === 'retreat';
+  // A screen intercepts reachable withdrawing ships while the main gun line
+  // maintains its capital focus. Global focus bias otherwise keeps every fast
+  // escort on a distant dreadnought until the last cruiser has almost escaped.
+  if (intercepting) score = (1 + wounded * 0.2) / (1 + relativeRange * relativeRange);
+  else score *= relativeRange <= 1 ? 1.15 : 1 / (relativeRange * relativeRange);
   if (target.role === 'fighter' && shooter.role !== 'fighter') score *= 0.05;
-  if (fleet.orders.focusFire && fleet.focusTargetId === target.id && relativeRange <= 1.2) score *= 1 + d.focusFire * 2;
+  if (!intercepting && fleet.orders.focusFire && fleet.focusTargetId === target.id && relativeRange <= 1.2) score *= 1 + d.focusFire * 2;
   score *= priorityMultiplier(fleet.orders.priority, target);
   if (fleet.orders.protectCapitals && (shooter.role === 'frigate' || shooter.role === 'cruiser')) {
     const tgt = target.targetId ? ctx.getShip(target.targetId) : undefined;
@@ -266,6 +272,40 @@ export function shipDecision(ctx: AiContext, ship: ShipState, fleet: FleetState)
   }
 }
 
+interface RoleStations {
+  formation: FleetState['orders']['formation'];
+  shipCount: number;
+  referenceByShip: Map<string, Vec3>;
+}
+
+const roleStations = new WeakMap<FleetState, RoleStations>();
+
+/** Formation references are deployment geometry, not the live centroid. Dead
+ * members keep their station in this calculation so casualties do not pull the
+ * survivors sideways. Rebuild only for assignment changes or new deployments. */
+function roleReference(ctx: AiContext, ship: ShipState, fleet: FleetState): Vec3 {
+  let cached = roleStations.get(fleet);
+  if (!cached || cached.formation !== fleet.orders.formation || cached.shipCount !== ctx.ships.length) {
+    const members = ctx.ships.filter(member => member.fleetId === fleet.spec.id);
+    const sums = new Map<string, { centre: Vec3; count: number }>();
+    for (const member of members) {
+      const key = member.role;
+      const value = sums.get(key) ?? { centre: v3(), count: 0 };
+      value.centre = add(value.centre, member.slot);
+      value.count++;
+      sums.set(key, value);
+    }
+    const referenceByShip = new Map<string, Vec3>();
+    for (const member of members) {
+      const value = sums.get(member.role)!;
+      referenceByShip.set(member.id, scale(value.centre, 1 / value.count));
+    }
+    cached = { formation: fleet.orders.formation, shipCount: ctx.ships.length, referenceByShip };
+    roleStations.set(fleet, cached);
+  }
+  return cached.referenceByShip.get(ship.id) ?? ship.slot;
+}
+
 /** A bounded firing station relative to the fleet line. Different roles use
  * different batteries, but do not alternate between mutually exclusive goals. */
 export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState): MovementGoal {
@@ -296,30 +336,60 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const band = engagementBand(ship);
   const range = shipEngagementRange(ship);
   const dist = distance(ship.pos, target.pos);
-  const fromStation = sub(target.pos, slotPos);
-  const stationDist = Math.sqrt(lengthSq(fromStation));
-  const toward = normalize(fromStation);
+  const screen = ship.role === 'frigate' || ship.role === 'reaper_destroyer' || ship.role === 'fighter';
+  if (screen && ctx.fleets.get(target.fleetId)?.orders.order === 'retreat') {
+    // Once the enemy abandons the engagement, a fast screen intercepts at its
+    // own gun range. Keeping it tethered to the slow capital line can match a
+    // fleeing cruiser forever, despite the escort's available closing speed.
+    const toward = normalize(sub(target.pos, ship.pos));
+    const pursuit = normalize(sub(target.pos, fleet.anchor));
+    const local = sub(ship.slot, roleReference(ctx, ship, fleet));
+    const spread = clampLength(v3(local.x * 0.35, local.y * 0.35, 0), range * 0.35);
+    const right = v3(fleet.heading.z, 0, -fleet.heading.x);
+    // Keep a stable escort spread rather than giving every pursuer the same
+    // point. Clearance can then protect hulls without holding the entire screen
+    // outside its firing envelope while it jostles for that single station.
+    let position = add(add(add(target.pos, scale(pursuit, -band.preferred)), scale(right, spread.x)), v3(0, spread.y, 0));
+    if (noRetreat && dot(sub(position, ship.pos), toward) < -1e-6) position = ship.pos;
+    ship.engagementMode = dist > band.max ? 'approach' : 'hold';
+    ship.firingOffset = sub(position, slotPos);
+    ship.firingTargetId = target.id;
+    return { position, speedFraction: 1, face: target.pos };
+  }
+  const reference = slotToWorld(fleet.anchor, fleet.heading, roleReference(ctx, ship, fleet));
+  const toReference = sub(target.pos, reference);
+  const referenceDistance = Math.sqrt(lengthSq(toReference));
+  const axialDistance = dot(toReference, fleet.heading);
   if (ship.firingTargetId !== target.id) {
     ship.firingTargetId = target.id;
     ship.engagementMode = dist > band.max ? 'approach' : 'hold';
-    ship.firingOffset = v3();
   }
   if (dist > band.max) ship.engagementMode = 'approach';
   else if (dist < band.min && !noRetreat) ship.engagementMode = 'reposition';
   else if (ship.engagementMode === 'approach' && dist <= band.preferred) ship.engagementMode = 'hold';
   else if (ship.engagementMode === 'reposition' && dist >= band.min) ship.engagementMode = 'hold';
 
-  if (ship.engagementMode === 'approach') {
-    // A forward layer gives frigates/short-range escorts their own firing line.
-    const screen = ship.role === 'frigate' || ship.role === 'reaper_destroyer' || ship.role === 'fighter';
-    const leash = screen ? Math.max(range, (fleet.engagementRange ?? range) * 1.1) : range * 0.55;
-    const advance = Math.min(Math.max(0, stationDist - band.preferred), leash);
-    ship.firingOffset = scale(toward, advance);
-  } else if (ship.engagementMode === 'reposition') {
-    // A finite recovery behind the assigned station, never an endless kite.
-    ship.firingOffset = scale(toward, -Math.min(Math.max(0, band.min - stationDist), range * 0.25));
+  // Translate a role's line as a whole. Radially projecting every hull onto a
+  // target-centred sphere contracted broad wings and erased the depth between
+  // battlegroups. A forward translation retains the assigned lateral/vertical
+  // stations, and the cached reference prevents the same contraction in depth.
+  const leash = screen ? Math.max(range, (fleet.engagementRange ?? range) * 1.1) : range * 0.55;
+  let advance = Math.min(Math.max(0, referenceDistance - band.preferred), Math.max(0, axialDistance - band.min), leash);
+  if (!noRetreat && referenceDistance < band.min) advance = -Math.min(band.min - referenceDistance, range * 0.25);
+  let position = add(slotPos, scale(fleet.heading, advance));
+
+  // A flank can still correct an unusable firing solution, within a bounded
+  // trim. In-range ships keep their station instead of all seeking precisely
+  // the same preferred radius. This is not a new pursuit/retargeting controller.
+  const toTarget = sub(target.pos, position);
+  const stationDistance = Math.sqrt(lengthSq(toTarget));
+  const trimLimit = range * 0.15;
+  if (stationDistance > range * 0.97) {
+    position = add(position, scale(normalize(toTarget), Math.min(trimLimit, stationDistance - range * 0.94)));
+  } else if (!noRetreat && stationDistance < band.min) {
+    position = add(position, scale(normalize(toTarget), -Math.min(trimLimit, band.min - stationDistance)));
   }
-  let position = add(slotPos, ship.firingOffset ?? v3());
+  ship.firingOffset = sub(position, slotPos);
   if (noRetreat) {
     // A station behind the enemy must not turn into a reverse thrust command
     // or a tangential orbit. Brake in place until forward pressure is needed.
