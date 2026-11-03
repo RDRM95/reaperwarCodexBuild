@@ -28,6 +28,7 @@ test.describe('Reaper War Simulator', () => {
     await page.goto('/');
     await page.click('[data-menu="quick-battle"]');
     await expect(page.locator('[data-action="launch"]')).toBeVisible();
+    await page.fill('input[type="number"]', '42');
     await page.click('[data-action="launch"]');
     await expect(page.locator('[data-action="pause"]')).toBeVisible();
 
@@ -45,6 +46,11 @@ test.describe('Reaper War Simulator', () => {
     await expect(page.locator('[data-action="pause"]')).toHaveClass(/active/);
     await page.click('[data-speed="4"]');
     await expect(page.locator('[data-speed="4"]')).toHaveClass(/active/);
+    // Speed selection deliberately resumes play. Freeze the battle again
+    // before camera/roster inspection: arrivals, casualties and automatic
+    // fleet summaries can legitimately replace a live row during a click.
+    await page.click('[data-action="pause"]');
+    await expect(page.locator('[data-action="pause"]')).toHaveClass(/active/);
     for (const cam of ['cinematic', 'follow', 'free', 'projectile', 'reaper', 'command', 'tactical']) {
       await page.click(`[data-camera="${cam}"]`);
       await expect(page.locator(`[data-camera="${cam}"]`)).toHaveClass(/active/);
@@ -54,6 +60,10 @@ test.describe('Reaper War Simulator', () => {
     await page.selectOption('select >> nth=0', 'strike_wedge');
 
     // Select a ship from the list, then order the fleet to attack a Reaper destroyer.
+    for (const fleetId of ['alliance-5th', 'reaper-sol']) {
+      const expand = page.locator(`[data-action="expand-fleet"][data-fleet="${fleetId}"]`);
+      if (await expand.isVisible()) await expand.click();
+    }
     await page.locator('.ship-list .ship-row').first().click();
     await expect(page.locator('.target-panel')).toContainText('SSV');
     const destroyerRow = page.locator('.ship-row', { hasText: 'Reaper destroyer' }).first();

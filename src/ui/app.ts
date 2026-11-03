@@ -586,6 +586,7 @@ export class App {
   /** Set when returning to the campaign screen after a fought battle. */
   campaignResume = false;
   private toastTimer = 0;
+  private toastElement?: HTMLElement;
 
   constructor() {
     this.ui = document.getElementById('ui')!;
@@ -864,9 +865,15 @@ export class App {
   }
 
   toast(text: string): void {
+    this.toastElement?.remove();
     const t = el('div', { class: 'toast' }, text);
+    this.toastElement = t;
     this.ui.appendChild(t);
     window.clearTimeout(this.toastTimer);
-    this.toastTimer = window.setTimeout(() => t.remove(), 2200);
+    this.toastTimer = window.setTimeout(() => {
+      t.remove();
+      this.toastElement = undefined;
+      this.toastTimer = 0;
+    }, 2200);
   }
 }

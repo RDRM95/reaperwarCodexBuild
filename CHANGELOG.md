@@ -10,6 +10,7 @@
 - Replaced generated ship numbers with faction-fitting names and fighter callsigns while preserving explicit/signature names and Reaper numbering. Names consume no combat randomness.
 - Large battles now aggregate both tactical labels and HUD lists by fleet name/live count, with expandable ship lists and retained inspected-ship details. Auto uses 80/64-ship hysteresis; explicit ship/fleet options persist. Hidden HUDs avoid roster DOM work.
 - Extended rendered hull review to all new AU/crossover models. The existing rendering benchmark now uses a fixed seed and optional bounded software-GPU samples; test results and same-host comparisons are recorded in `docs/QA_V014.md`.
+- Fixed old global alerts remaining on screen when a newer alert cancelled their expiry. Corrected a full-battle browser test that resumed combat before inspecting a changing roster; it now uses a fixed seed and pauses inspection. CI preserves readable failure annotations, reports and screenshots.
 - Saved the requested Extreme Scale engine upgrade as a deferred engineering brief. No current extreme-scale support or benchmark result is claimed.
 - See `docs/AU_WORLDS_AND_CIVILIZATIONS.md` for controls and scope; the Strict Lore, crossover and overlay changes below are included in this release.
 
