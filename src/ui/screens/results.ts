@@ -54,10 +54,11 @@ export function renderResults(app: App): HTMLElement {
 
   const footer = el('div', { class: 'screen-footer' }, [
     el('button', { class: 'btn', onclick: () => app.show('menu') }, '← Main menu'),
-    el('button', { class: 'btn', 'data-action': 'replay', onclick: () => app.startBattle(config, { replay: true, comparison: lb.comparison, comparisonSide: lb.comparisonSide }) }, 'Replay battle (same seed)'),
-    lb.campaign ? null : el('button', { class: 'btn', onclick: () => app.startBattle({ ...config, seed: Math.floor(Math.random() * 100000), id: `${config.id}-r` }) }, 'Re-run with new seed'),
+    el('button', { class: 'btn', 'data-action': 'replay', onclick: () => app.startBattle(config, { replay: true, comparison: lb.comparison, comparisonSide: lb.comparisonSide, civilization: lb.civilization }) }, 'Replay battle (same seed)'),
+    lb.campaign || lb.civilization ? null : el('button', { class: 'btn', onclick: () => app.startBattle({ ...config, seed: Math.floor(Math.random() * 100000), id: `${config.id}-r` }) }, 'Re-run with new seed'),
     lb.comparison ? el('button', { class: 'btn primary', onclick: () => app.show('comparison', { report: lb.comparison }) }, 'Back to comparison') : null,
     lb.campaign ? el('button', { class: 'btn primary', 'data-action': 'return-campaign', onclick: () => app.show('campaign') }, 'Return to campaign →') : null,
+    lb.civilization ? el('button', { class: 'btn primary', 'data-action': 'return-civilization', onclick: () => app.show('civilization') }, 'Return to civilization →') : null,
     el('div', { class: 'spacer' }),
     el('button', { class: 'btn', onclick: () => {
       const blob = new Blob([JSON.stringify({ result, events: sim.events }, null, 1)], { type: 'application/json' });

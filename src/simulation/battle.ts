@@ -21,6 +21,7 @@ import { getShipClass } from '@/data/ships';
 import type { FactionId } from '@/data/types';
 import { WEAPONS, getWeapon } from '@/data/weapons';
 import { applyRulesToShip, applyRulesToWeapon, cloneRules, type EffectiveWeapon, type RuleSet } from '@/timelines/rules';
+import { assertLoreCompatible } from '@/timelines/lore';
 import { fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
 import { applyDamage, applyProjectileDamage, hitProbability } from './damage';
 import { assignSlots } from './formations';
@@ -29,6 +30,7 @@ import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
 import { SeparationField } from './separation';
 import { HadesVolleyCoordinator } from './volleys';
+import { ShipNameGenerator } from './shipNames';
 import {
   batteryIntent, inWeaponArc, isCommandedBattery, PrimaryVolleyControl,
   weaponTarget, weaponWorldOffset,
@@ -87,6 +89,7 @@ export class BattleSimulation implements AiContext {
   result?: BattleResult;
   private nextId = 1;
   private shipCounter = new Map<string, number>();
+  private readonly shipNames: ShipNameGenerator;
   private fleetRules = new Map<string, RuleSet>();
   private pendingFleets: FleetSpec[] = [];
   private heavyLossesAnnounced = new Set<Side>();
@@ -98,9 +101,13 @@ export class BattleSimulation implements AiContext {
   onEvent?: (e: BattleEvent) => void;
 
   constructor(config: BattleConfig) {
+    assertLoreCompatible(config);
     this.config = config;
     this.rules = config.rules;
     this.rng = new Rng(config.seed);
+    // Reserve future arrivals too: an earlier generated name must not steal a
+    // scenario's explicitly named vessel before its reinforcement wave lands.
+    this.shipNames = new ShipNameGenerator(config.fleets.flatMap(fleet => fleet.ships.flatMap(group => group.names ?? [])));
     this.emit({ t: 0, type: 'battle_start', name: config.name });
     for (const f of config.fleets) {
       if ((f.arrivalTime ?? 0) <= 0) this.deployFleet(f);
@@ -217,7 +224,8 @@ export class BattleSimulation implements AiContext {
     const lengthKm = cls.lengthM.value / 1000;
     const ship: ShipState = {
       id,
-      name: name ?? `${cls.shortName ?? cls.name} ${String(n).padStart(2, '0')}`,
+      name: this.shipNames.assign({ faction: cls.faction, role: cls.role, classId: cls.id, explicitName: name,
+        reaperFallback: `${cls.shortName ?? cls.name} ${String(n).padStart(2, '0')}` }),
       classId,
       faction: cls.faction,
       role: cls.role,
@@ -719,7 +727,8 @@ export class BattleSimulation implements AiContext {
     if (manualWindow) this.primaryVolleys.fired(fleet.spec.id, ship, w);
 
     // Fire.
-    w.cooldown = def.cooldown * (0.95 + 0.1 * this.rng.next());
+    const reloadJitter = 0.95 + 0.1 * this.rng.next();
+    w.cooldown = def.cooldown * (this.rules.strictLore && def.id === 'alliance_dn_main' ? 1 : reloadJitter);
     ship.heat += def.heat;
     ship.stats.shotsFired++;
     if (w.burstLeft !== undefined && def.burst) {

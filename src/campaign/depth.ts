@@ -1,7 +1,7 @@
 import { Rng } from '@/core/rng';
 import { FACTIONS } from '@/data/factions';
-import type { FactionId } from '@/data/types';
-import type { TechModifiers } from '@/timelines/rules';
+import { MASS_EFFECT_FACTION_IDS, type MassEffectFactionId } from '@/data/types';
+import { techFor, type TechModifiers } from '@/timelines/rules';
 import { SYSTEMS, getSystem, neighbours, type SystemId } from './galaxy';
 import type { CampaignEvent, CampaignState } from './state';
 
@@ -64,14 +64,15 @@ export function setResearch(state: CampaignState, id: string | undefined): { ok:
 }
 
 /** Absolute technology overrides for allied fleets from completed research. */
-export function researchTech(state: CampaignState): Partial<TechModifiers> | undefined {
+export function researchTech(state: CampaignState, faction?: MassEffectFactionId): Partial<TechModifiers> | undefined {
   const out: Partial<TechModifiers> = {};
+  const base = faction ? techFor(state.rules, faction) : state.rules.organic;
   let any = false;
   for (const id of state.research.completed) {
     const p = getProject(id);
     if (!p?.tech) continue;
     for (const [k, mult] of Object.entries(p.tech) as [keyof TechModifiers, number][]) {
-      out[k] = (out[k] ?? state.rules.organic[k]) * mult;
+      out[k] = (out[k] ?? base[k]) * mult;
       any = true;
     }
   }
@@ -245,7 +246,7 @@ export function politicalPhase(state: CampaignState, log: Logger, interactive = 
     log('political', screened ? `Indoctrination screening exposes a compromised ${FACTIONS[s.homeworldOf].shortName} official on ${s.world} before any damage is done.` : `A senior ${FACTIONS[s.homeworldOf].shortName} official on ${s.world} is exposed as indoctrinated after months of sabotaged orders. Trust in joint command falls.`, s.id);
   }
   // Shipyard sabotage by indoctrinated staff.
-  for (const f of Object.keys(FACTIONS) as FactionId[]) {
+  for (const f of MASS_EFFECT_FACTION_IDS) {
     const home = SYSTEMS.find((s) => s.homeworldOf === f);
     if (!home) continue;
     const st = state.systems[home.id];

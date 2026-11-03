@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.14.0 — AU Worlds, persistent civilizations and fleet summaries
+
+- Added a separate AU Worlds hub with aligned Alliance/Cerberus, First Contact victors, the Prothean warning of 1800, independent FTL, Prothean victory, past cycles and an explicitly labelled HFY branch. Existing timelines remain available; ordinary new branches leave Reaper technology unchanged and use declared tradeoffs.
+- Added genuine three-week relay-independent campaign transit for eligible human fleets. Fleets in transit cannot defend, fight, receive production or change destination; ordinary relay travel remains available.
+- Fixed campaign research, readiness and preservation estimates losing faction-specific AU technology. Research/readiness now scale each fleet's own baseline, and withdrawal assessment weights that technology by deployed hull value. Added faction-specific technology controls to the timeline editor.
+- Added Prothean, past-cycle and player-civilization factions plus Skynet orbital extrapolations, with eight original hull models. The full builder now has sixteen factions; crossover/historical civilization rosters stay separate from ordinary galactic campaigns.
+- Added a compact persistent civilization layer: seeded identity, origin, government, ethics, doctrine, industry, research, politics, actual ship construction and per-fleet technology. Deployment locks strategic changes; owner-filtered surviving ships and battle consequences apply once on results. Local save, backup and JSON import/export are supported. Pending battles restart from their initial configuration, not a mid-battle snapshot.
+- Replaced generated ship numbers with faction-fitting names and fighter callsigns while preserving explicit/signature names and Reaper numbering. Names consume no combat randomness.
+- Large battles now aggregate both tactical labels and HUD lists by fleet name/live count, with expandable ship lists and retained inspected-ship details. Auto uses 80/64-ship hysteresis; explicit ship/fleet options persist. Hidden HUDs avoid roster DOM work.
+- Extended rendered hull review to all new AU/crossover models. The existing rendering benchmark now uses a fixed seed and optional bounded software-GPU samples; test results and same-host comparisons are recorded in `docs/QA_V014.md`.
+- Saved the requested Extreme Scale engine upgrade as a deferred engineering brief. No current extreme-scale support or benchmark result is claimed.
+- See `docs/AU_WORLDS_AND_CIVILIZATIONS.md` for controls and scope; the Strict Lore, crossover and overlay changes below are included in this release.
+
+## 0.13.0 — Strict Lore, crossover fleets and independent overlays
+
+- Added a separate Strict Lore profile with a sourced two-second Alliance main-gun base cycle, protected canonical technology/roster and exclusion of AU-only hulls and alternate-history launches. Balanced Canon and APEX retain their existing numerical calibration; unsupported specifications remain labelled estimates.
+- Fixed high-damage broadside flashes appearing at the spinal muzzle. Gun flashes now follow physical mount position/facing; turreted lance beams use their actual deck emitters. Added per-mount cadence, broadside counts and beam burst/recharge explanations.
+- Added the Multiverse crossover roster: UNSC, Covenant, Imperium and Chaos, with eight original hull models, twelve weapons, setting-weighted AU conversions, point values, builder presets, reinforcement/allied-fleet support and saved setup migration. Crossover factions stay out of ordinary campaigns and APEX refits do not leak into alien weapons.
+- Added stable 40k broadside facing and setup clearance for oversized hulls. Homing launch banks can engage forward targets while reloads, magazines and fixed-gun arcs remain enforced.
+- Added optional persistent tactical overlays with hidden/minimal HUD and in cinematic mode. O toggles annotations independently; H keeps its HUD cycle. Fixed invisible hidden-HUD pause menus and unintended unpausing when closing them.
+- See `docs/LORE_CADENCE_AND_CROSSOVERS.md` for controls, provenance, scaling assumptions, validation and limitations.
+
 ## 0.12.2 — Swept battlegroups and fleet cinematics
 
 - Large formations deploy mixed capital/escort battlegroups along staggered, swept fronts, with bounded organic spacing variation and cleaner Reaper pressure waves. Setup-time local clearance moves hulls laterally instead of building vertical towers. Small fleet layouts and the selected line/wedge/screen/column meanings remain.

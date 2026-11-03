@@ -268,7 +268,7 @@ export function renderCampaign(app: App, state: CampaignState): HTMLElement {
     setChildren(
       fleetPanel,
       el('div', { style: { color: ALLEGIANCE_COLOUR[f.allegiance], fontSize: '14px' } }, f.name),
-      el('div', { class: 'dim', style: { fontSize: '11px', marginBottom: '6px' } }, `${FACTIONS[f.faction].name} · at ${getSystem(f.location).name}${f.destination ? ` → ${getSystem(f.destination).name}` : ''} · readiness ${Math.round(f.readiness * 100)}%`),
+      el('div', { class: 'dim', style: { fontSize: '11px', marginBottom: '6px' } }, `${FACTIONS[f.faction].name} · ${f.travelMode === 'independent' ? `independent FTL: ${f.transitWeeksRemaining} weeks remaining` : `at ${getSystem(f.location).name}`}${f.destination ? ` → ${getSystem(f.destination).name}` : ''} · readiness ${Math.round(f.readiness * 100)}%`),
       el('table', {}, [el('tbody', {}, Object.entries(f.counts).filter(([, n]) => n > 0).map(([c, n]) => el('tr', {}, [el('td', {}, getShipClass(c).name), el('td', { class: 'num' }, String(n))])))]),
       f.playerControlled
         ? el('div', { class: 'row', style: { marginTop: '8px' } }, [
@@ -482,6 +482,7 @@ export function renderCampaign(app: App, state: CampaignState): HTMLElement {
 /** Campaign setup: timeline, world state, seed. */
 export function renderCampaignSetup(app: App): HTMLElement {
   let timelineId = app.prefs.lastTimelineId;
+  if (app.getTimeline(timelineId).campaignCompatible === false) timelineId = 'canon_me3';
   let seed = Math.floor(Math.random() * 100000);
   const ws: Record<string, string> = { ascension: 'present', rannoch: 'war', crucible: 'use', genophage: 'cured', rachni: 'saved' };
   const body = el('div', { class: 'screen-body' });
@@ -495,7 +496,7 @@ export function renderCampaignSetup(app: App): HTMLElement {
           el('label', { class: 'field' }, ['Rule set', el('select', { onchange: (e: Event) => {
             timelineId = (e.target as HTMLSelectElement).value;
             render();
-          } }, app.allTimelines().map((t) => el('option', { value: t.id, selected: t.id === timelineId }, `${t.name}${t.category === 'canon' ? '' : ` [${t.category.toUpperCase()}]`}`)))]),
+          } }, app.allTimelines().filter(t => t.campaignCompatible !== false).map((t) => el('option', { value: t.id, selected: t.id === timelineId }, `${t.name}${t.category === 'canon' ? '' : ` [${t.category.toUpperCase()}]`}`)))]),
           el('p', { class: 'dim' }, rules.description),
           el('div', { class: 'kv' }, [
             el('span', {}, 'Crucible'), el('span', { class: 'v' }, rules.strategic.crucibleAvailable && rules.strategic.catalystOperational ? 'available' : 'unavailable'),

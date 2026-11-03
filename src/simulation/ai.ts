@@ -306,6 +306,56 @@ function roleReference(ctx: AiContext, ship: ShipState, fleet: FleetState): Vec3
   return cached.referenceByShip.get(ship.id) ?? ship.slot;
 }
 
+interface BroadsideBearing {
+  flank: 1 | -1;
+  active: boolean;
+}
+
+const broadsideBearings = new WeakMap<ShipState, BroadsideBearing>();
+
+/** Warhammer hulls bring their actual side batteries to bear after arrival.
+ * This changes only gun facing: station translation never becomes an orbit.
+ * Other factions retain their existing spinal/forward engagement policy. */
+function combatFacing(ship: ShipState, target: ShipState, station: Vec3): Vec3 {
+  if (ship.faction !== 'imperium' && ship.faction !== 'chaos') return target.pos;
+  let portRange = 0, starboardRange = 0;
+  for (const weapon of ship.weapons) {
+    if (weapon.def.antiSmall || !weapon.def.antiCapital || weapon.def.kind !== 'mass_accelerator' ||
+      weapon.def.arc < 60 || weapon.def.arc >= 180 || Math.abs(Math.sin(weapon.facing)) < 0.9 ||
+      (weapon.ammo !== undefined && weapon.ammo <= 0)) continue;
+    if (Math.sin(weapon.facing) > 0) starboardRange = Math.max(starboardRange, weapon.def.range);
+    else portRange = Math.max(portRange, weapon.def.range);
+  }
+  if (!portRange && !starboardRange) {
+    broadsideBearings.delete(ship);
+    return target.pos;
+  }
+  const delta = sub(target.pos, ship.pos);
+  const dist = Math.sqrt(lengthSq(delta));
+  const bearing = normalize(v3(delta.x, 0, delta.z));
+  let state = broadsideBearings.get(ship);
+  if (!state || !(state.flank === 1 ? starboardRange : portRange)) {
+    const starboardHeading = v3(-bearing.z, 0, bearing.x);
+    const portHeading = scale(starboardHeading, -1);
+    const difference = dot(ship.heading, starboardHeading) - dot(ship.heading, portHeading);
+    // Equal turns use a stable per-hull choice, never the simulation RNG.
+    const tie = [...ship.id].reduce((value, character) => value + character.charCodeAt(0), 0) % 2 === 0 ? 1 : -1;
+    const flank: 1 | -1 = !portRange ? 1 : !starboardRange ? -1 : Math.abs(difference) < 1e-6 ? tie : difference > 0 ? 1 : -1;
+    state = { flank, active: false };
+    broadsideBearings.set(ship, state);
+  }
+  const macroRange = state.flank === 1 ? starboardRange : portRange;
+  const speed = Math.sqrt(lengthSq(ship.vel));
+  const stationDistance = distance(ship.pos, station);
+  if (state.active && (dist > macroRange * 1.08 ||
+    (stationDistance > Math.max(0.8, ship.maxSpeed * 10) && speed > ship.maxSpeed * 0.45))) state.active = false;
+  if (!state.active && dist <= macroRange * 0.96 && speed <= ship.maxSpeed * 0.25 &&
+    stationDistance <= Math.max(0.1, ship.maxSpeed * 2)) state.active = true;
+  if (!state.active) return target.pos;
+  const heading = state.flank === 1 ? v3(-bearing.z, 0, bearing.x) : v3(bearing.z, 0, -bearing.x);
+  return add(ship.pos, heading);
+}
+
 /** A bounded firing station relative to the fleet line. Different roles use
  * different batteries, but do not alternate between mutually exclusive goals. */
 export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState): MovementGoal {
@@ -331,7 +381,7 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
     if (escort?.alive && !escort.escaped) return { position: slotToWorld(escort.pos, escort.heading, scale(ship.slot, 0.35)), speedFraction: 1, face: target?.pos };
   }
   const engaging = attackOrder(fleet) || (noRetreat && ['withdraw', 'retreat'].includes(fleet.orders.order));
-  if (!target || (!engaging && ship.role !== 'fighter')) return { position: slotPos, speedFraction: 1, face: target?.pos };
+  if (!target || (!engaging && ship.role !== 'fighter')) return { position: slotPos, speedFraction: 1, face: target ? combatFacing(ship, target, slotPos) : undefined };
 
   const band = engagementBand(ship);
   const range = shipEngagementRange(ship);
@@ -396,5 +446,5 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
     const toEnemy = normalize(sub(target.pos, ship.pos));
     if (dot(sub(position, ship.pos), toEnemy) < -1e-6) position = ship.pos;
   }
-  return { position, speedFraction: 1, face: target.pos };
+  return { position, speedFraction: 1, face: combatFacing(ship, target, position) };
 }

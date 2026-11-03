@@ -12,6 +12,8 @@ Every important statistic in `src/data` carries one of four tags, which the UI s
 ## Canon anchors used
 
 - **Dreadnought main gun** (ME1 codex, *Dreadnought*): Everest-class gun ~800 m long; 20 kg slug at 4,025 km/s, ~38 kt TNT, one round every two seconds. → simulation damage unit: 1 dreadnought slug ≈ 1,000 points.
+
+  Strict Lore uses the two-second base cadence. The separate balanced Canon catalogue retains its historical four-second calibration. Heat/readiness can delay either. Other exact reload rates and emitter counts remain simulation estimates; see [cadence notes](docs/LORE_CADENCE_AND_CROSSOVERS.md).
 - **Reaper capital ship** (ME3 codex): ~2 km long; magnetohydrodynamic weapon yielding 132–454 kt per shot, capable of destroying a dreadnought. Sovereign's barriers withstood the Citadel fleet until Saren's death.
 - **Reaper destroyer** (ME3 codex): ~160 m; beam defeats frigates and cruisers.
 - **Kinetic barriers** (codex): stop fast projectiles, not slow objects, not directed energy.
@@ -32,6 +34,8 @@ Every important statistic in `src/data` carries one of four tags, which the UI s
 Hull / armour / barrier pools, regeneration, speeds, turn rates, sensor ranges, weapon cooldowns, ranges and projectile speeds in a **compressed battlespace** (tens of km instead of tens of thousands). The relationships enforced by tests: a dreadnought slug destroys a frigate; a Reaper capital beam guts a cruiser in one burst and a dreadnought in about two; frigate guns barely scratch Reaper plating; under canon rules a full dreadnought group loses the reference engagement while killing at most a couple of Reapers.
 
 Fleet sizes per scenario are compressed stand-ins for canon forces (the real Battle of Earth involved far larger fleets).
+
+Crossover hulls, power conversions, dimensions and weapon figures are explicitly AU estimates and are excluded by Strict Lore. Their common shield/damage model does not establish a canonical equivalence between unrelated settings.
 
 ## Player-dependent outcomes
 

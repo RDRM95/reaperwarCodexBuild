@@ -12,6 +12,7 @@ import { buildEnvironment, type EnvironmentBuild } from './environment';
 import { KM } from './geometry';
 import { instantiateShip, type BuiltShip } from './ships';
 import { DETAIL_MESH_NAMES, lodLevel, type LodLevel } from './lod';
+import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 
 /**
  * Binds a BattleSimulation to a Three.js scene. The simulation owns all
@@ -283,9 +284,10 @@ export class BattleView {
         if (w.beamRemaining > 0 && w.beamStart && w.beamEnd) {
           const kind = w.def.kind === 'thanix' ? 'thanix' : 'reaper_beam';
           const v = this.visuals.get(ship.id);
-          // Start the beam at the model muzzle for Reapers (the eye), else at the hardpoint.
+          // Eyes and narrow forward projectors use their model muzzle;
+          // turreted lance decks use the actual visible-hull hardpoint.
           let start: THREE.Vector3;
-          if (v && v.built.muzzle && (ship.faction === 'reaper' || w.def.kind === 'thanix')) start = v.built.group.localToWorld(v.built.muzzle.clone());
+          if (v) start = weaponBeamOrigin(v.built.group, v.built.muzzle, w, ship.faction === 'reaper');
           else start = new THREE.Vector3(w.beamStart.x * KM, w.beamStart.y * KM, w.beamStart.z * KM);
           const t = w.beamTargetId ? sim.getShip(w.beamTargetId) : undefined;
           const end = w.beamHit && t ? new THREE.Vector3(t.pos.x * KM, t.pos.y * KM, t.pos.z * KM) : new THREE.Vector3(w.beamEnd.x * KM, w.beamEnd.y * KM, w.beamEnd.z * KM);
@@ -388,10 +390,8 @@ export class BattleView {
           if (!w) break;
           const big = w.def.damage >= 600;
           if (!big && Math.random() > 0.35) break; // thin out small-gun flashes
-          const local = big && v.built.muzzle ? v.built.muzzle.clone() : new THREE.Vector3(w.offset.x * KM, w.offset.y * KM, w.offset.z * KM);
-          const world = v.built.group.localToWorld(local);
-          const dir = new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z);
-          this.effects.muzzleFlash(world, dir, big ? 6 : 1.4, ship.faction === 'reaper');
+          const pose = weaponFlashPose(v.built.group, v.built.muzzle, w);
+          this.effects.muzzleFlash(pose.position, pose.direction, big ? 6 : 1.4, ship.faction === 'reaper');
           if (big && this.rig.mode === 'projectile') this.projectileTrack = { id: this.sim.projectiles[this.sim.projectiles.length - 1]?.id ?? 0 };
           break;
         }

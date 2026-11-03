@@ -1,4 +1,4 @@
-import type { FactionId } from '@/data/types';
+import type { MassEffectFactionId } from '@/data/types';
 import type { Environment } from '@/simulation/types';
 
 /**
@@ -32,8 +32,8 @@ export interface StarSystem {
   region: string;
   /** Prominent world in the system. */
   world: string;
-  owner: FactionId | 'council' | 'terminus' | 'batarian';
-  homeworldOf?: FactionId;
+  owner: MassEffectFactionId | 'council' | 'terminus' | 'batarian';
+  homeworldOf?: MassEffectFactionId;
   x: number;
   y: number;
   /** Industrial output index (ship production per tick scales with it). */

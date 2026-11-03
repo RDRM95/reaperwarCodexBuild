@@ -5,10 +5,12 @@ A timeline is a `RuleSet` (`src/timelines/rules.ts`): plain JSON, validated on i
 ## Structure
 
 - `organic` / `reaper`: 18 technology multipliers (mass accelerator damage/penetration/range, fire rate, heat capacity, barrier strength/regen, armour, hull, speed, sensors, electronic warfare, accuracy, fighter strength, torpedo damage, GARDIAN effectiveness, beam damage, crew quality). Canon = 1.
-- `factionOverrides`: per-faction partial multipliers merged over `organic`.
+- `factionOverrides`: explicit per-faction technology values merged over `organic` (or `reaper` for Reapers). Crossover/generated factions inherit a neutral baseline so APEX refits do not leak into unrelated settings. The timeline editor can set/reset each value; campaign research and readiness scale the faction baseline.
 - `special`: hyper-mass accelerators (dreadnought spinal gun → `apex_hyper_ma`), HADES rounds (kinetic penetrators with a nuclear warhead that detonates after penetration: rounds ignore 50 % of armour; barriers absorb only 60 % as much), Thanix availability (canon / fleet-wide cruiser refit / none), Reaper command vulnerability (each capital loss degrades Reaper coordination for ~30 s), indoctrination disabled.
 - `fleetStrength`: per-faction multipliers on scenario ship counts (ignored when a scenario is built with `fleet_scaling: fixed`, which comparison mode uses).
 - `strategic`: allied coordination (crew effectiveness), Reaper competence, indoctrination effectiveness, Reaper reinforcements, conventional victory possible, Crucible available, Shepard alive/effectiveness, Illusive Man indoctrinated, Cerberus stance, Harbinger/Catalyst operational, homeworld independence.
+- `strategic.relayIndependentHumanFTL`: eligible human campaign fleets may take a three-week direct crossing; fleets remain unavailable in transit. This is not a combat-speed modifier.
+- `family`, `preferredFaction`, `campaignCompatible`: AU hub grouping, starting roster and whether the modern 2186 campaign fits the branch. Historical/crossover civilization profiles are battle sandboxes. `strictLore` is reserved for the built-in source-led mode and cannot be claimed by imports.
 
 Prerequisites enforced on import: a dead Shepard has effectiveness 0; Cerberus control of the Reapers requires the Catalyst destroyed; an indoctrinated Illusive Man forces Cerberus hostile. Imported sets can never claim `canon` status.
 
@@ -17,6 +19,7 @@ Prerequisites enforced on import: a dead Shepard has effectiveness 0; Cerberus c
 | Preset | Category | Key changes |
 | --- | --- | --- |
 | Canon Mass Effect 3 | canon | None. |
+| Strict Lore — Mass Effect | canon | Protected source-led roster, no AU refits; two-second Alliance main-gun anchor. Other unestablished figures remain estimates. |
 | Prepared Galaxy | AU | Fleets ×1.3–1.5, coordination 0.85, fleet-wide Thanix, modest crew/fire-rate bonuses. Reapers unchanged. |
 | Humanity Ascendant | AU | Alliance only: MA damage ×1.5, barriers ×1.4, armour ×1.3, fleet ×2.2; Council coordination 0.35. |
 | Cerberus Reformed | AU | Illusive Man unindoctrinated, Cerberus cooperative, Cerberus fleet ×2, EW/sensor bonuses. |
@@ -24,6 +27,8 @@ Prerequisites enforced on import: a dead Shepard has effectiveness 0; Cerberus c
 | Prime/Apex — Successful Refuse | AU | Organic MA damage ×1.25 / penetration ×1.3, barriers ×1.35, armour ×1.3, hull ×1.15, fire rate ×1.1, sensors ×1.4, beams ×1.35; hyper-mass accelerators; HADES; fleet-wide Thanix; Reaper command vulnerability; coordination 0.9; homeworld independence; conventional victory possible; Cerberus Black Fleet cooperative. Reaper tech unchanged. |
 | Cerberus Ascendant | AU | Shepard dead; Catalyst destroyed; indoctrination disabled; Illusive Man alone controls the Reapers; Harbinger independent; no Crucible. |
 | Custom | custom | Starts identical to canon; editable, saveable, exportable. |
+
+The current seventeen built-ins also include Concordant Earth, Iron Dawn, The Sealed Relay (1800 beacon), The Unbound Route, Prothean Victory, Past Cycles, Player Civilization, HFY Terran Ascendancy and Multiverse Crossover. See [AU Worlds](docs/AU_WORLDS_AND_CIVILIZATIONS.md) for their actual mechanics and the separate civilization inventory/politics layer. [Lore and cadence notes](docs/LORE_CADENCE_AND_CROSSOVERS.md) distinguish supported lore anchors from encounter estimates.
 
 ## Isolation guarantees (tested in `tests/timelines.test.ts`)
 

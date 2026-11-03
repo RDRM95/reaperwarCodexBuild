@@ -41,6 +41,10 @@ function spreadIndex(i: number): number {
 
 const CHUNK_LIMITS = [8, 12, 16, 24];
 const SLOT_SCALE = Math.max(BATTLESPACE_SCALE, 0.55);
+// Original catalogue bounds for the four nominal layout tiers. Keeping this
+// guard preserves established small ME layouts while bigger crossover/future
+// hulls receive the same physical clearance used by large formations.
+const NOMINAL_TIER_MAX_KM = [2.4, 0.56, 0.216, 0.018];
 
 export function assignSlots(ships: SlotShip[], formation: FormationType): Map<string, Vec3> {
   const counts = [0, 0, 0, 0];
@@ -51,12 +55,13 @@ export function assignSlots(ships: SlotShip[], formation: FormationType): Map<st
   // what keeps hulls from overlapping.
   const slots = new Map<string, Vec3>();
   for (const [id, v] of raw) slots.set(id, v3(v.x * SLOT_SCALE, v.y * SLOT_SCALE, v.z * SLOT_SCALE));
-  if (large) separateLargeFormation(ships, slots);
+  const oversized = ships.some(ship => ship.lengthKm > NOMINAL_TIER_MAX_KM[tier(ship.role)]);
+  if (large || oversized) separateFormationHulls(ships, slots);
   return slots;
 }
 
 /** Keep mixed tiers clear without moving established small-fleet layouts. */
-function separateLargeFormation(ships: SlotShip[], slots: Map<string, Vec3>): void {
+function separateFormationHulls(ships: SlotShip[], slots: Map<string, Vec3>): void {
   const cellSize = Math.max(0.1, ...ships.map((ship) => ship.lengthKm * 1.1));
   const cells = new Map<string, { pos: Vec3; radius: number }[]>();
   const key = (x: number, y: number, z: number) => `${x},${y},${z}`;

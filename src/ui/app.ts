@@ -26,8 +26,15 @@ import { createPostWar, type PostWarState } from '@/campaign/postwar';
 import { applyEngagementResult, createCampaign, type CampaignOptions } from '@/campaign/engine';
 import { normaliseCampaign } from '@/campaign/depth';
 import type { CampaignState, PendingEngagement } from '@/campaign/state';
+import { renderAuHub } from './screens/auHub';
+import { renderCivilization } from './screens/civilization';
+import { applyCivilizationBattleResult, beginCivilizationBattle, cancelCivilizationBattle, createCivilization, normalizeCivilizationState } from '@/civilization/engine';
+import type { CivilizationInput, CivilizationOrigin, CivilizationState } from '@/civilization/types';
+import { buildCustomBattle, type CustomBattleInput, type CustomFleetInput } from '@/scenarios';
 
-export type ScreenName = 'menu' | 'briefing' | 'battle' | 'results' | 'comparison' | 'codex' | 'database' | 'custom' | 'timelines' | 'settings' | 'campaign' | 'campaign_setup' | 'postwar' | 'saves';
+export type ScreenName = 'menu' | 'briefing' | 'battle' | 'results' | 'comparison' | 'codex' | 'database' | 'custom' | 'timelines' | 'settings' | 'campaign' | 'campaign_setup' | 'postwar' | 'saves' | 'au_hub' | 'civilization';
+
+export interface CivilizationBattleLink { civilizationId: string; }
 
 export interface CampaignBattleLink {
   state: CampaignState;
@@ -41,6 +48,7 @@ export interface LastBattle {
   comparison?: ComparisonReport;
   comparisonSide?: 'a' | 'b';
   campaign?: CampaignBattleLink;
+  civilization?: CivilizationBattleLink;
 }
 
 /** Speed steps available to the player. */
@@ -71,6 +79,7 @@ export class BattleController {
   readonly isReplay: boolean;
   /** Set when this battle resolves a campaign engagement. */
   campaignLink?: CampaignBattleLink;
+  civilizationLink?: CivilizationBattleLink;
 
   constructor(
     readonly app: App,
@@ -84,6 +93,7 @@ export class BattleController {
     this.view = new BattleView(canvas, this.sim, app.prefs.graphics);
     this.overlay = new TacticalOverlay(overlayCanvas);
     this.overlay.visible = app.prefs.showOverlay;
+    this.overlay.detail = app.prefs.overlayDetail;
     const prevOnEvent = this.sim.onEvent;
     this.sim.onEvent = (e) => {
       prevOnEvent?.(e);
@@ -164,11 +174,43 @@ export class BattleController {
     this.hudHidden = this.hudLevel !== 'full';
     this.hud.root.classList.toggle('hidden', this.hudHidden);
     this.hud.root.classList.toggle('none', this.hudLevel === 'none');
-    this.overlay.visible = !this.hudHidden && this.app.prefs.showOverlay;
+    this.syncOverlayVisibility();
+    this.hud.refresh();
   }
 
-  /** One-click viewing mode keeps the top controls accessible and removes
-   * tactical annotations; it never changes simulation speed or pause state. */
+  /** HUD layout and tactical annotations have separate visibility policies. */
+  syncOverlayVisibility(): void {
+    this.overlay.visible = this.app.prefs.showOverlay && (!this.hudHidden || this.app.prefs.overlayIndependent);
+    this.overlay.detail = this.app.prefs.overlayDetail;
+  }
+
+  setOverlayDetail(detail: Preferences['overlayDetail']): void {
+    this.app.prefs.overlayDetail = detail;
+    this.overlay.detail = detail;
+    void this.app.savePrefs();
+    this.hud.refresh();
+  }
+
+  setOverlayIndependent(independent: boolean): void {
+    this.app.prefs.overlayIndependent = independent;
+    this.syncOverlayVisibility();
+    void this.app.savePrefs();
+    this.hud.refresh();
+  }
+
+  toggleOverlay(): void {
+    const visible = !this.overlay.visible;
+    this.app.prefs.showOverlay = visible;
+    // An explicit request to show annotations while the HUD is hidden should
+    // take effect immediately, and survive subsequent HUD/camera changes.
+    if (visible && this.hudHidden) this.app.prefs.overlayIndependent = true;
+    this.syncOverlayVisibility();
+    void this.app.savePrefs();
+    this.hud.refresh();
+  }
+
+  /** One-click viewing mode respects the chosen annotation policy and never
+   * changes simulation speed or pause state. */
   toggleWatch(): void {
     const watching = this.view.rig.mode === 'cinematic' && this.hudLevel !== 'full';
     this.view.rig.setMode(watching ? 'tactical' : 'cinematic');
@@ -213,6 +255,18 @@ export class BattleController {
   selectFleet(): void {
     this.view.selectedIds.clear();
     for (const s of this.sim.ships) if (s.alive && !s.escaped && s.side === this.config.perspectiveSide && s.role !== 'fighter') this.view.selectedIds.add(s.id);
+    this.hud.refresh();
+  }
+
+  /** Fleet-summary rows select one deployed group with one HUD refresh. */
+  selectBattleFleet(fleetId: string, additive = false): void {
+    const ships = this.sim.ships.filter(s => s.fleetId === fleetId && s.alive && !s.escaped && s.role !== 'fighter');
+    const remove = additive && ships.length > 0 && ships.every(s => this.view.selectedIds.has(s.id));
+    if (!additive) this.view.selectedIds.clear();
+    for (const ship of ships) {
+      if (remove) this.view.selectedIds.delete(ship.id); else this.view.selectedIds.add(ship.id);
+    }
+    if (!remove && ships.length > 0) this.view.followId = ships.reduce((a, b) => a.pointValue >= b.pointValue ? a : b).id;
     this.hud.refresh();
   }
 
@@ -453,6 +507,9 @@ export class BattleController {
       case 'h':
         this.toggleHud();
         break;
+      case 'o':
+        if (!e.repeat) this.toggleOverlay();
+        break;
       case '1':
         this.setCamera('tactical');
         break;
@@ -523,6 +580,9 @@ export class App {
   screen: ScreenName = 'menu';
   campaign?: CampaignState;
   postwar?: PostWarState;
+  civilization?: CivilizationState;
+  civilizationBackup?: CivilizationState;
+  civilizationBattleConfig?: BattleConfig;
   /** Set when returning to the campaign screen after a fought battle. */
   campaignResume = false;
   private toastTimer = 0;
@@ -544,8 +604,14 @@ export class App {
     this.prefs = { ...DEFAULT_PREFERENCES, ...(await storage.get('preferences', DEFAULT_PREFERENCES)) };
     this.prefs.graphics = { ...DEFAULT_PREFERENCES.graphics, ...this.prefs.graphics };
     this.prefs.audio = { ...DEFAULT_PREFERENCES.audio, ...this.prefs.audio };
+    this.prefs.overlayIndependent = this.prefs.overlayIndependent === true;
+    if (!['auto', 'ships', 'fleets'].includes(this.prefs.overlayDetail)) this.prefs.overlayDetail = 'auto';
     this.customTimelines = await storage.get('customTimelines', []);
     this.history = await storage.get('battleHistory', []);
+    this.civilization = normalizeCivilizationState(await storage.get('civilization', undefined));
+    this.civilizationBackup = normalizeCivilizationState(await storage.get('civilizationBackup', undefined));
+    const pendingConfig = await storage.get<BattleConfig | undefined>('civilizationBattle', undefined);
+    if (pendingConfig && typeof pendingConfig === 'object' && pendingConfig.id === this.civilization?.pendingBattle?.id && Array.isArray(pendingConfig.fleets)) this.civilizationBattleConfig = pendingConfig;
     audio.settings = { ...this.prefs.audio };
     this.show('menu');
     document.getElementById('boot')?.classList.add('hidden');
@@ -625,7 +691,7 @@ export class App {
         node = renderDatabase(this);
         break;
       case 'custom':
-        node = renderCustom(this);
+        node = renderCustom(this, params as { template?: CustomBattleInput } | undefined);
         break;
       case 'timelines':
         node = renderTimelines(this, params as { editId?: string } | undefined);
@@ -644,6 +710,12 @@ export class App {
         break;
       case 'saves':
         node = renderSaves(this, params as { saveCurrent?: 'campaign' | 'postwar' } | undefined);
+        break;
+      case 'au_hub':
+        node = renderAuHub(this);
+        break;
+      case 'civilization':
+        node = renderCivilization(this, params as { found?: boolean; origin?: CivilizationOrigin } | undefined);
         break;
       case 'battle':
         node = el('div');
@@ -693,7 +765,7 @@ export class App {
     this.show('postwar');
   }
 
-  startBattle(config: BattleConfig, opts: { replay?: boolean; comparison?: ComparisonReport; comparisonSide?: 'a' | 'b'; campaign?: CampaignBattleLink } = {}): void {
+  startBattle(config: BattleConfig, opts: { replay?: boolean; comparison?: ComparisonReport; comparisonSide?: 'a' | 'b'; campaign?: CampaignBattleLink; civilization?: CivilizationBattleLink } = {}): void {
     if (this.battle) this.battle.dispose();
     clear(this.ui);
     this.screen = 'battle';
@@ -703,6 +775,7 @@ export class App {
     this.ui.appendChild(controller.hud.root);
     controller.hud.setComparison(opts.comparison, opts.comparisonSide);
     controller.campaignLink = opts.campaign;
+    controller.civilizationLink = opts.civilization;
     if (config.scenarioId !== 'campaign') {
       this.prefs.lastScenarioId = config.scenarioId;
       void this.savePrefs();
@@ -713,7 +786,14 @@ export class App {
   finishBattle(comparison?: ComparisonReport, comparisonSide?: 'a' | 'b'): void {
     const b = this.battle;
     if (!b || !b.sim.result) return;
-    this.lastBattle = { sim: b.sim, result: b.sim.result, config: b.config, comparison, comparisonSide, campaign: b.campaignLink };
+    this.lastBattle = { sim: b.sim, result: b.sim.result, config: b.config, comparison, comparisonSide, campaign: b.campaignLink, civilization: b.civilizationLink };
+    if (!b.isReplay && b.civilizationLink?.civilizationId === this.civilization?.id && this.civilization) {
+      const survivors: Record<string, number> = {};
+      for (const ship of b.sim.ships) if (ship.fleetId === 'custom-a' && ship.alive) survivors[ship.classId] = (survivors[ship.classId] ?? 0) + 1;
+      const applied = applyCivilizationBattleResult(this.civilization, b.sim.result, survivors);
+      if (applied.ok) { this.civilizationBattleConfig = undefined; void this.saveCivilization(); }
+      else this.toast(applied.reason ?? 'CIVILIZATION RESULT COULD NOT BE APPLIED');
+    }
     if (b.campaignLink && b.campaignLink.state.pending) {
       applyEngagementResult(b.campaignLink.state, b.campaignLink.pending, b.sim.result);
       this.campaign = b.campaignLink.state;
@@ -726,6 +806,61 @@ export class App {
       void storage.set('battleHistory', this.history);
     }
     this.show('results');
+  }
+
+  async saveCivilization(): Promise<void> {
+    await storage.set('civilization', this.civilization ?? null);
+    await storage.set('civilizationBackup', this.civilizationBackup ?? null);
+    await storage.set('civilizationBattle', this.civilizationBattleConfig ?? null);
+  }
+
+  foundCivilization(input: CivilizationInput): void {
+    if (this.civilization?.pendingBattle) return this.toast('RESOLVE OR CANCEL THE PENDING ENGAGEMENT FIRST');
+    this.adoptCivilization(createCivilization(input));
+  }
+
+  adoptCivilization(state: CivilizationState): void {
+    if (this.civilization?.pendingBattle) return this.toast('RESOLVE OR CANCEL THE PENDING ENGAGEMENT FIRST');
+    const safe = normalizeCivilizationState(state); if (!safe) return this.toast('INVALID CIVILIZATION');
+    this.civilizationBackup = this.civilization;
+    this.civilization = safe; this.civilizationBattleConfig = undefined;
+    void this.saveCivilization(); this.show('civilization');
+  }
+
+  restoreCivilizationBackup(): void {
+    if (this.civilization?.pendingBattle || !this.civilizationBackup) return;
+    const previous = this.civilization; this.civilization = this.civilizationBackup; this.civilizationBackup = previous;
+    this.civilizationBattleConfig = undefined;
+    void this.saveCivilization(); this.show('civilization');
+  }
+
+  cancelCivilizationDeployment(): void {
+    const state = this.civilization; if (!state?.pendingBattle) return;
+    const result = cancelCivilizationBattle(state, state.pendingBattle.id);
+    if (!result.ok) return this.toast(result.reason ?? 'NO PENDING DEPLOYMENT');
+    this.civilizationBattleConfig = undefined; void this.saveCivilization();
+  }
+
+  startCivilizationBattle(encounter: 'patrol' | 'harvest' | 'invasion' | 'skynet' = 'harvest'): void {
+    const state = this.civilization; if (!state) return;
+    if (state.pendingBattle) {
+      if (this.civilizationBattleConfig?.id !== state.pendingBattle.id) return this.toast('PENDING BATTLE CONFIGURATION MISSING; CANCEL ITS DEPLOYMENT TO CONTINUE');
+      this.startBattle(this.civilizationBattleConfig, { civilization: { civilizationId: state.id } }); return;
+    }
+    const launch = beginCivilizationBattle(state);
+    if (!launch.ok || !launch.battle) return this.toast(launch.reason ?? 'FLEET UNAVAILABLE');
+    const enemy: CustomFleetInput = encounter === 'skynet'
+      ? { faction: 'skynet', name: 'Skynet orbital machines', formation: 'strike_wedge', counts: { skynet_hunter: 8, skynet_harvester: 1 } }
+      : { faction: 'reaper', name: 'Reaper harvest force', formation: 'strike_wedge', counts: encounter === 'patrol' ? { reaper_destroyer: 2 } : encounter === 'invasion' ? { reaper_capital: 4, reaper_destroyer: 8 } : { reaper_capital: 1, reaper_destroyer: 4 } };
+    const rulesId = state.faction === 'past_cycle' ? 'past_cycles' : 'player_civilization';
+    try {
+      const cfg = buildCustomBattle({ seed: launch.battle.seed, rulesId, rosterMode: encounter === 'skynet' ? 'multiverse' : 'mass_effect', environment: 'deep_space', startingDistanceKm: 90, maxDuration: 300, sideA: launch.battle.fleet, sideB: enemy });
+      cfg.id = launch.battle.id; cfg.name = `${state.name} — engagement ${state.battleSerial}`;
+      this.civilizationBattleConfig = cfg; void this.saveCivilization();
+      this.startBattle(cfg, { civilization: { civilizationId: state.id } });
+    } catch (error) {
+      cancelCivilizationBattle(state, launch.battle.id); void this.saveCivilization(); this.toast(error instanceof Error ? error.message : 'CIVILIZATION LAUNCH FAILED');
+    }
   }
 
   toast(text: string): void {

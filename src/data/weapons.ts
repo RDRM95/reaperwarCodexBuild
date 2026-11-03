@@ -1,4 +1,6 @@
 import { canon, estimate, inferred } from '@/core/provenance';
+import { CROSSOVER_WEAPONS } from './crossover';
+import { SANDBOX_WEAPONS } from './auFactions';
 import type { DamageType, WeaponDef } from './types';
 
 /**
@@ -541,6 +543,8 @@ export const WEAPONS: Record<string, WeaponDef> = {
       note: 'Prime/Apex timeline only.',
     },
   },
+  ...CROSSOVER_WEAPONS,
+  ...SANDBOX_WEAPONS,
 };
 
 export const WEAPON_LIST: WeaponDef[] = Object.values(WEAPONS);

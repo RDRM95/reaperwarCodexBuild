@@ -6,6 +6,7 @@ import type { BattleResult } from '@/simulation/types';
 import type { RuleSet } from '@/timelines/rules';
 import type { GraphicsSettings } from '@/rendering/battleView';
 import type { AudioSettings } from '@/audio/engine';
+import type { OverlayDetail } from '@/ui/fleetLabels';
 
 export interface Preferences {
   graphics: GraphicsSettings;
@@ -14,6 +15,9 @@ export interface Preferences {
   lastTimelineId: string;
   lastScenarioId: string;
   showOverlay: boolean;
+  /** Keep tactical annotations visible when the interface is minimal/hidden. */
+  overlayIndependent: boolean;
+  overlayDetail: OverlayDetail;
 }
 
 export interface SaveData {
@@ -25,6 +29,9 @@ export interface SaveData {
   customBattle?: unknown;
   campaign?: unknown;
   postwar?: unknown;
+  civilization?: unknown;
+  civilizationBackup?: unknown;
+  civilizationBattle?: unknown;
   /** Named save slots: index plus data keyed by slot id. */
   saveSlots?: unknown[];
   slotData?: Record<string, unknown>;
@@ -37,6 +44,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lastTimelineId: 'canon_me3',
   lastScenarioId: 'battle_of_earth',
   showOverlay: true,
+  overlayIndependent: false,
+  overlayDetail: 'auto',
 };
 
 const DB_NAME = 'reaperwar';
@@ -124,6 +133,9 @@ export class Storage {
       customBattle: await this.get('customBattle', undefined),
       campaign: await this.get('campaign', undefined),
       postwar: await this.get('postwar', undefined),
+      civilization: await this.get('civilization', undefined),
+      civilizationBackup: await this.get('civilizationBackup', undefined),
+      civilizationBattle: await this.get('civilizationBattle', undefined),
       saveSlots: await this.get<unknown[]>('saveSlots', []),
       slotData: await this.slotData(),
     };
@@ -150,6 +162,9 @@ export class Storage {
     if (d.customBattle) await this.set('customBattle', d.customBattle);
     if (d.campaign && typeof d.campaign === 'object') await this.set('campaign', d.campaign);
     if (d.postwar && typeof d.postwar === 'object') await this.set('postwar', d.postwar);
+    if (d.civilization && typeof d.civilization === 'object') await this.set('civilization', d.civilization);
+    if (d.civilizationBackup && typeof d.civilizationBackup === 'object') await this.set('civilizationBackup', d.civilizationBackup);
+    if (d.civilizationBattle && typeof d.civilizationBattle === 'object') await this.set('civilizationBattle', d.civilizationBattle);
     if (Array.isArray(d.saveSlots) && d.slotData && typeof d.slotData === 'object') {
       const existing = await this.get<{ id: string }[]>('saveSlots', []);
       const merged = [...(Array.isArray(existing) ? existing : [])];

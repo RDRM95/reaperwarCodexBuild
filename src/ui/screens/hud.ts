@@ -1,4 +1,5 @@
 import type { App, BattleController } from '../app';
+import { OVERLAY_DETAIL_LABELS, resolveOverlayDetail, type OverlayDetail, type ResolvedOverlayDetail } from '../fleetLabels';
 import { SPEEDS } from '../app';
 import { el, fmtNum, fmtTime, setChildren } from '../dom';
 import { FACTIONS } from '@/data/factions';
@@ -44,12 +45,14 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   let comparison: ComparisonReport | undefined;
   let comparisonSide: 'a' | 'b' | undefined;
   let menuOpen = false;
+  let resumeAfterMenu = false;
   let endShown = false;
 
   const clock = el('div', { class: 'hud-clock' });
   const speedRow = el('div', { class: 'row hud-speed' });
   const cameraRow = el('div', { class: 'row' });
   const watchBtn = el('button', { class: 'btn small', 'data-action': 'watch-battle', onclick: () => ctrl.toggleWatch() }, 'Watch battle');
+  const overlayBtn = el('button', { class: 'btn small', 'data-action': 'toggle-overlay', title: 'Toggle tactical overlay (O)', onclick: () => ctrl.toggleOverlay() }, 'Overlay: on (O)');
   const shipList = el('div', { class: 'ship-list scroll' });
   const enemyList = el('div', { class: 'ship-list scroll' });
   const targetPanel = el('div', { class: 'target-panel' });
@@ -111,7 +114,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       statusLine,
     ]),
     el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'SIMULATION'), speedRow, el('button', { class: 'btn small hud-panels-toggle', 'data-action': 'toggle-panels', style: { marginTop: '6px' }, onclick: () => root.classList.toggle('panels-open') }, 'Panels')]),
-    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'CAMERA'), cameraRow, watchBtn]),
+    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'CAMERA'), cameraRow, el('div', { class: 'row', style: { marginTop: '6px' } }, [watchBtn, overlayBtn])]),
     el('div', { class: 'spacer' }),
     el('div', { class: 'panel orange hud-timeline', style: { maxWidth: '260px' } }, [el('div', { class: 'panel-title' }, 'TIMELINE'), el('div', { style: { fontSize: '13px' } }, rules.name), el('div', { class: 'dim', style: { fontSize: '11px' } }, rules.tagline)]),
     el('button', { class: 'btn', 'data-action': 'menu', onclick: () => toggleMenu() }, 'Menu'),
@@ -135,7 +138,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
         rules.special.hadesRounds ? el('div', { class: 'dim', 'data-action': 'hades-payload-note', style: { fontSize: '10px' } }, 'HADES penetrators carry internal nuclear warheads. Concentrated battery salvos create successive internal detonations after penetration.') : null,
         el('div', { class: 'dim', style: { fontSize: '10px' } }, 'Scope applies to spinal fire only. Movement and other orders command all player fleets. Secondary weapons and point defence remain active.'),
       ]),
-      el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Right-click enemy: attack · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD'),
+      el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Right-click enemy: attack · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD · O: tactical overlay'),
     ]),
     el('div', { class: 'panel red', style: { flex: '1', minHeight: '100px', overflow: 'auto' } }, [el('div', { class: 'panel-title' }, 'REAPER INTELLIGENCE ASSESSMENT'), intelBox]),
   ]);
@@ -147,7 +150,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   const root = el('div', { class: 'hud' }, [header, left, right, bottom, subtitle, toastHost]);
 
   // --------------------------------------------------------- menu overlay
-  const menuOverlay = el('div', { class: 'screen transparent', style: { display: 'none', background: 'rgba(6,9,15,0.75)', alignItems: 'center', justifyContent: 'center' } });
+  const menuOverlay = el('div', { class: 'screen transparent hud-menu', style: { display: 'none', background: 'rgba(6,9,15,0.75)', alignItems: 'center', justifyContent: 'center', cursor: 'default' } });
   root.append(menuOverlay);
   const buildMenu = () => {
     menuOverlay.replaceChildren(
@@ -162,12 +165,17 @@ export function createHud(app: App, ctrl: BattleController): Hud {
             ctrl.toggleHud();
             toggleMenu();
           } }, ctrl.hudLevel === 'full' ? 'HUD: minimal (H)' : ctrl.hudLevel === 'minimal' ? 'HUD: none for recording (H)' : 'HUD: full (H)'),
-          el('button', { class: 'btn', onclick: () => {
-            app.prefs.showOverlay = !app.prefs.showOverlay;
-            ctrl.overlay.visible = !ctrl.hudHidden && app.prefs.showOverlay;
-            void app.savePrefs();
+          el('button', { class: 'btn', 'data-action': 'menu-toggle-overlay', onclick: () => {
+            ctrl.toggleOverlay();
             buildMenu();
-          } }, `Tactical overlay: ${app.prefs.showOverlay ? 'ON' : 'OFF'}`),
+          } }, `Tactical overlay: ${ctrl.overlay.visible ? 'ON' : 'OFF'} (O)`),
+          el('button', { class: 'btn', 'data-action': 'keep-overlay-hidden-hud', 'aria-pressed': String(app.prefs.overlayIndependent), onclick: () => {
+            ctrl.setOverlayIndependent(!app.prefs.overlayIndependent);
+            buildMenu();
+          } }, `Keep overlay with hidden HUD: ${app.prefs.overlayIndependent ? 'ON' : 'OFF'}`),
+          el('label', { class: 'field' }, ['Tactical label detail', el('select', { 'data-action': 'overlay-detail-menu', onchange: (e: Event) => {
+            ctrl.setOverlayDetail((e.target as HTMLSelectElement).value as OverlayDetail);
+          } }, (Object.keys(OVERLAY_DETAIL_LABELS) as OverlayDetail[]).map(detail => el('option', { value: detail, selected: app.prefs.overlayDetail === detail }, OVERLAY_DETAIL_LABELS[detail])))]),
           el('button', { class: 'btn', onclick: () => {
             app.prefs.audio.muted = !app.prefs.audio.muted;
             void app.savePrefs();
@@ -185,12 +193,14 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   function toggleMenu(): void {
     menuOpen = !menuOpen;
     if (menuOpen) {
+      resumeAfterMenu = !ctrl.paused;
       buildMenu();
       menuOverlay.style.display = 'flex';
-      if (!ctrl.paused) ctrl.togglePause();
+      if (resumeAfterMenu) ctrl.togglePause();
     } else {
       menuOverlay.style.display = 'none';
-      if (ctrl.paused && !sim().finished) ctrl.togglePause();
+      if (resumeAfterMenu && ctrl.paused && !sim().finished) ctrl.togglePause();
+      resumeAfterMenu = false;
     }
   }
 
@@ -222,8 +232,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   };
 
   const fighterLine = el('div', { class: 'dim mono', style: { padding: '4px 6px', fontSize: '10px' } });
-  const syncList = (container: HTMLElement, ships: ShipState[], extra?: HTMLElement) => {
-    const rows = ships.map((s) => shipRow(s).row);
+  const syncNodes = (container: HTMLElement, rows: Node[], extra?: HTMLElement) => {
     const wanted: Node[] = extra ? [...rows, extra] : rows;
     // Only touch the DOM when the order/membership changed.
     let same = container.childNodes.length === wanted.length;
@@ -231,14 +240,77 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     if (!same) container.replaceChildren(...wanted);
   };
 
+  interface FleetRowRefs { container: HTMLElement; row: HTMLElement; name: HTMLElement; count: HTMLElement; barrier: HTMLElement; hull: HTMLElement; expand: HTMLButtonElement }
+  const fleetRowCache = new Map<string, FleetRowRefs>();
+  const expandedFleets = new Set<string>();
+  let listDetail: ResolvedOverlayDetail = 'ships';
+  let currentFleetMembers = new Map<string, ShipState[]>();
+  const fleetRows = (fleetId: string, members: ShipState[]): Node[] => {
+    const fleet = sim().fleets.get(fleetId)!;
+    let refs = fleetRowCache.get(fleetId);
+    if (!refs) {
+      const name = el('div', { class: 'name' });
+      const count = el('div', { class: 'dim mono', style: { fontSize: '10px' } });
+      const barrier = el('i'), hull = el('i');
+      const select = (additive: boolean) => { ctrl.selectBattleFleet(fleetId, additive); app.playUi('ui_click'); };
+      const row = el('div', { class: 'fleet-row', role: 'button', tabindex: 0, 'data-fleet-select': fleetId,
+        onclick: (e: MouseEvent) => select(e.shiftKey),
+        onkeydown: (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); if (!e.repeat) select(e.shiftKey); } },
+        oncontextmenu: (e: MouseEvent) => {
+          e.preventDefault();
+          if (fleet.spec.side === ctrl.config.perspectiveSide) return;
+          const targets = (currentFleetMembers.get(fleetId) ?? []).filter(s => s.alive && !s.escaped && s.role !== 'fighter');
+          const lead = targets.reduce<ShipState | undefined>((best, s) => !best || s.pointValue > best.pointValue ? s : best, undefined);
+          if (lead) ctrl.attackWithSelection(lead.id);
+        },
+      }, [el('div', {}, [name, count]), el('div', { class: 'bars' }, [el('div', { class: 'bar barrier' }, barrier), el('div', { class: 'bar hull' }, hull)])]);
+      const expand = el('button', { class: 'btn small', 'data-action': 'expand-fleet', 'data-fleet': fleetId, style: { margin: '2px 6px 6px' }, onclick: () => {
+        if (expandedFleets.has(fleetId)) expandedFleets.delete(fleetId); else expandedFleets.add(fleetId);
+        ctrl.hud.refresh();
+      } }, 'Show ships');
+      const container = el('div', { class: 'fleet-summary', 'data-fleet-summary': fleetId }, [row, expand]);
+      refs = { container, row, name, count, barrier, hull, expand }; fleetRowCache.set(fleetId, refs);
+    }
+    const capitalMembers = members.filter(s => s.role !== 'fighter');
+    const selected = capitalMembers.length > 0 && capitalMembers.every(s => ctrl.view.selectedIds.has(s.id));
+    refs.row.classList.toggle('selected', selected); refs.row.setAttribute('aria-pressed', String(selected));
+    refs.name.textContent = fleet.spec.name || FACTIONS[fleet.spec.faction].shortName;
+    refs.name.title = refs.name.textContent;
+    refs.count.textContent = `${members.length} ships`;
+    refs.row.title = fleet.spec.side === ctrl.config.perspectiveSide ? 'Select this deployed fleet. Shift adds or removes the group.' : 'Select this fleet. Right-click to attack its lead ship.';
+    let barriers = 0, maxBarriers = 0, hull = 0, maxHull = 0;
+    for (const ship of members) { barriers += ship.barriers; maxBarriers += ship.maxBarriers; hull += ship.hull; maxHull += ship.maxHull; }
+    refs.barrier.style.width = `${100 * Math.max(0, barriers) / Math.max(1, maxBarriers)}%`;
+    refs.hull.style.width = `${100 * Math.max(0, hull) / Math.max(1, maxHull)}%`;
+    const expanded = expandedFleets.has(fleetId);
+    refs.expand.textContent = expanded ? 'Hide ships' : 'Show ships'; refs.expand.setAttribute('aria-expanded', String(expanded));
+    return expanded ? [refs.container, ...capitalMembers.sort((a, b) => b.pointValue - a.pointValue).map(ship => shipRow(ship).row)] : [refs.container];
+  };
+
   const renderLists = () => {
     const s = sim();
+    currentFleetMembers = new Map();
+    let liveCount = 0;
+    for (const ship of s.ships) if (ship.alive && !ship.escaped) {
+      liveCount++;
+      const members = currentFleetMembers.get(ship.fleetId) ?? []; members.push(ship); currentFleetMembers.set(ship.fleetId, members);
+    }
+    listDetail = resolveOverlayDetail(app.prefs.overlayDetail, listDetail, liveCount);
+    if (listDetail === 'fleets') {
+      const mine: Node[] = [], theirs: Node[] = [];
+      for (const [id, members] of currentFleetMembers) {
+        const fleet = s.fleets.get(id);
+        if (fleet) (fleet.spec.side === ctrl.config.perspectiveSide ? mine : theirs).push(...fleetRows(id, members));
+      }
+      syncNodes(shipList, mine); syncNodes(enemyList, theirs);
+      return;
+    }
     const mine = s.ships.filter((x) => x.side === ctrl.config.perspectiveSide && x.role !== 'fighter' && !x.escaped).sort((a, b) => b.pointValue - a.pointValue).slice(0, 80);
     const theirs = s.ships.filter((x) => x.side !== ctrl.config.perspectiveSide && x.role !== 'fighter' && !x.escaped).sort((a, b) => b.pointValue - a.pointValue).slice(0, 80);
     const fighters = s.ships.filter((x) => x.side === ctrl.config.perspectiveSide && x.role === 'fighter' && x.alive && !x.escaped).length;
     fighterLine.textContent = `${fighters} fighters deployed`;
-    syncList(shipList, mine, fighters > 0 ? fighterLine : undefined);
-    syncList(enemyList, theirs);
+    syncNodes(shipList, mine.map(ship => shipRow(ship).row), fighters > 0 ? fighterLine : undefined);
+    syncNodes(enemyList, theirs.map(ship => shipRow(ship).row));
   };
 
   const renderTarget = () => {
@@ -258,6 +330,9 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     const s = sim().getShip(ids[0]);
     if (!s) return;
     const cls = getShipClass(s.classId);
+    const primary = s.weapons.find(w => w.def.antiCapital && !w.def.antiSmall && Math.cos(w.facing) > 0.999);
+    const broadsides = s.weapons.filter(w => w.def.kind === 'mass_accelerator' && Math.abs(Math.sin(w.facing)) > 0.9).length;
+    const cadence = primary ? `${primary.def.cooldown.toFixed(1)}s reload${primary.def.beamDuration ? ` + ${primary.def.beamDuration.toFixed(1)}s burst` : ''} / mount` : 'Independent weapon mounts';
     const battery = sim().primaryBatteryStatus(s.id);
     const targetId = battery?.targetId ?? s.targetId;
     const target = targetId ? sim().getShip(targetId) : undefined;
@@ -305,6 +380,8 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       stat('Subsystems', `ENG ${fmtNum(s.subsystems.engines * 100)}% · WPN ${fmtNum(s.subsystems.weapons * 100)}% · SNS ${fmtNum(s.subsystems.sensors * 100)}%`),
       stat('Target', target ? target.name : '—'),
       feedbackStat('Main battery', batteryText, 'ship-battery-status'),
+      feedbackStat('Base cycle', cadence, 'ship-firing-cadence'),
+      ...(broadsides > 0 ? [stat('Broadsides', `${broadsides} independent mounts`)] : []),
       feedbackStat('Range / max', rangeText, 'ship-engagement-range'),
       stat('Record', `${s.stats.shotsFired} fired · ${s.stats.hits} hits · ${s.stats.kills} kills`),
       feedbackStat('Status', movement, 'ship-motion-state'),
@@ -334,6 +411,9 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   cameraRow.append(...cameraBtns);
 
   const renderControls = () => {
+    overlayBtn.textContent = `Overlay: ${ctrl.overlay.visible ? 'on' : 'off'} (O)`;
+    overlayBtn.classList.toggle('active', ctrl.overlay.visible);
+    overlayBtn.setAttribute('aria-pressed', String(ctrl.overlay.visible));
     watchBtn.textContent = ctrl.view.rig.mode === 'cinematic' && ctrl.hudLevel !== 'full' ? 'Return to command' : 'Watch battle';
     watchBtn.classList.toggle('active', ctrl.view.rig.mode === 'cinematic' && ctrl.hudLevel !== 'full');
     pauseBtn.classList.toggle('active', ctrl.paused);
@@ -399,9 +479,11 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     const b = s.ships.filter((x) => x.side === 'B' && x.alive && !x.escaped && x.role !== 'fighter').length;
     statusLine.textContent = `ALLIED ${a} · HOSTILE ${b} · ${CAMERA_MODE_LABELS[ctrl.view.rig.mode].toUpperCase()} CAM`;
     renderControls();
-    renderLists();
-    renderTarget();
-    renderIntel();
+    if (ctrl.hudLevel === 'full') {
+      renderLists();
+      renderTarget();
+      renderIntel();
+    }
   };
 
   let subtitleTimer = 0;

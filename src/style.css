@@ -121,8 +121,8 @@ td.num { font-family: var(--mono); text-align: right; }
 .hud-right > * { pointer-events: auto; }
 .hud-bottom { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 10px; align-items: flex-end; pointer-events: none; }
 .hud-bottom > * { pointer-events: auto; }
-.hud.hidden > *:not(.hud-top) { display: none; }
-.hud.none > * { display: none !important; }
+.hud.hidden > *:not(.hud-top):not(.hud-menu) { display: none; }
+.hud.none > *:not(.hud-menu) { display: none !important; }
 .hud.none { cursor: none; }
 .ship-list { flex: 1; overflow: auto; font-size: 12px; }
 .ship-row { display: grid; grid-template-columns: 1fr 70px; gap: 6px; padding: 4px 6px; cursor: pointer; border-left: 2px solid transparent; }
@@ -130,6 +130,10 @@ td.num { font-family: var(--mono); text-align: right; }
 .ship-row.selected { border-left-color: var(--orange); background: rgba(255, 138, 31, 0.12); }
 .ship-row.dead { opacity: 0.35; text-decoration: line-through; }
 .ship-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fleet-row { display: grid; grid-template-columns: minmax(0, 1fr) 62px; gap: 6px; padding: 6px; cursor: pointer; border-left: 2px solid transparent; }
+.fleet-row:hover, .fleet-row:focus-visible { background: rgba(79, 163, 255, 0.12); }
+.fleet-row.selected { border-left-color: var(--orange); background: rgba(255, 138, 31, 0.12); }
+.fleet-row .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bars { display: flex; flex-direction: column; gap: 2px; justify-content: center; }
 .bar { height: 4px; background: rgba(255, 255, 255, 0.08); position: relative; }
 .bar i { position: absolute; left: 0; top: 0; bottom: 0; }

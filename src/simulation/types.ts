@@ -92,6 +92,8 @@ export interface BattleConfig {
   id: string;
   name: string;
   scenarioId: string;
+  /** Explicit scenario metadata used by the Strict Lore launch boundary. */
+  alternateHistory?: boolean;
   seed: number;
   rules: RuleSet;
   fleets: FleetSpec[];

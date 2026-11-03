@@ -21,9 +21,17 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
     return { campaignAllied: JSON.stringify(allied), campaignReaper: JSON.stringify(reaper) };
   };
   const body = el('div', { class: 'screen-body' });
+  const launchButton = el('button', { class: 'btn primary', 'data-action': 'launch', onclick: () => {
+    const rules = app.getTimeline(timelineId);
+    if (rules.strictLore && scenario.auOnly) return app.toast('CHOOSE A CANON SCENARIO FOR STRICT LORE');
+    app.playUi('ui_confirm');
+    app.selectTimeline(timelineId);
+    app.startBattle(scenario.build(rules, seed, { ...worldState, ...campaignWorldState() }));
+  } }, 'Launch battle →');
   const render = () => {
     body.replaceChildren();
     const rules = app.getTimeline(timelineId);
+    launchButton.disabled = !!rules.strictLore && !!scenario.auOnly;
     const config = scenario.build(rules, seed, { ...worldState, ...campaignWorldState() });
     const fleetSummary = (side: 'A' | 'B') =>
       config.fleets
@@ -36,7 +44,7 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
         );
 
     const scenarioList = el('div', { class: 'col' }, SCENARIOS.filter((s) => s.id !== 'custom').map((s) =>
-      el('button', { class: `btn ${s.id === scenario.id ? 'active' : ''}`, onclick: () => {
+      el('button', { class: `btn ${s.id === scenario.id ? 'active' : ''}`, disabled: !!rules.strictLore && !!s.auOnly, title: rules.strictLore && s.auOnly ? 'Alternate-history scenario: choose an AU timeline to play.' : s.subtitle, onclick: () => {
         app.playUi('ui_click');
         scenario = s;
         worldState = defaultWorldState(s);
@@ -45,7 +53,7 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
       } }, [s.name, s.auOnly ? el('span', { class: 'tag' }, 'AU') : null]),
     ));
 
-    const timelineSelect = el('select', { onchange: (e: Event) => {
+    const timelineSelect = el('select', { 'data-action': 'briefing-timeline', onchange: (e: Event) => {
       timelineId = (e.target as HTMLSelectElement).value;
       render();
     } }, app.allTimelines().map((t) => el('option', { value: t.id, selected: t.id === timelineId }, `${t.name}${t.category === 'canon' ? '' : ` [${t.category.toUpperCase()}]`}`)));
@@ -76,12 +84,15 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
           el('p', { class: 'mono dim', style: { fontSize: '11px' } }, `OBJECTIVE: ${scenario.objective}`),
           warn,
           canonNote,
+          rules.strictLore ? el('p', { class: 'dim', 'data-action': 'strict-lore-note' }, 'Strict Lore excludes AU-only hulls and refits. The Alliance main gun uses the sourced two-second base cycle; heat, damage and firing solutions can delay shots. Other rates and compressed-space physics remain simulation estimates.') : null,
+          rules.strictLore && scenario.auOnly ? el('p', { style: { color: 'var(--orange)' } }, 'Choose a canon scenario or an AU timeline to launch this alternate-history battle.') : null,
         ]),
         el('div', { class: 'col' }, [
           el('div', { class: 'panel orange' }, [
             el('div', { class: 'panel-title' }, 'TIMELINE & WORLD STATE'),
             el('label', { class: 'field' }, ['Timeline', timelineSelect]),
             el('p', { class: 'dim', style: { fontSize: '12px' } }, rules.tagline),
+            el('p', { class: 'dim', style: { fontSize: '11px' } }, 'Weapon cycles use simulated seconds. Multiple guns fire independently; 4× playback makes a four-second cycle appear to take one real second. Fleet Database lists individual mount cycles.'),
             ...worldStateControls,
             el('label', { class: 'field' }, ['Random seed', el('input', { type: 'number', value: seed, onchange: (e: Event) => {
               seed = Number((e.target as HTMLInputElement).value) || 0;
@@ -98,12 +109,7 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
   const footer = el('div', { class: 'screen-footer' }, [
     el('button', { class: 'btn', onclick: () => app.show('menu') }, '← Main menu'),
     el('div', { class: 'spacer' }),
-    el('button', { class: 'btn primary', 'data-action': 'launch', onclick: () => {
-      app.playUi('ui_confirm');
-      app.selectTimeline(timelineId);
-      const rules = app.getTimeline(timelineId);
-      app.startBattle(scenario.build(rules, seed, { ...worldState, ...campaignWorldState() }));
-    } }, 'Launch battle →'),
+    launchButton,
   ]);
 
   return el('div', { class: 'screen' }, [

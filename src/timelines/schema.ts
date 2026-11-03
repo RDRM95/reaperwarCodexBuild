@@ -10,6 +10,7 @@ import {
   type StrategicVariables,
   type TechModifiers,
 } from './rules';
+import { CROSSOVER_FACTION_IDS, SANDBOX_FACTION_IDS } from '@/data/types';
 
 /**
  * Validation for imported rule sets. Imports are JSON data only; nothing is
@@ -101,11 +102,11 @@ export function validateRuleSet(input: unknown): ValidationResult {
   const factionOverrides: RuleSet['factionOverrides'] = {};
   if (isObj(input.factionOverrides)) {
     for (const [k, v] of Object.entries(input.factionOverrides)) {
-      if (!(FACTION_IDS as readonly string[]).includes(k)) {
+      if (!([...FACTION_IDS, ...CROSSOVER_FACTION_IDS, ...SANDBOX_FACTION_IDS] as readonly string[]).includes(k)) {
         warnings.push(`factionOverrides.${k}: unknown faction ignored`);
         continue;
       }
-      factionOverrides[k as (typeof FACTION_IDS)[number]] = techFrom(v, `factionOverrides.${k}`, warnings, true);
+      factionOverrides[k as keyof RuleSet['factionOverrides']] = techFrom(v, `factionOverrides.${k}`, warnings, true);
     }
   }
 
@@ -144,6 +145,7 @@ export function validateRuleSet(input: unknown): ValidationResult {
     harbingerOperational: bool(st.harbingerOperational, true, 'strategic.harbingerOperational', warnings),
     catalystOperational: bool(st.catalystOperational, true, 'strategic.catalystOperational', warnings),
     homeworldIndependence: bool(st.homeworldIndependence, false, 'strategic.homeworldIndependence', warnings),
+    relayIndependentHumanFTL: bool(st.relayIndependentHumanFTL, false, 'strategic.relayIndependentHumanFTL', warnings),
   };
 
   // Prerequisite consistency.
@@ -163,12 +165,23 @@ export function validateRuleSet(input: unknown): ValidationResult {
   const historyChanges = Array.isArray(input.historyChanges)
     ? input.historyChanges.filter((x): x is string => typeof x === 'string').map((s) => s.slice(0, 300)).slice(0, 40)
     : [];
+  const families = ['human_au', 'historical_au', 'hfy', 'crossover'] as const;
+  const family = typeof input.family === 'string' && (families as readonly string[]).includes(input.family)
+    ? input.family as RuleSet['family'] : undefined;
+  if (input.family !== undefined && !family) warnings.push('family: unknown AU grouping ignored');
+  const knownFactions = [...FACTION_IDS, ...CROSSOVER_FACTION_IDS, ...SANDBOX_FACTION_IDS] as const;
+  const preferredFaction = typeof input.preferredFaction === 'string' && (knownFactions as readonly string[]).includes(input.preferredFaction)
+    ? input.preferredFaction as RuleSet['preferredFaction'] : undefined;
+  if (input.preferredFaction !== undefined && !preferredFaction) warnings.push('preferredFaction: unknown faction ignored');
 
   const rules: RuleSet = {
-    id: id === 'canon_me3' ? 'canon_me3_imported' : id,
+    id: id === 'canon_me3' || id === 'strict_lore' ? `${id}_imported` : id,
     name,
     tagline: str(input.tagline, '', 160),
     category: category === 'canon' ? 'custom' : category,
+    ...(family ? { family } : {}),
+    ...(preferredFaction ? { preferredFaction } : {}),
+    ...(input.campaignCompatible !== undefined ? { campaignCompatible: bool(input.campaignCompatible, true, 'campaignCompatible', warnings) } : {}),
     description: str(input.description, ''),
     historyChanges,
     organic,

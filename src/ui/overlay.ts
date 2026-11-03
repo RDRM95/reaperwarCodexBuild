@@ -4,6 +4,7 @@ import { FACTIONS } from '@/data/factions';
 import { engagementBand, shipEngagementRange } from '@/simulation/ai';
 import { v3 } from '@/core/vec3';
 import { layoutLabels, type LabelCandidate } from './labelLayout';
+import { resolveOverlayDetail, summariseFleetLabels, type OverlayDetail, type ResolvedOverlayDetail } from './fleetLabels';
 
 /** Tactical annotations stay bounded even when a whole massive fleet is selected.
  * This view only reads the simulation; the main selection gets range envelopes,
@@ -13,8 +14,13 @@ export class TacticalOverlay {
   private ctx: CanvasRenderingContext2D;
   visible = true;
   hoverId?: string;
+  detail: OverlayDetail = 'auto';
+  private resolvedDetail: ResolvedOverlayDetail = 'ships';
   /** Actual draw workload, also useful to visual/performance QA. */
   drawCounts = { labels: 0, targetLines: 0, rangeRings: 0 };
+  /** Camera work is measured separately so aggregate mode can be checked
+   * without changing the existing drawing-budget diagnostics. */
+  drawStats = { mode: 'ships' as ResolvedOverlayDetail, liveShips: 0, shipProjections: 0, fleetProjections: 0, projections: 0, fleetLabels: 0, shipLabels: 0 };
 
   constructor(private canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext('2d')!;
@@ -33,6 +39,7 @@ export class TacticalOverlay {
     let connected = false;
     for (let i = 0; i <= 40; i++) {
       const angle = i * Math.PI / 20;
+      this.drawStats.projections++;
       const p = view.project(v3(ship.pos.x + Math.cos(angle) * radius, ship.pos.y, ship.pos.z + Math.sin(angle) * radius), this.width, this.height);
       if (!p) { connected = false; continue; }
       if (connected) ctx.lineTo(p.x, p.y);
@@ -55,8 +62,21 @@ export class TacticalOverlay {
     this.width = w; this.height = h;
     ctx.clearRect(0, 0, w, h);
     this.drawCounts = { labels: 0, targetLines: 0, rangeRings: 0 };
+    this.drawStats = { mode: this.resolvedDetail, liveShips: 0, shipProjections: 0, fleetProjections: 0, projections: 0, fleetLabels: 0, shipLabels: 0 };
     if (!this.visible) return;
     const sim = view.sim;
+    const fleets = summariseFleetLabels(sim.ships);
+    const liveShips = fleets.reduce((total, fleet) => total + fleet.count, 0);
+    this.resolvedDetail = resolveOverlayDetail(this.detail, this.resolvedDetail, liveShips);
+    this.drawStats.mode = this.resolvedDetail; this.drawStats.liveShips = liveShips;
+    const aggregate = this.resolvedDetail === 'fleets';
+    const projectionCache = new Map<string, ReturnType<BattleView['project']>>();
+    const projectShip = (ship: ShipState) => {
+      if (projectionCache.has(ship.id)) return projectionCache.get(ship.id);
+      this.drawStats.shipProjections++; this.drawStats.projections++;
+      const point = view.project(ship.pos, w, h); projectionCache.set(ship.id, point);
+      return point;
+    };
     const command = mode === 'command';
     const detailed = mode === 'tactical' || command;
     ctx.font = '10px Consolas, "Roboto Mono", monospace';
@@ -78,7 +98,7 @@ export class TacticalOverlay {
       if (!s?.alive || s.escaped) continue;
       const t = s.targetId ? sim.getShip(s.targetId) : undefined;
       if (!t?.alive || t.escaped) continue;
-      const a = view.project(s.pos, w, h), b = view.project(t.pos, w, h);
+      const a = projectShip(s), b = projectShip(t);
       if (!a || !b) continue;
       ctx.strokeStyle = 'rgba(255,138,31,0.55)';
       ctx.setLineDash([4, 6]);
@@ -87,15 +107,42 @@ export class TacticalOverlay {
     }
     ctx.setLineDash([]);
 
+    const candidates: LabelCandidate[] = [];
+    const fleetDetails = new Map<string, { label: string; colour: string }>();
+    if (aggregate) for (const summary of fleets) {
+      const fleet = sim.fleets.get(summary.fleetId);
+      if (!fleet) continue;
+      this.drawStats.fleetProjections++; this.drawStats.projections++;
+      const point = view.project(summary.position, w, h);
+      if (!point || point.x < -80 || point.y < -80 || point.x > w + 80 || point.y > h + 80) continue;
+      const colour = FACTIONS[fleet.spec.faction].colour;
+      const fullName = fleet.spec.name || FACTIONS[fleet.spec.faction].shortName;
+      const name = fullName.length > 34 ? `${fullName.slice(0, 31)}…` : fullName;
+      const label = `${name.toUpperCase()} · ${summary.count} SHIPS`;
+      const width = Math.min(w - 8, ctx.measureText(label).width + 12);
+      const id = `fleet:${summary.fleetId}`;
+      ctx.strokeStyle = colour; ctx.globalAlpha = 0.9; ctx.lineWidth = 1.5;
+      ctx.strokeRect(point.x - 8, point.y - 6, 16, 12); ctx.globalAlpha = 1;
+      candidates.push({ id, x: point.x - width / 2, y: point.y + 14, width, height: 19,
+        priority: fleet.spec.side === sim.config.perspectiveSide ? 50_000 : 40_000 });
+      fleetDetails.set(id, { label, colour });
+    }
+
+    // Fleet mode inspects only the primary/hovered hull and its target. A mass
+    // selection no longer creates a projection/marker for every selected ship.
+    const detailShips = new Map<string, ShipState>();
+    if (aggregate) for (const id of [primary?.id, this.hoverId, primary?.targetId]) {
+      const ship = id ? sim.getShip(id) : undefined;
+      if (ship?.alive && !ship.escaped) detailShips.set(ship.id, ship);
+    }
     const ships: { s: ShipState; x: number; y: number; depth: number }[] = [];
-    for (const s of sim.ships) {
+    for (const s of aggregate ? detailShips.values() : sim.ships) {
       if (!s.alive || s.escaped) continue;
-      const p = view.project(s.pos, w, h);
+      const p = projectShip(s);
       if (!p || p.x < -40 || p.y < -40 || p.x > w + 40 || p.y > h + 40) continue;
       ships.push({ s, x: p.x, y: p.y, depth: p.depth });
     }
     ships.sort((a, b) => b.depth - a.depth);
-    const candidates: LabelCandidate[] = [];
     const details = new Map<string, { ship: ShipState; label: string; highlighted: boolean }>();
     for (const { s, x, y, depth } of ships) {
       const friendly = s.side === sim.config.perspectiveSide;
@@ -134,6 +181,15 @@ export class TacticalOverlay {
       ctx.globalAlpha = 1;
     }
     for (const placement of layoutLabels(candidates, w, h, command ? 90 : 60)) {
+      const fleet = fleetDetails.get(placement.id);
+      if (fleet) {
+        ctx.fillStyle = 'rgba(6,9,15,0.82)';
+        ctx.fillRect(placement.x, placement.y, placement.width, placement.height);
+        ctx.fillStyle = fleet.colour; ctx.textAlign = 'center';
+        ctx.fillText(fleet.label, placement.x + placement.width / 2, placement.y + placement.height / 2, placement.width - 8);
+        this.drawCounts.labels++; this.drawStats.fleetLabels++;
+        continue;
+      }
       const detail = details.get(placement.id)!;
       const s = detail.ship;
       const centre = placement.x + placement.width / 2;
@@ -152,6 +208,7 @@ export class TacticalOverlay {
         ctx.fillText(detail.label, centre, by + 14);
       }
       this.drawCounts.labels++;
+      this.drawStats.shipLabels++;
     }
     ctx.globalAlpha = 1;
     if (command) {

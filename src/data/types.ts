@@ -1,14 +1,16 @@
 import type { Sourced } from '@/core/provenance';
 
-export type FactionId =
-  | 'alliance'
-  | 'turian'
-  | 'asari'
-  | 'salarian'
-  | 'quarian'
-  | 'geth'
-  | 'cerberus'
-  | 'reaper';
+export const MASS_EFFECT_FACTION_IDS = ['alliance', 'turian', 'asari', 'salarian', 'quarian', 'geth', 'cerberus', 'reaper'] as const;
+export const CROSSOVER_FACTION_IDS = ['unsc', 'covenant', 'imperium', 'chaos', 'skynet'] as const;
+export const SANDBOX_FACTION_IDS = ['prothean', 'past_cycle', 'player_civ'] as const;
+export type MassEffectFactionId = (typeof MASS_EFFECT_FACTION_IDS)[number];
+export type CrossoverFactionId = (typeof CROSSOVER_FACTION_IDS)[number];
+export type SandboxFactionId = (typeof SANDBOX_FACTION_IDS)[number];
+export type FactionId = MassEffectFactionId | CrossoverFactionId | SandboxFactionId;
+
+export const isCrossoverFaction = (id: string): id is CrossoverFactionId => (CROSSOVER_FACTION_IDS as readonly string[]).includes(id);
+export const isMassEffectFaction = (id: string): id is MassEffectFactionId => (MASS_EFFECT_FACTION_IDS as readonly string[]).includes(id);
+export const isSandboxFaction = (id: string): id is SandboxFactionId => (SANDBOX_FACTION_IDS as readonly string[]).includes(id);
 
 export type ShipRole =
   | 'fighter'

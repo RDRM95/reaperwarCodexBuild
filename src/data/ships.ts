@@ -1,5 +1,7 @@
 import { canon, estimate, inferred } from '@/core/provenance';
 import type { ShipClassDef } from './types';
+import { CROSSOVER_SHIPS } from './crossover';
+import { SANDBOX_SHIPS } from './auFactions';
 
 /** Invented tuning for an explicitly alternate-universe hull, not a lore measurement. */
 const auEstimate = (value: number) => ({ value, provenance: 'AU_MODIFIED' as const, note: 'AU simulation estimate; not a canonical specification.' });
@@ -618,7 +620,7 @@ export const SHIP_CLASSES: Record<string, ShipClassDef> = {
     shortName: 'Black Fleet dreadnought',
     faction: 'cerberus',
     role: 'dreadnought',
-    designProvenance: estimate('Cerberus is not known to field dreadnoughts in the trilogy. This class exists for the AU Cerberus Black Fleet and custom battles.'),
+    designProvenance: { value: 'Cerberus is not known to field dreadnoughts in the trilogy. This class exists for the AU Cerberus Black Fleet and custom battles.', provenance: 'AU_MODIFIED' },
     lengthM: estimate(900),
     hull: estimate(8800),
     armour: estimate(125),
@@ -946,6 +948,8 @@ export const SHIP_CLASSES: Record<string, ShipClassDef> = {
     description:
       'The oldest and most powerful Reaper, directing the harvest. In the simulation it is a heavier Sovereign-class unit with an additional primary emitter.',
   },
+  ...CROSSOVER_SHIPS,
+  ...SANDBOX_SHIPS,
 };
 
 export const getShipClass = (id: string): ShipClassDef => {

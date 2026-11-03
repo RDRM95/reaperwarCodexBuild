@@ -1,4 +1,4 @@
-import type { FactionId, ShipClassDef, WeaponDef } from '@/data/types';
+import { isMassEffectFaction, type FactionId, type ShipClassDef, type WeaponDef } from '@/data/types';
 
 /**
  * The alternate-universe rule engine.
@@ -77,6 +77,8 @@ export interface StrategicVariables {
   catalystOperational: boolean;
   /** Homeworld Defence Rule (Prime/Apex): Alliance & Turians can hold their homeworlds unaided. */
   homeworldIndependence: boolean;
+  /** AU strategic drive: human fleets can cross relay-free routes in campaign time. */
+  relayIndependentHumanFTL?: boolean;
 }
 
 export type TimelineCategory = 'canon' | 'au' | 'custom';
@@ -86,6 +88,14 @@ export interface RuleSet {
   name: string;
   tagline: string;
   category: TimelineCategory;
+  /** Built-in source-led roster/technology policy; imports cannot claim it. */
+  strictLore?: boolean;
+  /** Display grouping for the AU hub; never a claim of canonical history. */
+  family?: 'human_au' | 'historical_au' | 'hfy' | 'crossover';
+  /** Faction used when opening a profile's custom battle. */
+  preferredFaction?: FactionId;
+  /** False for historical/crossover branches without a compatible 2186 campaign. */
+  campaignCompatible?: boolean;
   description: string;
   /** Explicit list of changed history; shown in codex and comparison. */
   historyChanges: string[];
@@ -152,6 +162,7 @@ export const CANON_STRATEGIC: StrategicVariables = {
   harbingerOperational: true,
   catalystOperational: true,
   homeworldIndependence: false,
+  relayIndependentHumanFTL: false,
 };
 
 export const TECH_KEYS = Object.keys(CANON_TECH) as (keyof TechModifiers)[];
@@ -161,7 +172,10 @@ export const cloneRules = (r: RuleSet): RuleSet => JSON.parse(JSON.stringify(r))
 
 /** Effective technology modifiers for a given faction under a rule set. */
 export function techFor(rules: RuleSet, faction: FactionId): TechModifiers {
-  const base = faction === 'reaper' ? rules.reaper : rules.organic;
+  if (rules.strictLore) return { ...CANON_TECH };
+  // APEX refits belong to Mass Effect. Alien settings keep their declared
+  // crossover conversion, with explicit per-faction overrides when desired.
+  const base = !isMassEffectFaction(faction) ? CANON_TECH : faction === 'reaper' ? rules.reaper : rules.organic;
   const override = rules.factionOverrides[faction];
   return override ? { ...base, ...override } : { ...base };
 }
@@ -239,7 +253,7 @@ export function applyRulesToWeapon(
   let w: WeaponDef = weapon;
   let substitutedFrom: string | undefined;
 
-  if (faction !== 'reaper') {
+  if (faction !== 'reaper' && isMassEffectFaction(faction) && !rules.strictLore) {
     // Hyper-mass accelerators replace dreadnought spinal guns.
     if (
       rules.special.hyperMassAccelerators &&
@@ -275,14 +289,14 @@ export function applyRulesToWeapon(
   if (isTorp) damage *= t.torpedoDamage;
   if (isGardian) damage *= t.gardianEffectiveness;
 
-  const hades = faction !== 'reaper' && rules.special.hadesRounds && isMA;
+  const hades = faction !== 'reaper' && isMassEffectFaction(faction) && !rules.strictLore && rules.special.hadesRounds && isMA;
 
   return {
     ...w,
     damage,
     penetration: isMA ? w.penetration * t.massAcceleratorPenetration : w.penetration,
     range: isMA ? w.range * t.massAcceleratorRange : w.range,
-    cooldown: w.cooldown / t.fireRate,
+    cooldown: (rules.strictLore && w.id === 'alliance_dn_main' ? 2 : w.cooldown) / t.fireRate,
     accuracy: Math.min(0.99, w.accuracy * t.accuracy),
     armourBypass: hades ? 0.5 : 0,
     barrierEfficiencyMultiplier: hades ? 0.6 : 1,

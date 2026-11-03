@@ -1,7 +1,9 @@
 import { v3, type Vec3 } from '@/core/vec3';
 import { getPreset } from '@/timelines/presets';
-import type { RuleSet } from '@/timelines/rules';
-import type { FactionId } from '@/data/types';
+import { TECH_KEYS, type RuleSet, type TechModifiers } from '@/timelines/rules';
+import { TECH_RANGE } from '@/timelines/schema';
+import { isCrossoverFaction, isMassEffectFaction, type FactionId } from '@/data/types';
+import { assertLoreCompatible, isShipAllowedInRules } from '@/timelines/lore';
 import type { BattleConfig, Environment, FleetSpec, FormationType, ShipSpec, Side } from '@/simulation/types';
 import { SHIP_CLASSES } from '@/data/ships';
 import { FACTIONS } from '@/data/factions';
@@ -84,7 +86,7 @@ const NAMES: Record<string, string[]> = {
 export const scaleCount = (base: number, mult: number): number => (base <= 0 ? 0 : Math.max(1, Math.round(base * mult)));
 
 const fleetMult = (rules: RuleSet, faction: FactionId, ws: Record<string, string>): number =>
-  ws[FLEET_SCALING_KEY] === 'fixed' ? 1 : rules.fleetStrength[faction];
+  ws[FLEET_SCALING_KEY] === 'fixed' || !isMassEffectFaction(faction) ? 1 : rules.fleetStrength[faction];
 
 export interface FleetOpts {
   /** Ship counts by class id (before scaling). */
@@ -101,6 +103,7 @@ export interface FleetOpts {
   playerControlled?: boolean;
   ws?: Record<string, string>;
   initialOrder?: FleetSpec['initialOrder'];
+  techOverride?: Partial<TechModifiers>;
 }
 
 /** Generic fleet builder for any faction. */
@@ -109,6 +112,7 @@ export function fleet(id: string, faction: FactionId, rules: RuleSet, opts: Flee
   const ships: ShipSpec[] = [];
   for (const [classId, base] of Object.entries(opts.counts)) {
     if (base <= 0) continue;
+    if (rules.strictLore && SHIP_CLASSES[classId] && !isShipAllowedInRules(SHIP_CLASSES[classId], rules)) continue;
     const fixed = opts.fixedClasses?.includes(classId);
     // Carriers scale more conservatively than the line.
     const mult = fixed ? 1 : classId.endsWith('carrier') ? Math.min(m, 1.5) : m;
@@ -128,6 +132,7 @@ export function fleet(id: string, faction: FactionId, rules: RuleSet, opts: Flee
     playerControlled: opts.playerControlled ?? side === 'A',
     arrivalTime: opts.arrivalTime,
     initialOrder: opts.initialOrder,
+    techOverride: opts.techOverride,
   };
 }
 
@@ -162,6 +167,7 @@ const base = (id: string, name: string, scenarioId: string, seed: number, rules:
   id: `${id}-${rules.id}-${seed}`,
   name,
   scenarioId,
+  alternateHistory: SCENARIOS.some(s => s.id === scenarioId && s.auOnly),
   seed,
   rules,
   environment,
@@ -619,6 +625,8 @@ export interface CustomFleetInput {
   name: string;
   formation: FormationType;
   counts: Record<string, number>;
+  /** Explicit civilization-specific tuning, validated at the builder boundary. */
+  techOverride?: Partial<TechModifiers>;
   /** Seconds after battle start when this fleet arrives (0 or undefined = present from the start). */
   arrivalTime?: number;
 }
@@ -626,6 +634,8 @@ export interface CustomFleetInput {
 export interface CustomBattleInput {
   seed: number;
   rulesId: string;
+  /** Explicit UI roster selection; old setups default to Mass Effect. */
+  rosterMode?: 'mass_effect' | 'multiverse';
   environment: Environment;
   startingDistanceKm: number;
   sideA: CustomFleetInput;
@@ -653,9 +663,32 @@ export function countsForFaction(counts: Record<string, number>, faction: Custom
 
 export function buildCustomBattle(input: CustomBattleInput, rules?: RuleSet): BattleConfig {
   const r = rules ?? getPreset(input.rulesId);
+  const requested = [input.sideA, input.sideB, ...(input.extraA ?? []), ...(input.extraB ?? [])];
+  const hasCrossover = requested.some(f => isCrossoverFaction(f.faction)) ||
+    ((input.reinforcementTime ?? 0) > 0 && isCrossoverFaction(input.reinforcementFaction ?? input.sideB.faction));
+  if (hasCrossover && (r.strictLore || r.category === 'canon')) {
+    throw new Error('Crossover fleets require an AU timeline. Choose Multiverse Crossover — Sandbox.');
+  }
+  if (r.strictLore) {
+    const rosters = [...requested.map(f => f.counts), input.reinforcementCounts ?? {}];
+    for (const counts of rosters) for (const [id, n] of Object.entries(counts)) {
+      if (n > 0 && SHIP_CLASSES[id] && !isShipAllowedInRules(SHIP_CLASSES[id], r)) {
+        throw new Error(`Strict Lore excludes ${SHIP_CLASSES[id].name}. Choose an AU timeline to field this hull.`);
+      }
+    }
+  }
   const half = Math.max(10, input.startingDistanceKm) / 2;
+  const safeTech = (raw: Partial<TechModifiers> | undefined): Partial<TechModifiers> | undefined => {
+    if (!raw || r.strictLore) return undefined;
+    const out: Partial<TechModifiers> = {};
+    for (const key of TECH_KEYS) {
+      const value = raw[key];
+      if (typeof value === 'number' && Number.isFinite(value)) out[key] = Math.min(TECH_RANGE[key][1], Math.max(TECH_RANGE[key][0], value));
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
   const mk = (f: CustomFleetInput, side: Side, id: string, x: number, z: number, heading: number, arrivalTime?: number, counts?: Record<string, number>): FleetSpec =>
-    fleet(id, f.faction, r, { counts: countsForFaction(counts ?? f.counts, f.faction), name: f.name, side, position: v3(x, 0, z), heading: v3(0, 0, heading), formation: f.formation, mult: 1, arrivalTime: arrivalTime && arrivalTime > 0 ? arrivalTime : undefined, playerControlled: side === 'A' });
+    fleet(id, f.faction, r, { counts: countsForFaction(counts ?? f.counts, f.faction), techOverride: safeTech(f.techOverride), name: f.name, side, position: v3(x, 0, z), heading: v3(0, 0, heading), formation: f.formation, mult: 1, arrivalTime: arrivalTime && arrivalTime > 0 ? arrivalTime : undefined, playerControlled: side === 'A' });
   // United fleets: extra fleets of any faction sit beside the main fleet, alternating left and right, 20 km apart.
   const lateral = (i: number): number => (i % 2 === 0 ? 1 : -1) * Math.ceil((i + 1) / 2) * 20;
   const fleets: FleetSpec[] = [mk(input.sideA, 'A', 'custom-a', 0, -half, 1, input.sideA.arrivalTime), mk(input.sideB, 'B', 'custom-b', 0, half, -1, input.sideB.arrivalTime)];
@@ -668,7 +701,7 @@ export function buildCustomBattle(input: CustomBattleInput, rules?: RuleSet): Ba
     fleets.push(mk({ faction: reinforcementFaction, name, formation: input.sideB.formation, counts: reinforcements }, 'B', 'custom-b-reinforcements', 0, half + 30, -1, input.reinforcementTime));
   }
   const sideName = (main: CustomFleetInput, extra: CustomFleetInput[] | undefined): string => (extra && extra.length > 0 ? `${main.name} + ${extra.length} allied fleet${extra.length > 1 ? 's' : ''}` : main.name);
-  return {
+  const config: BattleConfig = {
     id: `custom-${r.id}-${input.seed}`,
     name: `Custom: ${sideName(input.sideA, input.extraA)} vs ${sideName(input.sideB, input.extraB)}`,
     scenarioId: 'custom',
@@ -680,4 +713,6 @@ export function buildCustomBattle(input: CustomBattleInput, rules?: RuleSet): Ba
     objective: 'Destroy the enemy force.',
     fleets: fleets.filter((f) => f.ships.length > 0),
   };
+  assertLoreCompatible(config);
+  return config;
 }

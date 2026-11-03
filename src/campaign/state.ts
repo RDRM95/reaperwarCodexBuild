@@ -1,4 +1,4 @@
-import type { FactionId } from '@/data/types';
+import type { MassEffectFactionId } from '@/data/types';
 import type { RuleSet } from '@/timelines/rules';
 import type { SystemId } from './galaxy';
 
@@ -13,13 +13,17 @@ export type Allegiance = 'allied' | 'reaper' | 'cerberus' | 'neutral';
 export interface CampaignFleet {
   id: string;
   name: string;
-  faction: FactionId;
+  faction: MassEffectFactionId;
   allegiance: Allegiance;
   location: SystemId;
   /** Next relay hop when moving; arrives next tick. */
   destination?: SystemId;
   /** Remaining hops after `destination`. */
   route?: SystemId[];
+  /** AU relay-independent crossing; the fleet is unavailable at either endpoint until arrival. */
+  travelMode?: 'independent';
+  /** Remaining campaign weeks; three-week transit is a declared simulation estimate. */
+  transitWeeksRemaining?: number;
   counts: Record<string, number>;
   /** 0..1 readiness; low readiness lowers crew effectiveness. */
   readiness: number;
@@ -49,7 +53,7 @@ export interface SystemState {
 }
 
 export interface FactionStatus {
-  faction: FactionId;
+  faction: MassEffectFactionId;
   morale: number; // 0..1
   /** Production points accumulated toward the next hull. */
   productionPool: number;
@@ -87,7 +91,7 @@ export interface CampaignState {
   startDate: string;
   systems: Record<SystemId, SystemState>;
   fleets: CampaignFleet[];
-  factions: Record<FactionId, FactionStatus>;
+  factions: Record<MassEffectFactionId, FactionStatus>;
   crucible: { progress: number; available: boolean; complete: boolean; docked: boolean };
   reaper: { strength: number; competence: number; reinforcementPool: number; lostValue: number; killedValue: number };
   warAssets: number;

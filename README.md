@@ -16,11 +16,11 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-## What works today (v0.12.2)
+## What works today (v0.14.0)
 
 - **Galactic campaign**: interactive galaxy map with 15 systems and relay corridors, weekly turns, Reaper offensives and harvest, a ground war per system (ground forces slow the harvest; krogan reinforce Earth and Palaven when the genophage is cured), allied production from intact industry, eight research projects that change fleet technology in engagements, refugee pressure on the Citadel, Council war summits with decisions, political events (indoctrinated officials, shipyard sabotage, Terminus mercenaries, STG intelligence), 2183 world states (Destiny Ascension and Council composition, rachni queen), fleet movement with cooperation constraints, Crucible construction, indoctrination pressure, morale, Reaper strategic assessment, autosave and Load Game. Engagements involving your fleets can be fought in the 3D simulator or auto-resolved; outcomes feed back into the war.
 - **Post-war reconstruction** (Cerberus Ascendant, alternate continuity, 2186–2206): quarterly turns, twelve budget programmes, progressive Reaper dismantlement gated by conventional fleet strength and Sol defence, Council and Alliance politics, victory and defeat outcomes. Start it from campaign setup or continue into it after a Cerberus Ascendant campaign victory.
-- **Twelve scenarios**: Battle of Earth, Final Battle of Earth (uses a saved campaign's surviving fleets when one exists; the Salarian First Fleet joins when the genophage cure was sabotaged), Defence of Palaven, Fall of Thessia, Defence of Sur'Kesh (a labelled simulation estimate: STG early warning option), Cerberus Intervention (hostile in canon, cooperative in AU timelines), Rannoch Campaign (war with Reaper-upgraded geth, war without upgrades, or peace against the Reapers), Battle of the Citadel (2183, save the Ascension or concentrate on Sovereign), Alliance Fleet Engagement, Prime/Apex Sol Defence, Prime/Apex Palaven Defence, Cerberus Ascendant — Harbinger, plus a **Custom Battle** builder for any combination of Alliance, Turian, Asari, Salarian, Cerberus, Geth, Quarian and Reaper fleets.
+- **Twelve scenarios**: Battle of Earth, Final Battle of Earth (uses a saved campaign's surviving fleets when one exists; the Salarian First Fleet joins when the genophage cure was sabotaged), Defence of Palaven, Fall of Thessia, Defence of Sur'Kesh (a labelled simulation estimate: STG early warning option), Cerberus Intervention (hostile in canon, cooperative in AU timelines), Rannoch Campaign (war with Reaper-upgraded geth, war without upgrades, or peace against the Reapers), Battle of the Citadel (2183, save the Ascension or concentrate on Sovereign), Alliance Fleet Engagement, Prime/Apex Sol Defence, Prime/Apex Palaven Defence, Cerberus Ascendant — Harbinger, plus a **Custom Battle** builder with the eight original Mass Effect factions, three AU civilization factions, and five crossover factions. Canon/Strict Lore keep their permitted rosters; AU and multiverse options are explicit.
 - **Real-time 3D battle** with original Alliance (dreadnought, carrier, cruiser, frigate, Normandy-style Thanix frigate, Trident fighter), Turian (dreadnought, cruiser, frigate, interceptor), Asari (Destiny Ascension, dreadnought, cruiser), Cerberus (cruiser, frigate, fighter, AU Black Fleet dreadnought), Geth (dreadnought, cruiser, frigate, fighter), Quarian (liveship, Heavy Fleet warship, Patrol cruiser, fighter) and Reaper (Sovereign-class capital, destroyer, Harbinger) models, a procedural Citadel, Earth/Palaven/Thessia/Rannoch orbital environments, starfield, procedural weapon effects, barrier shimmer, hull damage glow and break-apart destruction.
 - **Simulated weapons**: mass accelerators (real projectiles with lead and sweep collision), Thanix streams, Reaper magnetohydrodynamic beams, GARDIAN point defence in heat-limited bursts, disruptor torpedoes with interception and finite magazines (fighters rearm at their carrier). Kinetic barriers, armour with penetration and ablation, hull, subsystem damage, heat.
 - **Fleet AI** with per-faction doctrine, formations (six), focus fire, withdrawal, carrier operations.
@@ -28,15 +28,18 @@ npm run dev        # http://localhost:5173
 - **Seven cameras**: tactical, cinematic director, ship follow, free, projectile, Reaper, command (holographic overlay).
 - **Rendering**: original procedural hulls with image-based lighting, distance level of detail (detail meshes and glow sprites drop with range; far ships and fighters collapse into one point cloud), pooled effects and a draw-call counter on the HUD. `npm run perf` benchmarks a 206-ship Final Battle headlessly.
 - **Deterministic simulation** with event log, replay (same seed → same battle), pause and 0.25×–8× speed.
-- **Timeline rule engine** with eight presets (Canon ME3, Prepared Galaxy, Humanity Ascendant, Cerberus Reformed, Reaper Escalation, Prime/Apex — Successful Refuse, Cerberus Ascendant, Custom) and a validated JSON import/export editor.
+- **AU Worlds & Civilizations**: a separate hub for aligned Alliance/Cerberus, First Contact victors, the warning of 1800, non-eezo FTL, early human eezo, Prothean victory, invented past cycles and explicit HFY branches. Supported modern-human branches also work in the galactic campaign. The independent-FTL branch has real three-week direct transit, with fleets unavailable until arrival.
+- **Player civilization**: a seeded polity with finite industry, research, influence, political decisions, ship construction and real fleet technology. Battles deploy its actual inventory and return surviving ships; losses and political consequences persist. A generated past-cycle origin uses the same compact strategic layer, separate from the 2186 campaign.
+- **Timeline rule engine** with seventeen built-in profiles, a custom rules template and validated JSON import/export. Canon, Strict Lore, grounded AUs, HFY and crossover sandboxes are labelled separately.
 - **Canon vs AU comparison**: same scenario, fleets and seed under two rule sets, split results table, replay of either side, and a ranked explanation of which modifiers changed the result.
+- **Ship identities and fleet summaries**: faction-fitting generated names and fighter callsigns, preserved signature/explicit names and numbered Reapers. Large battles automatically use fleet names and live ship counts in both annotations and HUD lists; individual ships remain inspectable.
 - **Reaper Intelligence** assessment generated from live simulation data.
 - **Codex** and **Fleet Database** with per-statistic provenance (canon confirmed / canon inferred / simulation estimate / AU modified).
 - **Procedural audio** (Web Audio) with volume and mute; local save of preferences, custom timelines, custom battle and history (IndexedDB with localStorage fallback) with export/import.
 
 - **Saved games**: weekly autosave plus named slots (rename, delete, export/import with the rest of your data); touch pinch zoom in battle.
 
-Not yet implemented: bilateral negotiation with individual governments (diplomacy is summits plus events), simplified mid-range hull meshes and instanced rendering for very large fleets. See [ROADMAP.md](ROADMAP.md).
+Not yet implemented: bilateral negotiation with individual governments (diplomacy is summits plus events), simplified mid-range hull meshes and instanced rendering for very large fleets. Extreme Scale is a [saved future brief](docs/EXTREME_SCALE_BRIEF.md), not a supported engine mode. See [ROADMAP.md](ROADMAP.md).
 
 ## Controls
 
@@ -51,7 +54,7 @@ Not yet implemented: bilateral negotiation with individual governments (diplomac
 | Space, `[` `]` | Pause, slower / faster |
 | 1–7 | Camera modes |
 | Tab | Select entire fleet |
-| H | Hide HUD |
+| H / O | Cycle HUD / toggle tactical overlay independently |
 | Esc | Pause menu |
 
 ## Development
@@ -66,6 +69,8 @@ npm run sim -- battle_of_earth prime_apex 42 fixed   # headless battle for balan
 
 Architecture, lore sourcing, AU rules, known issues and the changelog are documented in [ARCHITECTURE.md](ARCHITECTURE.md), [LORE_REFERENCE.md](LORE_REFERENCE.md), [AU_RULES.md](AU_RULES.md), [KNOWN_ISSUES.md](KNOWN_ISSUES.md) and [CHANGELOG.md](CHANGELOG.md).
 
+The current release's controls/scope are in [AU Worlds](docs/AU_WORLDS_AND_CIVILIZATIONS.md); test results and same-host simulation benchmarks are in [v0.14 verification](docs/QA_V014.md).
+
 ## Deployment
 
 `.github/workflows/deploy.yml` builds with `VITE_BASE=/<repo>/` and publishes `dist/` to GitHub Pages on every push to `main` or `codex/apex-combat-overhaul` (or manually via *workflow_dispatch*). One-time setup in the repository: **Settings → Pages → Build and deployment → Source: GitHub Actions**. `.github/workflows/ci.yml` runs typecheck, unit tests, the production build and the Playwright suite on every branch.
@@ -77,3 +82,7 @@ If the site shows plain, unstyled “INITIALISING COMBAT SIMULATION…” text, 
 In battle, **Spinal fire** controls apply to the selected command scope: hold/resume organic dreadnought guns or **Release volley** when ready. Escorts and point defence keep fighting. Select a ship to see its actual firing/range state. **Watch battle** switches to a quieter cinematic view; **Return to command** restores the tactical HUD. H still cycles full/minimal/clean HUD. See [V2 polish notes](docs/V2_POLISH.md) for validation and limitations.
 
 Large fleets deploy in staggered mixed battlegroups with varied organic spacing and more ordered Reaper fronts. Cinematics mix combat shots with held wide passes showing those formations. Under HADES-enabled AU rules, rounds that penetrate the hull trigger internal nuclear bursts with flashes, shock rings and delayed impact audio; coordinated battery releases still obey real range, arcs, heat and reloads.
+
+**Strict Lore** is a separate timeline with a sourced two-second Alliance main-gun base cycle and canonical roster restrictions; other unknown numbers remain estimates. **Custom Battle → Roster → Multiverse crossover** enables UNSC, Covenant, Imperium, Chaos and Skynet fleets with ten original hulls and declared setting-weighted power conversions. AU Worlds also supplies Prothean, past-cycle and player-civilization factions with six further hulls. **O** toggles the overlay; Settings offers **Keep tactical overlay** when H hides the HUD. See [lore, cadence and crossover notes](docs/LORE_CADENCE_AND_CROSSOVERS.md).
+
+Open **AU Worlds & Civilizations** from the main menu to choose a branch, build a fleet or found a civilization. **Overlay labels** offers Auto, individual ships or fleet names/counts in Settings and the pause menu; Auto switches to fleets at 80 living deployed ships and returns to ships below 64. Fleet HUD rows can expand with **Show ships**. See [AU Worlds and civilization notes](docs/AU_WORLDS_AND_CIVILIZATIONS.md) for persistence, politics and scope.

@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { el } from '../dom';
 import { storage } from '@/core/storage';
+import { OVERLAY_DETAIL_LABELS, type OverlayDetail } from '../fleetLabels';
 
 export function renderSettings(app: App): HTMLElement {
   const p = app.prefs;
@@ -28,10 +29,20 @@ export function renderSettings(app: App): HTMLElement {
           p.graphics.lod = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();
         } }, [el('option', { value: 'on', selected: p.graphics.lod !== false }, 'On: distant ships simplify to hull and points'), el('option', { value: 'off', selected: p.graphics.lod === false }, 'Off: full detail at any distance')])]),
-        el('label', { class: 'field' }, ['Tactical overlay', el('select', { onchange: (e: Event) => {
+        el('label', { class: 'field' }, ['Tactical overlay', el('select', { 'data-action': 'overlay-enabled', onchange: (e: Event) => {
           p.showOverlay = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();
         } }, [el('option', { value: 'on', selected: p.showOverlay }, 'On'), el('option', { value: 'off', selected: !p.showOverlay }, 'Off')])]),
+        el('label', { class: 'field' }, ['Overlay with hidden HUD', el('select', { 'data-action': 'overlay-hud-policy', onchange: (e: Event) => {
+          p.overlayIndependent = (e.target as HTMLSelectElement).value === 'keep';
+          void app.savePrefs();
+        } }, [el('option', { value: 'hide', selected: !p.overlayIndependent }, 'Hide with HUD'), el('option', { value: 'keep', selected: p.overlayIndependent }, 'Keep tactical overlay')])]),
+        el('p', { class: 'dim', style: { fontSize: '12px' } }, 'H cycles the HUD. O toggles tactical annotations separately, including in cinematic view.'),
+        el('label', { class: 'field' }, ['Tactical label detail', el('select', { 'data-action': 'overlay-detail-setting', onchange: (e: Event) => {
+          p.overlayDetail = (e.target as HTMLSelectElement).value as OverlayDetail;
+          void app.savePrefs();
+        } }, (Object.keys(OVERLAY_DETAIL_LABELS) as OverlayDetail[]).map(detail => el('option', { value: detail, selected: p.overlayDetail === detail }, OVERLAY_DETAIL_LABELS[detail])))]),
+        el('p', { class: 'dim', style: { fontSize: '12px' } }, 'Automatic detail uses fleet names and live ship counts from 80 ships, keeping inspected ships readable. It returns to individual labels below 64 ships.'),
         el('p', { class: 'dim', style: { fontSize: '12px' } }, 'Changes apply to the next battle. Low quality disables antialiasing and caps the render resolution.'),
       ]),
       el('div', { class: 'panel orange' }, [

@@ -1,6 +1,8 @@
 import type { App } from '../app';
 import { el } from '../dom';
-import { CANON_TECH, TECH_KEYS, cloneRules, type RuleSet, type TechModifiers } from '@/timelines/rules';
+import { CANON_TECH, TECH_KEYS, cloneRules, techFor, type RuleSet, type TechModifiers } from '@/timelines/rules';
+import { FACTIONS } from '@/data/factions';
+import type { FactionId } from '@/data/types';
 import { TECH_RANGE, exportRuleSet, importRuleSet } from '@/timelines/schema';
 import { makeCustom } from '@/timelines/presets';
 
@@ -28,6 +30,8 @@ const TECH_LABELS: Record<keyof TechModifiers, { label: string; tip: string }> =
 export function renderTimelines(app: App, params?: { editId?: string }): HTMLElement {
   let selectedId = params?.editId ?? app.prefs.lastTimelineId;
   let editing: RuleSet | undefined;
+  let overrideFaction: FactionId = 'alliance';
+  let overrideKey: keyof TechModifiers = 'massAcceleratorDamage';
   const body = el('div', { class: 'screen-body' });
   const status = el('div', { class: 'mono dim', style: { fontSize: '11px', flex: '1' } });
 
@@ -56,6 +60,29 @@ export function renderTimelines(app: App, params?: { editId?: string }): HTMLEle
         ]);
       })),
     ]);
+
+  const factionPanel = (rules: RuleSet, editable: boolean) => {
+    const overrides = rules.factionOverrides[overrideFaction] ?? {};
+    const effective = techFor(rules, overrideFaction);
+    const value = el('input', { type: 'number', step: 0.05, min: TECH_RANGE[overrideKey][0], max: TECH_RANGE[overrideKey][1], value: effective[overrideKey], 'data-action': 'faction-override-value', disabled: !editable });
+    return el('div', { class: 'panel', style: { marginTop: '16px' } }, [
+      el('div', { class: 'panel-title' }, 'FACTION TECHNOLOGY'),
+      el('p', { class: 'dim' }, 'Set an explicit value for one faction. Unset values inherit the timeline; crossover and generated factions inherit their own baseline. Removing an override restores that inheritance.'),
+      el('div', { class: 'row', style: { flexWrap: 'wrap', alignItems: 'end' } }, [
+        el('label', { class: 'field' }, ['Faction', el('select', { 'data-action': 'faction-override-select', onchange: (e: Event) => { overrideFaction = (e.target as HTMLSelectElement).value as FactionId; render(); } }, Object.values(FACTIONS).map(f => el('option', { value: f.id, selected: f.id === overrideFaction }, f.name)))]),
+        el('label', { class: 'field' }, ['Technology', el('select', { 'data-action': 'faction-override-key', onchange: (e: Event) => { overrideKey = (e.target as HTMLSelectElement).value as keyof TechModifiers; render(); } }, TECH_KEYS.map(k => el('option', { value: k, selected: k === overrideKey }, TECH_LABELS[k].label)))]),
+        el('label', { class: 'field' }, ['Multiplier', value]),
+        editable ? el('button', { class: 'btn small', 'data-action': 'faction-override-set', onclick: () => {
+          const n = Number(value.value); if (!Number.isFinite(n)) return;
+          rules.factionOverrides[overrideFaction] = { ...overrides, [overrideKey]: Math.min(TECH_RANGE[overrideKey][1], Math.max(TECH_RANGE[overrideKey][0], n)) }; render();
+        } }, 'Set faction value') : null,
+        editable ? el('button', { class: 'btn small', 'data-action': 'faction-override-reset', disabled: overrides[overrideKey] === undefined, onclick: () => {
+          delete overrides[overrideKey]; if (Object.keys(overrides).length === 0) delete rules.factionOverrides[overrideFaction]; render();
+        } }, 'Restore inherited value') : null,
+      ]),
+      el('p', { class: 'mono dim', 'data-action': 'faction-override-summary', style: { fontSize: '11px' } }, Object.entries(overrides).map(([key, v]) => `${TECH_LABELS[key as keyof TechModifiers].label} ×${v!.toFixed(2)}`).join(' · ') || 'No explicit overrides for this faction.'),
+    ]);
+  };
 
   const specialPanel = (rules: RuleSet, editable: boolean) => {
     const bool = (label: string, get: () => boolean, set: (v: boolean) => void, tip: string) =>
@@ -91,6 +118,7 @@ export function renderTimelines(app: App, params?: { editId?: string }): HTMLEle
       bool('Illusive Man indoctrinated', () => st.illusiveManIndoctrinated, (v) => (st.illusiveManIndoctrinated = v), 'An indoctrinated Illusive Man cannot cooperate.'),
       bool('Conventional victory possible', () => st.conventionalVictoryPossible, (v) => (st.conventionalVictoryPossible = v), 'Campaign flag: the war can be won without the Crucible.'),
       bool('Homeworld independence', () => st.homeworldIndependence, (v) => (st.homeworldIndependence = v), 'Prime/Apex rule: Earth and Palaven hold without rescue.'),
+      bool('Relay-independent human FTL', () => st.relayIndependentHumanFTL === true, (v) => (st.relayIndependentHumanFTL = v), 'AU campaign drive: Alliance and Cerberus can use direct three-week routes. This does not increase tactical combat speed.'),
     ]);
   };
 
@@ -124,6 +152,7 @@ export function renderTimelines(app: App, params?: { editId?: string }): HTMLEle
                 editing.id = `custom_${Date.now().toString(36)}`;
                 editing.name = `${base.name} (custom)`;
                 editing.category = 'custom';
+                delete editing.strictLore;
                 render();
               } }, 'Duplicate selected & edit'),
               el('button', { class: 'btn small', onclick: () => {
@@ -206,6 +235,7 @@ export function renderTimelines(app: App, params?: { editId?: string }): HTMLEle
             el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'TECHNOLOGY — ORGANIC FACTIONS'), techTable('organic', rules, editable)]),
             el('div', { class: 'panel red' }, [el('div', { class: 'panel-title' }, 'TECHNOLOGY — REAPERS'), techTable('reaper', rules, editable)]),
           ]),
+          factionPanel(rules, editable),
           el('div', { class: 'grid2' }, [
             el('div', { class: 'panel orange' }, [el('div', { class: 'panel-title' }, 'SPECIAL TECHNOLOGY & STRATEGIC VARIABLES'), specialPanel(rules, editable)]),
             el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'FLEET STRENGTH'), fleetPanel(rules, editable), el('p', { class: 'dim', style: { fontSize: '11px', marginTop: '8px' } }, 'Faction overrides (e.g. Alliance-only bonuses in Humanity Ascendant) are shown in the Fleet Database as effective stats.')]),

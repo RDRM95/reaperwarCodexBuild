@@ -28,6 +28,7 @@ export function renderMenu(app: App): HTMLElement {
     item('New Galactic Campaign', () => app.show('campaign_setup')),
     item('Quick Battle', () => app.show('briefing', { scenarioId: lastScenario.id }), undefined, true),
     item('Custom Battle', () => app.show('custom')),
+    item('AU Worlds & Civilizations', () => app.show('au_hub'), 'AU'),
     item('Alternate Timelines', () => app.show('timelines')),
     item('Canon vs AU Comparison', () => app.show('comparison')),
     item('Fleet Database', () => app.show('database')),

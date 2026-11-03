@@ -1,4 +1,6 @@
 import type { FactionId } from './types';
+import { CROSSOVER_FACTIONS } from './crossover';
+import { SANDBOX_FACTIONS } from './auFactions';
 
 export interface FactionDoctrine {
   /** Preferred fraction of max weapon range to fight at (0.5 = close in). */
@@ -29,6 +31,10 @@ export interface FactionDef {
   colour: string;
   colourHex: number;
   engineColourHex: number;
+  /** Omitted for the original Mass Effect factions. */
+  universe?: 'mass_effect' | 'halo' | 'warhammer40k' | 'terminator';
+  /** Available in crossover sandbox battles, never ordinary campaign production. */
+  sandboxOnly?: boolean;
   doctrine: FactionDoctrine;
   description: string;
   /** Lines used by the communications panel; chosen per event type. */
@@ -359,6 +365,8 @@ export const FACTIONS: Record<FactionId, FactionDef> = {
       fighters_launch: ['Insignificant craft detected.'],
     },
   },
+  ...CROSSOVER_FACTIONS,
+  ...SANDBOX_FACTIONS,
 };
 
 export const getFaction = (id: FactionId): FactionDef => FACTIONS[id];

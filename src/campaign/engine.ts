@@ -2,10 +2,10 @@ import { Rng } from '@/core/rng';
 import { v3 } from '@/core/vec3';
 import { FACTIONS } from '@/data/factions';
 import { getShipClass } from '@/data/ships';
-import type { FactionId } from '@/data/types';
+import { MASS_EFFECT_FACTION_IDS, type MassEffectFactionId } from '@/data/types';
 import { BattleSimulation } from '@/simulation/battle';
 import type { BattleConfig, BattleResult, FleetSpec } from '@/simulation/types';
-import type { RuleSet } from '@/timelines/rules';
+import { techFor, type RuleSet } from '@/timelines/rules';
 import { getSystem, neighbours, relayPath, SYSTEMS, type SystemId } from './galaxy';
 import type { Allegiance, CampaignEvent, CampaignFleet, CampaignState, FactionStatus, PendingEngagement, SystemState } from './state';
 import { crucibleRateModifier, groundWar, indoctrinationModifier, liberationClear, politicalPhase, refugeePhase, researchPhase, researchTech, resolveSummit, type SummitChoice } from './depth';
@@ -23,7 +23,7 @@ export const CAMPAIGN_VERSION = 2;
 const MAX_SHIPS_PER_SIDE = 70;
 
 /** Classes each faction produces, with relative weights and point costs. */
-const PRODUCTION: Partial<Record<FactionId, { classId: string; weight: number }[]>> = {
+const PRODUCTION: Partial<Record<MassEffectFactionId, { classId: string; weight: number }[]>> = {
   alliance: [
     { classId: 'alliance_frigate', weight: 6 },
     { classId: 'alliance_cruiser', weight: 3 },
@@ -58,7 +58,7 @@ const PRODUCTION: Partial<Record<FactionId, { classId: string; weight: number }[
 };
 
 /** Orbital defence platforms are represented by the owner's escort hulls. */
-const DEFENCE_CLASSES: Partial<Record<FactionId, { cruiser: string; frigate: string }>> = {
+const DEFENCE_CLASSES: Partial<Record<MassEffectFactionId, { cruiser: string; frigate: string }>> = {
   alliance: { cruiser: 'alliance_cruiser', frigate: 'alliance_frigate' },
   turian: { cruiser: 'turian_cruiser', frigate: 'turian_frigate' },
   asari: { cruiser: 'asari_cruiser', frigate: 'asari_cruiser' },
@@ -92,6 +92,7 @@ export interface CampaignOptions {
 
 export function createCampaign(opts: CampaignOptions): CampaignState {
   const { rules, seed } = opts;
+  if (rules.campaignCompatible === false) throw new Error(`${rules.name} is a battle sandbox, not a compatible 2186 campaign. Open a custom battle instead.`);
   const ws = opts.worldState;
   const rannochPeace = ws.rannoch === 'peace';
   const cerberusAllied = rules.strategic.cerberusStance === 'cooperative' || rules.strategic.cerberusStance === 'controls_reapers';
@@ -111,8 +112,8 @@ export function createCampaign(opts: CampaignOptions): CampaignState {
   systems.hades_gamma.controller = 'reaper';
   systems.hades_gamma.reaperPresence = 1;
 
-  const factions = {} as Record<FactionId, FactionStatus>;
-  for (const f of Object.keys(FACTIONS) as FactionId[]) {
+  const factions = {} as Record<MassEffectFactionId, FactionStatus>;
+  for (const f of MASS_EFFECT_FACTION_IDS) {
     factions[f] = { faction: f, morale: 0.7, productionPool: 0, lost: 0, built: 0, cooperation: Math.min(1, 0.35 + rules.strategic.alliedCoordination * 0.6) };
   }
   factions.alliance.cooperation = 1;
@@ -127,7 +128,7 @@ export function createCampaign(opts: CampaignOptions): CampaignState {
   const fs = rules.fleetStrength;
   const k = (base: Record<string, number>, mult: number): Record<string, number> => scaleCounts(base, mult);
   let nextId = 1;
-  const mk = (name: string, faction: FactionId, allegiance: Allegiance, location: SystemId, counts: Record<string, number>, player = allegiance === 'allied', posture: CampaignFleet['posture'] = 'defend'): CampaignFleet => ({
+  const mk = (name: string, faction: MassEffectFactionId, allegiance: Allegiance, location: SystemId, counts: Record<string, number>, player = allegiance === 'allied', posture: CampaignFleet['posture'] = 'defend'): CampaignFleet => ({
     id: `f${nextId++}`,
     name,
     faction,
@@ -188,7 +189,7 @@ export function createCampaign(opts: CampaignOptions): CampaignState {
 
 // ------------------------------------------------------------- utilities
 
-export const fleetsAt = (state: CampaignState, system: SystemId): CampaignFleet[] => state.fleets.filter((f) => f.location === system && fleetShipCount(f.counts) > 0);
+export const fleetsAt = (state: CampaignState, system: SystemId): CampaignFleet[] => state.fleets.filter((f) => f.location === system && !(f.transitWeeksRemaining && f.transitWeeksRemaining > 0) && fleetShipCount(f.counts) > 0);
 export const getFleet = (state: CampaignState, id: string): CampaignFleet | undefined => state.fleets.find((f) => f.id === id);
 const isHostile = (a: Allegiance, b: Allegiance): boolean => a !== b && a !== 'neutral' && b !== 'neutral';
 
@@ -211,23 +212,45 @@ function log(state: CampaignState, kind: CampaignEvent['kind'], text: string, sy
   if (state.events.length > 400) state.events.splice(0, state.events.length - 400);
 }
 
-/** Issue a move order; returns false when refused (cooperation / adjacency). */
-export function orderMove(state: CampaignState, fleetId: string, to: SystemId): { ok: boolean; reason?: string } {
+/** AU direct crossings take three abstract weeks, not a measured FTL velocity. */
+export const INDEPENDENT_TRANSIT_WEEKS = 3;
+export type CampaignTravelMode = 'auto' | 'relay' | 'independent';
+
+/** Issue a move order; normal relay routes and coalition consent remain unchanged. */
+export function orderMove(state: CampaignState, fleetId: string, to: SystemId, mode: CampaignTravelMode = 'auto'): { ok: boolean; reason?: string } {
   const f = getFleet(state, fleetId);
   if (!f) return { ok: false, reason: 'No such fleet' };
   if (!f.playerControlled) return { ok: false, reason: 'Fleet is not under your command' };
+  if (!SYSTEMS.some(s => s.id === to)) return { ok: false, reason: 'No such destination' };
+  if ((f.transitWeeksRemaining ?? 0) > 0) return { ok: false, reason: 'Independent FTL crossing in progress; orders resume on arrival.' };
   if (to === f.location) {
     f.route = undefined;
     f.destination = undefined;
+    f.travelMode = undefined;
+    f.transitWeeksRemaining = undefined;
     return { ok: true };
   }
+  const independentCapable = state.rules.strategic.relayIndependentHumanFTL === true && (f.faction === 'alliance' || f.faction === 'cerberus');
   const path = relayPath(f.location, to);
-  if (path.length < 2) return { ok: false, reason: 'No relay route' };
+  if (path.length < 2 && (!independentCapable || mode === 'relay')) return { ok: false, reason: 'No relay route' };
   const home = SYSTEMS.find((s) => s.homeworldOf === f.faction)?.id;
   const coop = state.factions[f.faction].cooperation;
   if (f.faction !== 'alliance' && home && to !== home && coop < 0.5) {
     return { ok: false, reason: `${FACTIONS[f.faction].shortName} command will not commit this fleet away from ${getSystem(home).world} (cooperation ${(coop * 100).toFixed(0)}%)` };
   }
+  if (mode === 'independent' && !independentCapable) return { ok: false, reason: 'This fleet has no relay-independent FTL drive.' };
+  const independent = independentCapable && (mode === 'independent' || (mode === 'auto' && (path.length < 2 || path.length - 1 >= INDEPENDENT_TRANSIT_WEEKS)));
+  if (independent) {
+    if (state.pending && [...state.pending.alliedFleetIds, ...state.pending.reaperFleetIds].includes(f.id)) {
+      return { ok: false, reason: 'Resolve or withdraw from the pending engagement before beginning an independent FTL crossing.' };
+    }
+    f.route = [to]; f.destination = to;
+    f.travelMode = 'independent'; f.transitWeeksRemaining = INDEPENDENT_TRANSIT_WEEKS;
+    log(state, 'move', `${f.name} begins a relay-independent crossing to ${getSystem(to).name}: ${INDEPENDENT_TRANSIT_WEEKS} weeks (AU transit estimate). Fleet unavailable until arrival.`, f.location);
+    return { ok: true };
+  }
+  f.travelMode = undefined;
+  f.transitWeeksRemaining = undefined;
   f.route = path.slice(1);
   f.destination = f.route[0];
   log(state, 'move', `${f.name} ordered to ${getSystem(to).name}.`, f.location);
@@ -253,9 +276,11 @@ export function buildEngagement(state: CampaignState, pending: PendingEngagement
   const kA = Math.min(1, MAX_SHIPS_PER_SIDE / Math.max(1, alliedTotal));
   const kB = Math.min(1, MAX_SHIPS_PER_SIDE / Math.max(1, reaperTotal));
   const fleets: FleetSpec[] = [];
-  const research = researchTech(state);
   allied.forEach((f, i) => {
-    const readiness = f.readiness < 0.95 ? { crewQuality: 0.7 + 0.3 * f.readiness } : undefined;
+    // Research multiplies each faction's own AU technology; a shared absolute
+    // organic value would erase that faction's prepared defences or weapons.
+    const research = researchTech(state, f.faction);
+    const readiness = f.readiness < 0.95 ? { crewQuality: (research?.crewQuality ?? techFor(state.rules, f.faction).crewQuality) * (0.7 + 0.3 * f.readiness) } : undefined;
     const techOverride = research || readiness ? { ...research, ...readiness } : undefined;
     fleets.push({
       id: f.id,
@@ -272,8 +297,8 @@ export function buildEngagement(state: CampaignState, pending: PendingEngagement
   });
   // Orbital defence as a static escort group of the system owner's hulls.
   if (st.controller === 'allied' && st.defence > 0.1 && sys.defence > 0) {
-    const ownerFaction = (SYSTEMS.find((s) => s.id === sys.id)?.owner ?? 'alliance') as FactionId | 'council' | 'terminus' | 'batarian';
-    const fac: FactionId = ownerFaction === 'council' ? 'turian' : ownerFaction === 'terminus' || ownerFaction === 'batarian' ? 'alliance' : ownerFaction;
+    const ownerFaction = (SYSTEMS.find((s) => s.id === sys.id)?.owner ?? 'alliance') as MassEffectFactionId | 'council' | 'terminus' | 'batarian';
+    const fac: MassEffectFactionId = ownerFaction === 'council' ? 'turian' : ownerFaction === 'terminus' || ownerFaction === 'batarian' ? 'alliance' : ownerFaction;
     const cls = DEFENCE_CLASSES[fac];
     if (cls) {
       const n = Math.max(1, Math.round(sys.defence * st.defence));
@@ -500,6 +525,12 @@ export function advanceTick(state: CampaignState, opts: { interactive: boolean }
   // Movement.
   for (const f of state.fleets) {
     if (!f.destination) continue;
+    if (f.travelMode === 'independent' && (f.transitWeeksRemaining ?? 0) > 0) {
+      f.transitWeeksRemaining = (f.transitWeeksRemaining ?? 1) - 1;
+      if (f.transitWeeksRemaining > 0) continue;
+      f.travelMode = undefined;
+      f.transitWeeksRemaining = undefined;
+    }
     f.location = f.destination;
     f.route = f.route?.slice(1);
     f.destination = f.route && f.route.length > 0 ? f.route[0] : undefined;
@@ -542,8 +573,15 @@ function preservationWithdrawals(state: CampaignState, includePlayer: boolean): 
     const alliedPower = here.filter((f) => f.allegiance === 'allied').reduce((a, f) => a + fleetPoints(f.counts), 0) + s.defence * state.systems[s.id].defence * 100;
     const competence = 0.8 + 0.4 * state.rules.strategic.alliedCoordination;
     // Technology changes what a point of fleet value is worth against Reapers.
-    const t = state.rules.organic;
-    const techFactor = t.massAcceleratorDamage * t.kineticBarrierStrength * t.armourStrength * (state.rules.special.hyperMassAccelerators ? 2 : 1) * (state.rules.special.hadesRounds ? 1.5 : 1);
+    const friendly = here.filter(f => f.allegiance === 'allied');
+    const framePoints = friendly.reduce((sum, f) => sum + fleetPoints(f.counts), 0);
+    const factor = (f: CampaignFleet) => {
+      const t = techFor(state.rules, f.faction);
+      return t.massAcceleratorDamage * t.kineticBarrierStrength * t.armourStrength * (state.rules.special.hyperMassAccelerators ? 2 : 1) * (state.rules.special.hadesRounds ? 1.5 : 1);
+    };
+    // Per-faction AU technology changes actual fleet strength, not just a
+    // descriptive card. Identical global modifiers retain the original factor.
+    const techFactor = framePoints > 0 ? friendly.reduce((sum, f) => sum + fleetPoints(f.counts) * factor(f), 0) / framePoints : 1;
     if (reaperPower > alliedPower * techFactor * 2.2 * competence) {
       for (const f of allied) {
         const escape = neighbours(s.id).find((n) => state.systems[n].controller === 'allied' && !fleetsAt(state, n).some((x) => x.allegiance === 'reaper'));
@@ -616,7 +654,7 @@ function economyPhase(state: CampaignState, interactive = false): void {
     }
   }
   // Production.
-  for (const f of Object.keys(FACTIONS) as FactionId[]) {
+  for (const f of MASS_EFFECT_FACTION_IDS) {
     const table = PRODUCTION[f];
     if (!table) continue;
     const fs = state.factions[f];
@@ -643,8 +681,8 @@ function economyPhase(state: CampaignState, interactive = false): void {
       fs.productionPool -= cost;
       // Deliver to the faction's fleet at its homeworld, else its strongest fleet.
       const home = SYSTEMS.find((s) => s.homeworldOf === f)?.id;
-      const target = state.fleets.filter((x) => x.faction === f && x.allegiance === 'allied').sort((a, b) => (a.location === home ? -1 : 1) - (b.location === home ? -1 : 1) || fleetPoints(b.counts) - fleetPoints(a.counts))[0];
-      if (!target) break;
+      const target = state.fleets.filter((x) => x.faction === f && x.allegiance === 'allied' && !(x.transitWeeksRemaining && x.transitWeeksRemaining > 0)).sort((a, b) => (a.location === home ? -1 : 1) - (b.location === home ? -1 : 1) || fleetPoints(b.counts) - fleetPoints(a.counts))[0];
+      if (!target) { fs.productionPool += cost; break; }
       target.counts[chosen.classId] = (target.counts[chosen.classId] ?? 0) + 1;
       fs.built++;
       built++;

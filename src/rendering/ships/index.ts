@@ -8,6 +8,8 @@ import { buildHarbinger, buildReaperCapital, buildReaperDestroyer } from './reap
 import { buildSalarianCruiser, buildSalarianDreadnought, buildSalarianFighter, buildStgFrigate } from './salarian';
 import { buildTurianCruiser, buildTurianDreadnought, buildTurianFighter, buildTurianFrigate } from './turian';
 import type { BuiltShip } from './types';
+import { buildChaosDesolator, buildChaosMurder, buildCovenantCas, buildCovenantCcs, buildImperiumLunar, buildImperiumRetribution, buildUnscInfinity, buildUnscMarathon } from './crossover';
+import { buildPastCycleCruiser, buildPastCycleDreadnought, buildPlayerCivCruiser, buildPlayerCivDreadnought, buildProtheanCruiser, buildProtheanDreadnought, buildSkynetHarvester, buildSkynetHunter } from './auHumanity';
 
 export type { BuiltShip } from './types';
 
@@ -45,6 +47,22 @@ const BUILDERS: Record<string, () => BuiltShip> = {
   reaper_capital: buildReaperCapital,
   reaper_destroyer: buildReaperDestroyer,
   harbinger: buildHarbinger,
+  unsc_marathon: buildUnscMarathon,
+  unsc_infinity: buildUnscInfinity,
+  covenant_ccs: buildCovenantCcs,
+  covenant_cas: buildCovenantCas,
+  imperium_lunar: buildImperiumLunar,
+  imperium_retribution: buildImperiumRetribution,
+  chaos_murder: buildChaosMurder,
+  chaos_desolator: buildChaosDesolator,
+  prothean_cruiser: buildProtheanCruiser,
+  prothean_dreadnought: buildProtheanDreadnought,
+  past_cycle_cruiser: buildPastCycleCruiser,
+  past_cycle_dreadnought: buildPastCycleDreadnought,
+  player_civ_cruiser: buildPlayerCivCruiser,
+  player_civ_dreadnought: buildPlayerCivDreadnought,
+  skynet_hunter: buildSkynetHunter,
+  skynet_harvester: buildSkynetHarvester,
 };
 
 /** Cache of template groups per class; instances are cloned (sharing geometry). */
