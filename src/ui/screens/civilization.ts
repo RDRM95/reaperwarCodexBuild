@@ -46,7 +46,7 @@ export function renderCivilization(app: App, params?: { found?: boolean; origin?
     }
     const fleet = civilizationFleet(state), locked = !!state.pendingBattle;
     const hulls = Object.values(state.fleetCounts).reduce((a, b) => a + b, 0);
-    const stat = (label: string, value: string | number, action: string) => el('div', { class: 'stat' }, [el('b', {}, label), el('span', { class: 'mono', 'data-action': action }, String(value))]);
+    const stat = (label: string, value: string | number, action: string) => el('div', { class: 'stat', style: { display: 'flex', justifyContent: 'space-between', gap: '16px', padding: '3px 0', alignItems: 'baseline' } }, [el('b', {}, label), el('span', { class: 'mono', 'data-action': action }, String(value))]);
     setChildren(body,
       el('div', { class: 'row', style: { flexWrap: 'wrap', marginBottom: '16px' } }, [el('h2', { 'data-action': 'civilization-name' }, state.name), el('span', { class: 'badge au' }, 'AU'), el('span', { class: 'dim' }, `${CIVILIZATION_ORIGINS[state.origin]} · ${state.government} · ${state.ethics} · seed ${state.seed}`)]),
       el('div', { class: 'grid3' }, [
