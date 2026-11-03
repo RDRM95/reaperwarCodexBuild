@@ -11,6 +11,7 @@ export default defineConfig({
     baseURL: `http://localhost:${port}`,
     viewport: { width: 1920, height: 1080 },
     headless: true,
+    screenshot: 'only-on-failure',
     launchOptions: {
       // Optional system Chromium for cloud environments; CI still uses the
       // version installed by `playwright install` when this is unset.
