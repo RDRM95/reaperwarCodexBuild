@@ -29,6 +29,8 @@ import { summarise } from './results';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
 import { SeparationField } from './separation';
+import { ProjectileBroadphase } from './projectileBroadphase';
+import { WeaponTargetField } from './weaponTargetField';
 import { HadesVolleyCoordinator } from './volleys';
 import { ShipNameGenerator } from './shipNames';
 import {
@@ -96,6 +98,9 @@ export class BattleSimulation implements AiContext {
   private engagementAnnounced = new Set<string>();
   private hadesVolleys = new HadesVolleyCoordinator();
   private separationField?: SeparationField;
+  private weaponTargetField?: WeaponTargetField;
+  /** Fighter references indexed by carrier: no full-fleet scan per hangar per tick. */
+  private readonly carrierFighters = new Map<string, ShipState[]>();
   private primaryVolleys = new PrimaryVolleyControl();
   /** Listener for events (renderer/UI). */
   onEvent?: (e: BattleEvent) => void;
@@ -269,6 +274,11 @@ export class BattleSimulation implements AiContext {
     };
     if (cls.fighterComplement) {
       ship.hangar = { classId: cls.fighterComplement.classId, remaining: cls.fighterComplement.count, launchTimer: 2 };
+    }
+    if (carrierId) {
+      let fighters = this.carrierFighters.get(carrierId);
+      if (!fighters) { fighters = []; this.carrierFighters.set(carrierId, fighters); }
+      fighters.push(ship);
     }
     return ship;
   }
@@ -477,6 +487,9 @@ export class BattleSimulation implements AiContext {
     }
 
     this.separationField = new SeparationField(this.ships);
+    // Snapshot targets before the per-ship move/fire loop, with a movement
+    // allowance so targets entering range mid-tick remain eligible.
+    this.weaponTargetField = new WeaponTargetField(this.ships, dt);
     for (const ship of this.ships) {
       if (!ship.alive || ship.escaped) continue;
       ship.prevPos = clone(ship.pos);
@@ -495,7 +508,9 @@ export class BattleSimulation implements AiContext {
       this.updateWeapons(ship, fleet, dt);
     }
 
-    this.updateProjectiles(dt);
+    // Build after ship movement: every projectile sees current target positions.
+    const projectileField = this.projectiles.length ? new ProjectileBroadphase(this.ships) : undefined;
+    this.updateProjectiles(dt, projectileField);
     this.updateMissiles(dt);
     for (const f of this.flashes) f.ttl -= dt;
     this.flashes = this.flashes.filter((f) => f.ttl > 0);
@@ -588,7 +603,7 @@ export class BattleSimulation implements AiContext {
     }
     // Recall: fighters near the carrier return to the hangar.
     if (!fleet.orders.fightersDeployed) {
-      for (const f of this.ships) {
+      for (const f of this.carrierFighters.get(ship.id) ?? []) {
         if (f.carrierId === ship.id && f.alive && !f.escaped && distance(f.pos, ship.pos) < ship.lengthKm) {
           f.escaped = true; // Treated as recovered: not a loss, no longer in battle.
           f.alive = true;
@@ -597,7 +612,7 @@ export class BattleSimulation implements AiContext {
       }
     }
     // Rearming: fighters that have spent their torpedoes reload alongside the carrier.
-    for (const f of this.ships) {
+    for (const f of this.carrierFighters.get(ship.id) ?? []) {
       if (f.carrierId !== ship.id || !f.rearming || !f.alive || f.escaped) continue;
       if (distance(f.pos, ship.pos) > ship.lengthKm * 1.5) continue;
       f.rearmTimer = (f.rearmTimer ?? REARM_SECONDS) - dt;
@@ -621,7 +636,7 @@ export class BattleSimulation implements AiContext {
 
   private updateWeapons(ship: ShipState, fleet: FleetState, dt: number): void {
     const wpnFactor = 0.4 + 0.6 * ship.subsystems.weapons;
-    for (const w of this.iterWeapons(ship)) {
+    for (const w of ship.weapons) {
       // Active beams deal damage over time.
       if (w.beamRemaining > 0) {
         w.beamRemaining -= dt;
@@ -662,10 +677,6 @@ export class BattleSimulation implements AiContext {
     }
   }
 
-  private *iterWeapons(ship: ShipState): Generator<WeaponState> {
-    for (const w of ship.weapons) yield w;
-  }
-
   private tryFire(ship: ShipState, fleet: FleetState, w: WeaponState): void {
     const def = w.def;
     const origin = this.weaponWorldOffset(ship, w);
@@ -688,30 +699,37 @@ export class BattleSimulation implements AiContext {
         }
       }
       if (!missile) {
-        for (const e of this.enemiesOf(ship.side)) {
-          if (!e.alive || e.escaped) continue;
-          if (e.role !== 'fighter') continue;
+        let bestIndex = Infinity;
+        const considerFighter = (e: ShipState, index: number) => {
+          if (!e.alive || e.escaped || e.role !== 'fighter') return;
           const d = distance(origin, e.pos);
-          if (d <= def.range && d < best && this.inArc(ship, w, e.pos)) {
+          if (d <= def.range && (d < best || (d === best && index < bestIndex)) && this.inArc(ship, w, e.pos)) {
             best = d;
+            bestIndex = index;
             target = e;
           }
-        }
+        };
+        if (this.weaponTargetField) this.weaponTargetField.forRange(ship.side, origin, def.range, considerFighter);
+        else this.enemiesOf(ship.side).forEach(considerFighter);
       }
       if (!missile && !target && def.kind === 'gardian') {
         // GARDIAN lasers can scorch nearby hulls (bypassing barriers) — low priority.
-        for (const e of this.enemiesOf(ship.side)) {
-          if (!e.alive || e.escaped) continue;
+        let bestIndex = Infinity;
+        const considerHull = (e: ShipState, index: number) => {
+          if (!e.alive || e.escaped) return;
           const d = distance(origin, e.pos);
-          if (d <= def.range && d < best) {
+          if (d <= def.range && (d < best || (d === best && index < bestIndex))) {
             best = d;
+            bestIndex = index;
             target = e;
           }
-        }
+        };
+        if (this.weaponTargetField) this.weaponTargetField.forRange(ship.side, origin, def.range, considerHull);
+        else this.enemiesOf(ship.side).forEach(considerHull);
       }
       if (!missile && !target) return;
     } else {
-      target = weaponTarget(ship, fleet, w, id => this.shipById.get(id), this.enemiesOf(ship.side));
+      target = weaponTarget(ship, fleet, w, id => this.shipById.get(id), this.enemiesOf(ship.side), this.weaponTargetField);
       if (!target) return;
     }
 
@@ -876,7 +894,7 @@ export class BattleSimulation implements AiContext {
 
   // ------------------------------------------------------------ projectiles
 
-  private updateProjectiles(dt: number): void {
+  private updateProjectiles(dt: number, broadphase?: ProjectileBroadphase): void {
     const survivors: Projectile[] = [];
     for (const p of this.projectiles) {
       p.prevPos = clone(p.pos);
@@ -885,17 +903,21 @@ export class BattleSimulation implements AiContext {
       let hitShip: ShipState | undefined;
       let hitPoint: Vec3 | undefined;
       let bestT = Infinity;
-      for (const s of this.ships) {
-        if (!s.alive || s.escaped || s.side === p.side) continue;
-        if (s.role === 'fighter' && !p.weapon.antiSmall) continue;
+      let bestIndex = Infinity;
+      // Candidate enumeration is spatial, but equal-time hits still resolve in
+      // original ship order to keep seeded battles deterministic.
+      broadphase?.forSegment(p.side, p.prevPos, p.pos, (s, index) => {
+        if (!s.alive || s.escaped) return; // Earlier projectile may have killed it.
+        if (s.role === 'fighter' && !p.weapon.antiSmall) return;
         const r = s.radiusKm * (s.role === 'fighter' ? 2.5 : 1);
         const t = segmentSphere(p.prevPos, p.pos, s.pos, r);
-        if (t !== undefined && t < bestT) {
+        if (t !== undefined && (t < bestT || (t === bestT && index < bestIndex))) {
           bestT = t;
+          bestIndex = index;
           hitShip = s;
-          hitPoint = addScaled(p.prevPos, sub(p.pos, p.prevPos), t);
         }
-      }
+      });
+      if (hitShip) hitPoint = addScaled(p.prevPos, sub(p.pos, p.prevPos), bestT);
       if (hitShip && hitPoint) {
         const shooter = this.shipById.get(p.shooterId);
         if (shooter) this.applyHit(shooter, hitShip, p.weapon, p.weapon.damage, hitPoint);
@@ -1070,12 +1092,14 @@ export class BattleSimulation implements AiContext {
  * along the segment, or undefined.
  */
 export function segmentSphere(a: Vec3, b: Vec3, c: Vec3, r: number): number | undefined {
-  const d = sub(b, a);
-  const f = sub(a, c);
-  const A = dot(d, d);
-  if (A < 1e-12) return lengthSq(f) <= r * r ? 0 : undefined;
-  const B = 2 * dot(f, d);
-  const C = dot(f, f) - r * r;
+  // Scalar hot path: no temporary Vec3 allocations for every projectile/ship test.
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const fx = a.x - c.x, fy = a.y - c.y, fz = a.z - c.z;
+  const A = dx * dx + dy * dy + dz * dz;
+  const ff = fx * fx + fy * fy + fz * fz;
+  if (A < 1e-12) return ff <= r * r ? 0 : undefined;
+  const B = 2 * (fx * dx + fy * dy + fz * dz);
+  const C = ff - r * r;
   let disc = B * B - 4 * A * C;
   if (disc < 0) return undefined;
   disc = Math.sqrt(disc);

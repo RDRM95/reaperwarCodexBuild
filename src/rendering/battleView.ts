@@ -28,6 +28,8 @@ export interface ShipVisual {
   removed: boolean;
   /** Unique materials for damage tinting (cloned lazily on first damage). */
   tinted: boolean;
+  /** Cached unique hull materials: no whole-ship traversal each frame. */
+  tintedMats?: THREE.MeshStandardMaterial[];
   /** Current level of detail. */
   lod: LodLevel;
 }
@@ -40,7 +42,7 @@ export interface GraphicsSettings {
   lod?: boolean;
 }
 
-const MAX_FAR_POINTS = 2048;
+const INITIAL_FAR_POINTS = 2048;
 
 export class BattleView {
   readonly renderer: THREE.WebGLRenderer;
@@ -71,8 +73,8 @@ export class BattleView {
   private eventQueue: BattleEvent[] = [];
   /** Shared point cloud for ships beyond mesh range (one draw call). */
   private readonly farPoints: THREE.Points;
-  private readonly farPositions = new Float32Array(MAX_FAR_POINTS * 3);
-  private readonly farColours = new Float32Array(MAX_FAR_POINTS * 3);
+  private farPositions = new Float32Array(INITIAL_FAR_POINTS * 3);
+  private farColours = new Float32Array(INITIAL_FAR_POINTS * 3);
   private readonly tmpColour = new THREE.Color();
   /** Draw calls of the last rendered frame. */
   drawCalls = 0;
@@ -154,6 +156,21 @@ export class BattleView {
     this.rig.distance = Math.max(320, deploymentRadius * 2.6);
     this.rig.yaw = Math.PI + 0.6;
     this.rig.pitch = 0.42;
+  }
+
+  /** Grow far-ship GPU buffers geometrically; never drop ships beyond 2048. */
+  private ensureFarCapacity(required: number): void {
+    if (required * 3 <= this.farPositions.length) return;
+    let next = Math.max(INITIAL_FAR_POINTS, this.farPositions.length / 3);
+    while (next < required) next *= 2;
+    const positions = new Float32Array(next * 3);
+    const colours = new Float32Array(next * 3);
+    positions.set(this.farPositions);
+    colours.set(this.farColours);
+    this.farPositions = positions;
+    this.farColours = colours;
+    this.farPoints.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    this.farPoints.geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3).setUsage(THREE.DynamicDrawUsage));
   }
 
   private ensureVisual(ship: ShipState): ShipVisual {
@@ -239,7 +256,8 @@ export class BattleView {
       const level = lodLevel(dist, v.built.lengthUnits, ship.role, lodOn);
       this.applyLod(v, level);
       this.lodCounts[level]++;
-      if (level === 'point' && far < MAX_FAR_POINTS) {
+      if (level === 'point') {
+        this.ensureFarCapacity(far + 1);
         const p = v.built.group.position;
         this.farPositions[far * 3] = p.x;
         this.farPositions[far * 3 + 1] = p.y;
@@ -257,15 +275,13 @@ export class BattleView {
       // Damage tint.
       const hullFrac = ship.hull / ship.maxHull;
       if (hullFrac < 0.6 && !v.tinted) this.tintDamage(v);
-      if (v.tinted) {
+      if (v.tintedMats) {
         const t = 1 - hullFrac;
-        v.built.group.traverse((o) => {
-          const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-          if (m && (m as THREE.MeshStandardMaterial).isMeshStandardMaterial && o.name === 'hull') {
-            m.emissive.setRGB(0.25 * t * (0.6 + 0.4 * Math.sin(sim.time * 7 + ship.id.length)), 0.05 * t, 0);
-            m.emissiveIntensity = 1;
-          }
-        });
+        const red = 0.25 * t * (0.6 + 0.4 * Math.sin(sim.time * 7 + ship.id.length));
+        for (const mat of v.tintedMats) {
+          mat.emissive.setRGB(red, 0.05 * t, 0);
+          mat.emissiveIntensity = 1;
+        }
       }
     }
     const farGeom = this.farPoints.geometry;
@@ -319,10 +335,15 @@ export class BattleView {
   }
 
   private tintDamage(v: ShipVisual): void {
+    const tintedMats: THREE.MeshStandardMaterial[] = [];
     v.built.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
-      if (mesh.isMesh && mesh.name === 'hull') mesh.material = (mesh.material as THREE.Material).clone();
+      if (mesh.isMesh && mesh.name === 'hull') {
+        mesh.material = (mesh.material as THREE.MeshStandardMaterial).clone();
+        tintedMats.push(mesh.material as THREE.MeshStandardMaterial);
+      }
     });
+    v.tintedMats = tintedMats;
     v.tinted = true;
   }
 

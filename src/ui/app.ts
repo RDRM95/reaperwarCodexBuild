@@ -331,14 +331,20 @@ export class BattleController {
     this.handleKeys(dtReal);
     if (!this.paused && !this.sim.finished) {
       this.accumulator += dtReal * this.speed;
-      // Step until caught up, but never spend more than ~40 ms of wall time
-      // per frame so slow machines degrade to slower simulation, not a hang.
-      const budgetEnd = performance.now() + 40;
+      // Simulation runs on the main thread, so a 40 ms catch-up budget
+      // guarantees visible stutter even on a fast CPU/GPU. Reserve most of
+      // each display frame for rendering and input. On 144 Hz monitors the
+      // budget is shorter than at 60 Hz; 8x speed cannot be guaranteed if
+      // the simulation itself takes longer than real time.
+      const budgetMs = Math.max(2, Math.min(8, dtReal * 1000 * 0.35));
+      const budgetEnd = performance.now() + budgetMs;
       while (this.accumulator >= SIM_DT) {
         this.sim.step();
         this.accumulator -= SIM_DT;
-        if (performance.now() > budgetEnd) {
-          this.accumulator = Math.min(this.accumulator, SIM_DT);
+        if (performance.now() >= budgetEnd) {
+          // Permit bounded catch-up after a heavy volley, without creating a
+          // seconds-long spiral where each frame tries to repay old work.
+          this.accumulator = Math.min(this.accumulator, Math.max(0.2, this.speed * 0.2));
           break;
         }
       }
