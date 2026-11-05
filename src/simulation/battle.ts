@@ -30,6 +30,7 @@ import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
 import { SeparationField } from './separation';
 import { ProjectileBroadphase } from './projectileBroadphase';
+import { WeaponTargetField } from './weaponTargetField';
 import { HadesVolleyCoordinator } from './volleys';
 import { ShipNameGenerator } from './shipNames';
 import {
@@ -97,6 +98,7 @@ export class BattleSimulation implements AiContext {
   private engagementAnnounced = new Set<string>();
   private hadesVolleys = new HadesVolleyCoordinator();
   private separationField?: SeparationField;
+  private weaponTargetField?: WeaponTargetField;
   /** Fighter references indexed by carrier: no full-fleet scan per hangar per tick. */
   private readonly carrierFighters = new Map<string, ShipState[]>();
   private primaryVolleys = new PrimaryVolleyControl();
@@ -485,6 +487,9 @@ export class BattleSimulation implements AiContext {
     }
 
     this.separationField = new SeparationField(this.ships);
+    // Snapshot targets before the per-ship move/fire loop, with a movement
+    // allowance so targets entering range mid-tick remain eligible.
+    this.weaponTargetField = new WeaponTargetField(this.ships, dt);
     for (const ship of this.ships) {
       if (!ship.alive || ship.escaped) continue;
       ship.prevPos = clone(ship.pos);
@@ -694,30 +699,37 @@ export class BattleSimulation implements AiContext {
         }
       }
       if (!missile) {
-        for (const e of this.enemiesOf(ship.side)) {
-          if (!e.alive || e.escaped) continue;
-          if (e.role !== 'fighter') continue;
+        let bestIndex = Infinity;
+        const considerFighter = (e: ShipState, index: number) => {
+          if (!e.alive || e.escaped || e.role !== 'fighter') return;
           const d = distance(origin, e.pos);
-          if (d <= def.range && d < best && this.inArc(ship, w, e.pos)) {
+          if (d <= def.range && (d < best || (d === best && index < bestIndex)) && this.inArc(ship, w, e.pos)) {
             best = d;
+            bestIndex = index;
             target = e;
           }
-        }
+        };
+        if (this.weaponTargetField) this.weaponTargetField.forRange(ship.side, origin, def.range, considerFighter);
+        else this.enemiesOf(ship.side).forEach(considerFighter);
       }
       if (!missile && !target && def.kind === 'gardian') {
         // GARDIAN lasers can scorch nearby hulls (bypassing barriers) — low priority.
-        for (const e of this.enemiesOf(ship.side)) {
-          if (!e.alive || e.escaped) continue;
+        let bestIndex = Infinity;
+        const considerHull = (e: ShipState, index: number) => {
+          if (!e.alive || e.escaped) return;
           const d = distance(origin, e.pos);
-          if (d <= def.range && d < best) {
+          if (d <= def.range && (d < best || (d === best && index < bestIndex))) {
             best = d;
+            bestIndex = index;
             target = e;
           }
-        }
+        };
+        if (this.weaponTargetField) this.weaponTargetField.forRange(ship.side, origin, def.range, considerHull);
+        else this.enemiesOf(ship.side).forEach(considerHull);
       }
       if (!missile && !target) return;
     } else {
-      target = weaponTarget(ship, fleet, w, id => this.shipById.get(id), this.enemiesOf(ship.side));
+      target = weaponTarget(ship, fleet, w, id => this.shipById.get(id), this.enemiesOf(ship.side), this.weaponTargetField);
       if (!target) return;
     }
 
