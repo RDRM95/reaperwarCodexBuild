@@ -29,6 +29,7 @@ import { summarise } from './results';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
 import { SeparationField } from './separation';
+import { ProjectileBroadphase } from './projectileBroadphase';
 import { HadesVolleyCoordinator } from './volleys';
 import { ShipNameGenerator } from './shipNames';
 import {
@@ -495,7 +496,9 @@ export class BattleSimulation implements AiContext {
       this.updateWeapons(ship, fleet, dt);
     }
 
-    this.updateProjectiles(dt);
+    // Build after ship movement: every projectile sees current target positions.
+    const projectileField = this.projectiles.length ? new ProjectileBroadphase(this.ships) : undefined;
+    this.updateProjectiles(dt, projectileField);
     this.updateMissiles(dt);
     for (const f of this.flashes) f.ttl -= dt;
     this.flashes = this.flashes.filter((f) => f.ttl > 0);
@@ -876,7 +879,7 @@ export class BattleSimulation implements AiContext {
 
   // ------------------------------------------------------------ projectiles
 
-  private updateProjectiles(dt: number): void {
+  private updateProjectiles(dt: number, broadphase?: ProjectileBroadphase): void {
     const survivors: Projectile[] = [];
     for (const p of this.projectiles) {
       p.prevPos = clone(p.pos);
@@ -885,17 +888,21 @@ export class BattleSimulation implements AiContext {
       let hitShip: ShipState | undefined;
       let hitPoint: Vec3 | undefined;
       let bestT = Infinity;
-      for (const s of this.ships) {
-        if (!s.alive || s.escaped || s.side === p.side) continue;
-        if (s.role === 'fighter' && !p.weapon.antiSmall) continue;
+      let bestIndex = Infinity;
+      // Candidate enumeration is spatial, but equal-time hits still resolve in
+      // original ship order to keep seeded battles deterministic.
+      broadphase?.forSegment(p.side, p.prevPos, p.pos, (s, index) => {
+        if (!s.alive || s.escaped) return; // Earlier projectile may have killed it.
+        if (s.role === 'fighter' && !p.weapon.antiSmall) return;
         const r = s.radiusKm * (s.role === 'fighter' ? 2.5 : 1);
         const t = segmentSphere(p.prevPos, p.pos, s.pos, r);
-        if (t !== undefined && t < bestT) {
+        if (t !== undefined && (t < bestT || (t === bestT && index < bestIndex))) {
           bestT = t;
+          bestIndex = index;
           hitShip = s;
-          hitPoint = addScaled(p.prevPos, sub(p.pos, p.prevPos), t);
         }
-      }
+      });
+      if (hitShip) hitPoint = addScaled(p.prevPos, sub(p.pos, p.prevPos), bestT);
       if (hitShip && hitPoint) {
         const shooter = this.shipById.get(p.shooterId);
         if (shooter) this.applyHit(shooter, hitShip, p.weapon, p.weapon.damage, hitPoint);
@@ -1070,12 +1077,14 @@ export class BattleSimulation implements AiContext {
  * along the segment, or undefined.
  */
 export function segmentSphere(a: Vec3, b: Vec3, c: Vec3, r: number): number | undefined {
-  const d = sub(b, a);
-  const f = sub(a, c);
-  const A = dot(d, d);
-  if (A < 1e-12) return lengthSq(f) <= r * r ? 0 : undefined;
-  const B = 2 * dot(f, d);
-  const C = dot(f, f) - r * r;
+  // Scalar hot path: no temporary Vec3 allocations for every projectile/ship test.
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const fx = a.x - c.x, fy = a.y - c.y, fz = a.z - c.z;
+  const A = dx * dx + dy * dy + dz * dz;
+  const ff = fx * fx + fy * fy + fz * fz;
+  if (A < 1e-12) return ff <= r * r ? 0 : undefined;
+  const B = 2 * (fx * dx + fy * dy + fz * dz);
+  const C = ff - r * r;
   let disc = B * B - 4 * A * C;
   if (disc < 0) return undefined;
   disc = Math.sqrt(disc);
