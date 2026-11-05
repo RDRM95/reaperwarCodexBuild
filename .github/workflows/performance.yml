@@ -1,0 +1,31 @@
+name: Compare large-fleet simulation performance
+
+on:
+  push:
+    branches: ['perf/**']
+  workflow_dispatch:
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: codex/apex-combat-overhaul
+          path: baseline
+      - uses: actions/checkout@v4
+        with:
+          path: optimised
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install baseline
+        run: npm ci --prefix baseline
+      - name: Install optimised
+        run: npm ci --prefix optimised
+      - name: Baseline (same seed 42, 30 simulated seconds)
+        working-directory: baseline
+        run: node --import tsx/esm scripts/combat-benchmark.ts 30
+      - name: Optimised (same seed 42, 30 simulated seconds)
+        working-directory: optimised
+        run: node --import tsx/esm scripts/combat-benchmark.ts 30
