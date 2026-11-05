@@ -27,8 +27,15 @@ export const cross = (a: Vec3, b: Vec3): Vec3 =>
   v3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
 export const lengthSq = (a: Vec3): number => a.x * a.x + a.y * a.y + a.z * a.z;
 export const length = (a: Vec3): number => Math.sqrt(lengthSq(a));
-export const distance = (a: Vec3, b: Vec3): number => length(sub(a, b));
-export const distanceSq = (a: Vec3, b: Vec3): number => lengthSq(sub(a, b));
+/** Hot-path distance calculations without allocating a temporary vector. */
+export const distance = (a: Vec3, b: Vec3): number => {
+  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+};
+export const distanceSq = (a: Vec3, b: Vec3): number => {
+  const dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+  return dx * dx + dy * dy + dz * dz;
+};
 export const normalize = (a: Vec3): Vec3 => {
   const l = length(a);
   return l > 1e-9 ? scale(a, 1 / l) : v3(0, 0, 1);
