@@ -97,6 +97,8 @@ export class BattleSimulation implements AiContext {
   private engagementAnnounced = new Set<string>();
   private hadesVolleys = new HadesVolleyCoordinator();
   private separationField?: SeparationField;
+  /** Fighter references indexed by carrier: no full-fleet scan per hangar per tick. */
+  private readonly carrierFighters = new Map<string, ShipState[]>();
   private primaryVolleys = new PrimaryVolleyControl();
   /** Listener for events (renderer/UI). */
   onEvent?: (e: BattleEvent) => void;
@@ -270,6 +272,11 @@ export class BattleSimulation implements AiContext {
     };
     if (cls.fighterComplement) {
       ship.hangar = { classId: cls.fighterComplement.classId, remaining: cls.fighterComplement.count, launchTimer: 2 };
+    }
+    if (carrierId) {
+      let fighters = this.carrierFighters.get(carrierId);
+      if (!fighters) { fighters = []; this.carrierFighters.set(carrierId, fighters); }
+      fighters.push(ship);
     }
     return ship;
   }
@@ -591,7 +598,7 @@ export class BattleSimulation implements AiContext {
     }
     // Recall: fighters near the carrier return to the hangar.
     if (!fleet.orders.fightersDeployed) {
-      for (const f of this.ships) {
+      for (const f of this.carrierFighters.get(ship.id) ?? []) {
         if (f.carrierId === ship.id && f.alive && !f.escaped && distance(f.pos, ship.pos) < ship.lengthKm) {
           f.escaped = true; // Treated as recovered: not a loss, no longer in battle.
           f.alive = true;
@@ -600,7 +607,7 @@ export class BattleSimulation implements AiContext {
       }
     }
     // Rearming: fighters that have spent their torpedoes reload alongside the carrier.
-    for (const f of this.ships) {
+    for (const f of this.carrierFighters.get(ship.id) ?? []) {
       if (f.carrierId !== ship.id || !f.rearming || !f.alive || f.escaped) continue;
       if (distance(f.pos, ship.pos) > ship.lengthKm * 1.5) continue;
       f.rearmTimer = (f.rearmTimer ?? REARM_SECONDS) - dt;
@@ -624,7 +631,7 @@ export class BattleSimulation implements AiContext {
 
   private updateWeapons(ship: ShipState, fleet: FleetState, dt: number): void {
     const wpnFactor = 0.4 + 0.6 * ship.subsystems.weapons;
-    for (const w of this.iterWeapons(ship)) {
+    for (const w of ship.weapons) {
       // Active beams deal damage over time.
       if (w.beamRemaining > 0) {
         w.beamRemaining -= dt;
@@ -663,10 +670,6 @@ export class BattleSimulation implements AiContext {
       if (fleet.orders.order === 'retreat' && ship.role !== 'fighter' && w.def.arc < 180) continue;
       this.tryFire(ship, fleet, w);
     }
-  }
-
-  private *iterWeapons(ship: ShipState): Generator<WeaponState> {
-    for (const w of ship.weapons) yield w;
   }
 
   private tryFire(ship: ShipState, fleet: FleetState, w: WeaponState): void {
