@@ -7,6 +7,7 @@ interface Neighbour {
   vel: Vec3;
   radius: number;
   acceleration: number;
+  responseTime: number;
   reaper: boolean;
   toEnemy?: Vec3;
 }
@@ -33,6 +34,7 @@ export class SeparationField {
       const member: Neighbour = {
         id: ship.id, pos: { ...ship.pos }, vel: { ...ship.vel },
         radius: Math.max(0.02, ship.radiusKm), acceleration,
+        responseTime: length(ship.vel) / acceleration,
         reaper: ship.faction === 'reaper',
         toEnemy: target?.alive && !target.escaped && target.side !== ship.side
           ? normalize(sub(target.pos, ship.pos)) : undefined,
@@ -100,17 +102,24 @@ export class SeparationField {
     const radius = Math.ceil(reach / this.cellSize);
     const cx = Math.floor(self.pos.x / this.cellSize), cy = Math.floor(self.pos.y / this.cellSize), cz = Math.floor(self.pos.z / this.cellSize);
     let force = v3();
+    const reachSq = reach * reach;
     for (const other of this.nearby(cx, cy, cz, radius)) {
     if (other.id === self.id) continue;
     this.pairChecks++;
-    const delta = sub(self.pos, other.pos);
-    const dist = length(delta);
+    // The broad phase includes many nearby grid cells that are still outside
+    // reaction distance. Reject them without allocating a vector or sqrt.
+    const dx = self.pos.x - other.pos.x;
+    const dy = self.pos.y - other.pos.y;
+    const dz = self.pos.z - other.pos.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq > reachSq) continue;
+    const delta = v3(dx, dy, dz);
+    const dist = Math.sqrt(distSq);
     const clearance = (self.radius + other.radius) * 1.08;
     const influence = clearance + Math.max(0.08, clearance * 0.55);
-    if (dist > reach) continue;
     const relative = sub(self.vel, other.vel);
     const relativeSpeedSq = lengthSq(relative);
-    const horizon = Math.min(6, Math.max(1.5, (length(self.vel) / self.acceleration + length(other.vel) / other.acceleration) * 0.5));
+    const horizon = Math.min(6, Math.max(1.5, (self.responseTime + other.responseTime) * 0.5));
     const closestAt = relativeSpeedSq > 1e-8 ? Math.max(0, Math.min(horizon, -dot(delta, relative) / relativeSpeedSq)) : 0;
     const closest = add(delta, scale(relative, closestAt));
     const closestDistance = length(closest);
