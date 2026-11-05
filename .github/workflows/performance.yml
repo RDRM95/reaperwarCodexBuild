@@ -29,3 +29,6 @@ jobs:
       - name: Optimised (same seed 42, 30 simulated seconds)
         working-directory: optimised
         run: node --import tsx/esm scripts/combat-benchmark.ts 30
+      - name: Profile optimised high-count combat
+        working-directory: optimised
+        run: node --import tsx/esm scripts/profile-combat.ts
