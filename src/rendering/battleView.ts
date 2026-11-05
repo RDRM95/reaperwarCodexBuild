@@ -517,7 +517,7 @@ export class BattleView {
     if (!ship) return undefined;
     const v = this.visuals.get(ship.id);
     return {
-      position: v ? v.built.group.position.clone() :
+      position: (v && (v.built.group.visible || !ship.alive)) ? v.built.group.position.clone() :
         new THREE.Vector3(ship.pos.x * KM, ship.pos.y * KM, ship.pos.z * KM),
       velocity: new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM),
       heading: new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z),
@@ -627,7 +627,7 @@ export class BattleView {
       if (!ship.alive || ship.escaped) continue;
       const existing = this.visuals.get(ship.id);
       if (existing?.removed) continue;
-      const p = existing ? this.tmpA.copy(existing.built.group.position) :
+      const p = existing?.built.group.visible ? this.tmpA.copy(existing.built.group.position) :
         this.tmpA.set(ship.pos.x * KM, ship.pos.y * KM, ship.pos.z * KM);
       const dist = cam.position.distanceTo(p);
       p.project(cam);
