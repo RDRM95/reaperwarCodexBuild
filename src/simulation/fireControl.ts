@@ -64,6 +64,7 @@ function validEnemy(ship: ShipState, target: ShipState | undefined): target is S
 export function weaponTarget(
   ship: ShipState, fleet: FleetState, weapon: WeaponState,
   getShip: (id: string) => ShipState | undefined, enemies: readonly ShipState[],
+  nearby?: (origin: Vec3, range: number, visit: (ship: ShipState, index: number) => void) => void,
 ): ShipState | undefined {
   const def = weapon.def;
   const origin = weaponWorldOffset(ship, weapon);
@@ -77,13 +78,20 @@ export function weaponTarget(
   if (reachable(primary)) return primary;
   let best: ShipState | undefined;
   let bestScore = -Infinity;
-  for (const enemy of enemies) {
-    if (!validEnemy(ship, enemy) || enemy.role === 'fighter') continue;
+  let bestIndex = Infinity;
+  const consider = (enemy: ShipState, index: number) => {
+    if (!validEnemy(ship, enemy) || enemy.role === 'fighter') return;
     const d = distance(origin, enemy.pos);
-    if (d > def.range || !inWeaponArc(ship, weapon, enemy.pos)) continue;
+    if (d > def.range || !inWeaponArc(ship, weapon, enemy.pos)) return;
     const score = (def.antiCapital ? Math.log2(1 + enemy.pointValue) : 1) * (1 - d / def.range) + (1 - enemy.hull / enemy.maxHull) * 0.5;
-    if (score > bestScore) { best = enemy; bestScore = score; }
-  }
+    if (score > bestScore || (score === bestScore && index < bestIndex)) {
+      best = enemy;
+      bestScore = score;
+      bestIndex = index;
+    }
+  };
+  if (nearby) nearby(origin, def.range, consider);
+  else enemies.forEach(consider);
   return best;
 }
 
