@@ -1,5 +1,6 @@
 import { add, distance, dot, normalize, rotateY, sub, v3, type Vec3 } from '@/core/vec3';
 import type { FleetState, ShipState, WeaponState } from './types';
+import type { WeaponTargetField } from './weaponTargetField';
 
 export const PRIMARY_VOLLEY_SECONDS = 0.5;
 
@@ -64,7 +65,7 @@ function validEnemy(ship: ShipState, target: ShipState | undefined): target is S
 export function weaponTarget(
   ship: ShipState, fleet: FleetState, weapon: WeaponState,
   getShip: (id: string) => ShipState | undefined, enemies: readonly ShipState[],
-  nearby?: (origin: Vec3, range: number, visit: (ship: ShipState, index: number) => void) => void,
+  nearby?: WeaponTargetField,
 ): ShipState | undefined {
   const def = weapon.def;
   const origin = weaponWorldOffset(ship, weapon);
@@ -90,7 +91,7 @@ export function weaponTarget(
       bestIndex = index;
     }
   };
-  if (nearby) nearby(origin, def.range, consider);
+  if (nearby) nearby.forRange(ship.side, origin, def.range, consider);
   else enemies.forEach(consider);
   return best;
 }
