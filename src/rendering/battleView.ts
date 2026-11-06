@@ -324,9 +324,9 @@ export class BattleView {
     (farGeom.attributes.color as THREE.BufferAttribute).needsUpdate = true;
     this.farPoints.visible = far > 0;
     // Effects from sim state.
-    const tracers = sim.projectiles.map((p) => ({ pos: p.pos, vel: p.vel, big: p.weapon.damage >= 600 }));
-    this.effects.setTracers(tracers, alpha, SIM_DT);
-    this.effects.setMissiles(sim.missiles.filter((m) => m.alive).map((m) => ({ pos: m.pos, vel: m.vel })), alpha, SIM_DT);
+    // GPU visuals read simulation-owned data directly. No per-shot allocations.
+    this.effects.setTracers(sim.projectiles, alpha, SIM_DT);
+    this.effects.setMissiles(sim.missiles, alpha, SIM_DT);
     const beams: { start: THREE.Vector3; end: THREE.Vector3; kind: 'thanix' | 'reaper_beam'; intensity: number }[] = [];
     for (const ship of sim.ships) {
       if (!ship.alive) continue;
