@@ -221,3 +221,16 @@ td.num { font-family: var(--mono); text-align: right; }
 
 /* ---------- campaign map ---------- */
 .galaxy-map { width: 100%; height: auto; display: block; background: #06090f; border: 1px solid var(--line); cursor: pointer; }
+
+
+/* Live, event-sourced kill scoreboard by actual destroyed ship class. */
+.kill-scoreboard{width:350px;max-width:38vw;flex:0 0 auto;max-height:250px;overflow:hidden}
+.kill-scoreboard .panel-title{display:flex;justify-content:space-between;align-items:center}
+.kill-score-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-height:0}
+.kill-score-columns[hidden]{display:none}
+.kill-score-columns>div>strong{display:block;color:var(--text-dim,#94b5cb);font:10px ui-monospace,monospace;margin:0 0 6px}
+.kill-type-list{max-height:170px;overflow:auto;scrollbar-width:thin}
+.kill-type-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #284056;padding:4px 0;font:10px ui-monospace,monospace}
+.kill-type-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.kill-type-row b{color:#d1e9fa;font-variant-numeric:tabular-nums}
+@media(max-width:900px){.kill-scoreboard{width:245px;max-width:42vw}}
