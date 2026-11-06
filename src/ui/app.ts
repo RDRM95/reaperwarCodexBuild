@@ -1,4 +1,5 @@
 import { audio, type SoundId } from '@/audio/engine';
+import { installShipReferenceInspector } from '@/references/ShipReferenceInspector';
 import { DEFAULT_PREFERENCES, storage, type Preferences } from '@/core/storage';
 import { BattleView } from '@/rendering/battleView';
 import type { CameraMode } from '@/rendering/cameras';
@@ -621,6 +622,7 @@ export class App {
     if (pendingConfig && typeof pendingConfig === 'object' && pendingConfig.id === this.civilization?.pendingBattle?.id && Array.isArray(pendingConfig.fleets)) this.civilizationBattleConfig = pendingConfig;
     audio.settings = { ...this.prefs.audio };
     this.show('menu');
+    installShipReferenceInspector();
     document.getElementById('boot')?.classList.add('hidden');
   }
 
