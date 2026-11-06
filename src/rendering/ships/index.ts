@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildNormandySR1 } from './normandySR1';
 import { buildAllianceCarrier, buildAllianceCruiser, buildAllianceDreadnought, buildAllianceFighter, buildAllianceFrigate, buildAllianceOmaha } from './alliance';
 import { buildAsariCruiser, buildAsariDreadnought, buildDestinyAscension } from './asari';
 import { buildCerberusCruiser, buildCerberusDreadnought, buildCerberusFighter, buildCerberusFrigate } from './cerberus';
@@ -14,6 +15,7 @@ import { buildPastCycleCruiser, buildPastCycleDreadnought, buildPlayerCivCruiser
 export type { BuiltShip } from './types';
 
 const BUILDERS: Record<string, () => BuiltShip> = {
+  alliance_normandy_sr1: buildNormandySR1,
   alliance_dreadnought: buildAllianceDreadnought,
   alliance_omaha: buildAllianceOmaha,
   alliance_carrier: buildAllianceCarrier,

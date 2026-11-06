@@ -13,6 +13,7 @@ import { KM } from './geometry';
 import { instantiateShip, type BuiltShip } from './ships';
 import { DETAIL_MESH_NAMES, lodLevel, type LodLevel } from './lod';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
+import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
 
 /**
  * Binds a BattleSimulation to a Three.js scene. The simulation owns all
@@ -32,6 +33,7 @@ export interface ShipVisual {
   tintedMats?: THREE.MeshStandardMaterial[];
   /** Current level of detail. */
   lod: LodLevel;
+  reaperRig?: ReaperRig;
 }
 
 export interface GraphicsSettings {
@@ -192,7 +194,8 @@ export class BattleView {
     built.group.name = ship.id;
     built.group.userData.shipId = ship.id;
     this.scene.add(built.group);
-    v = { ship, built, glows, removed: false, tinted: false, lod: 'full' };
+    v = { ship, built, glows, removed: false, tinted: false, lod: 'full',
+      reaperRig: isArticulatedReaper(ship) ? captureReaperRig(built.group, ship.id) : undefined };
     this.visuals.set(ship.id, v);
     this.placeVisual(v, 1);
     return v;
@@ -238,6 +241,7 @@ export class BattleView {
     const cam = this.rig.camera.position;
     const lodOn = this.settings.lod !== false;
     let far = 0;
+    let articulatedHeroes=0;
     this.lodCounts = { full: 0, reduced: 0, point: 0 };
     for (const ship of sim.ships) {
       const v = this.ensureVisual(ship);
@@ -255,6 +259,17 @@ export class BattleView {
       const dist = cam.distanceTo(v.built.group.position);
       const level = lodLevel(dist, v.built.lengthUnits, ship.role, lodOn);
       this.applyLod(v, level);
+      if(v.reaperRig){
+        const priority=this.selectedIds.has(ship.id)||this.followId===ship.id||
+          this.cine.fromId===ship.id||this.cine.toId===ship.id;
+        const close=dist<=Math.max(55,v.built.lengthUnits*10);
+        const detailed=level!=='point'&&articulatedHeroes<24&&(priority||(close&&articulatedHeroes<12));
+        selectReaperRigDetail(v.reaperRig,detailed);
+        if(detailed){
+          articulatedHeroes++;
+          animateReaperRig(v.reaperRig,ship,sim.time,dt);
+        }
+      }
       this.lodCounts[level]++;
       if (level === 'point') {
         this.ensureFarCapacity(far + 1);
