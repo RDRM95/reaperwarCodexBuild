@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ShipReferenceRegistry, auditShipReferences } from './ShipReferenceRegistry';
 import { buildShipQAAudit } from './shipQA';
 import { buildReaperCapital, buildReaperDestroyer } from '@/rendering/ships/reaper';
-import { captureReaperRig, animateReaperRig } from '@/rendering/reaperMotion';
+import { captureReaperRig, animateReaperRig, selectReaperRigDetail } from '@/rendering/reaperMotion';
 import type { ShipState } from '@/simulation/types';
 
 describe('ship reference pack provenance + geometry QA',()=>{
@@ -47,6 +47,13 @@ describe('mechanical Reaper articulation',()=>{
       expect(rig.elbows).toHaveLength(expected);
       expect(rig.mandibles).toHaveLength(5);
       expect(rig.shutters).toHaveLength(4);
+      expect(rig.staticMeshes).toHaveLength(2);
+      selectReaperRigDetail(rig,false);
+      expect(rig.shoulders.every(part=>!part.visible)).toBe(true);
+      expect(rig.staticMeshes.every(part=>part.visible)).toBe(true);
+      selectReaperRigDetail(rig,true);
+      expect(rig.shoulders.every(part=>part.visible)).toBe(true);
+      expect(rig.staticMeshes.every(part=>!part.visible)).toBe(true);
       const ship={
         role:expected===4?'reaper_destroyer':'reaper_capital',
         faction:'reaper',targetId:'contact',maxSpeed:1,
