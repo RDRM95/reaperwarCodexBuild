@@ -17,6 +17,11 @@ describe('ship reference pack provenance + geometry QA',()=>{
     expect(audit).toHaveLength(43);
     expect(audit.every(a=>a.actualGameMesh===false&&a.approval==='not_reviewed')).toBe(true);
     expect(audit.find(a=>a.reference.id==='ALL-001')?.modelAvailable).toBe(true);
+    const sr1=buildShipQAAudit().find(row=>row.registryId==='ALL-001');
+    expect(sr1?.modelStatus).toBe('procedural_unverified');
+    expect(sr1?.referenceLengthM).toBeNull();
+    expect(sr1?.thrusters).toBe(4);
+    expect(sr1?.approval).toBe('not_reviewed');
   });
   it('reports scale deltas, hardpoint locations and actual modelling gaps',()=>{
     const rows=buildShipQAAudit();
