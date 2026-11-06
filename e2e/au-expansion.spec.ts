@@ -20,6 +20,9 @@ test('mission briefing resolves huge Apex strategic fleet immediately without in
 
 test('live class losses panel is present and collapsible in a small battle',async({page})=>{
   await page.goto('/');
+  // App boot restores preferences asynchronously. Await the actual home menu
+  // before creating a battle; otherwise late initialization replaces its HUD.
+  await expect(page.locator('[data-menu="quick-battle"]')).toBeVisible();
   await page.evaluate(()=>{
     const app=(window as unknown as {reaperwar:import('../src/ui/app').App}).reaperwar;
     const a=app.getTimeline('prime_apex');
