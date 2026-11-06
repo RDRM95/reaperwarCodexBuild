@@ -13,6 +13,7 @@ export interface ReaperRig {
   elbows: THREE.Group[];
   mandibles: THREE.Group[];
   shutters: THREE.Group[];
+  staticMeshes: THREE.Object3D[];
   emitter?: THREE.Object3D;
   headlight?: THREE.Object3D;
   phase: number;
@@ -25,7 +26,7 @@ export function isArticulatedReaper(ship: Pick<ShipState,'role'|'faction'>): boo
 }
 
 export function captureReaperRig(root: THREE.Group, shipId: string): ReaperRig {
-  const rig: ReaperRig = { shoulders:[], elbows:[], mandibles:[], shutters:[], phase:0 };
+  const rig: ReaperRig = { shoulders:[], elbows:[], mandibles:[], shutters:[], staticMeshes:[], phase:0 };
   let hash = 2166136261;
   for (let i=0;i<shipId.length;i++) hash=Math.imul(hash^shipId.charCodeAt(i),16777619);
   rig.phase=(hash>>>0)/4294967296*TAU;
@@ -35,6 +36,7 @@ export function captureReaperRig(root: THREE.Group, shipId: string): ReaperRig {
     else if(part==='elbow')rig.elbows.push(o as THREE.Group);
     else if(part==='mandible')rig.mandibles.push(o as THREE.Group);
     else if(part==='shutter')rig.shutters.push(o as THREE.Group);
+    if(o.name==='reaper-static-arms'||o.name==='reaper-static-seams') rig.staticMeshes.push(o);
     if(o.name==='eye'){
       if(!rig.emitter)rig.emitter=o;
       else rig.headlight=o;
@@ -99,4 +101,14 @@ export function animateReaperRig(rig: ReaperRig, ship: ShipState, time: number, 
     rig.emitter.scale.setScalar(aperture);
   }
   if(rig.headlight) rig.headlight.scale.setScalar(1+(fire?.05:0));
+}
+
+/** Switch between two merged static meshes and articulated mechanical parts.
+ * The bulk fleet remains cheap; only a small number of hero ships animate.
+ */
+export function selectReaperRigDetail(rig:ReaperRig,articulated:boolean):void{
+  for(const part of rig.shoulders)part.visible=articulated;
+  for(const part of rig.mandibles)part.visible=articulated;
+  for(const part of rig.shutters)part.visible=articulated;
+  for(const mesh of rig.staticMeshes)mesh.visible=!articulated;
 }
