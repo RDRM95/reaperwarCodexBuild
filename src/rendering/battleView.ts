@@ -263,7 +263,7 @@ export class BattleView {
         const priority=this.selectedIds.has(ship.id)||this.followId===ship.id||
           this.cine.fromId===ship.id||this.cine.toId===ship.id;
         const close=dist<=Math.max(55,v.built.lengthUnits*10);
-        const detailed=level!=='point'&&(priority||(close&&articulatedHeroes<12));
+        const detailed=level!=='point'&&articulatedHeroes<24&&(priority||(close&&articulatedHeroes<12));
         selectReaperRigDetail(v.reaperRig,detailed);
         if(detailed){
           articulatedHeroes++;
