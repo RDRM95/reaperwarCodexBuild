@@ -32,6 +32,8 @@ import { renderCivilization } from './screens/civilization';
 import { applyCivilizationBattleResult, beginCivilizationBattle, cancelCivilizationBattle, createCivilization, normalizeCivilizationState } from '@/civilization/engine';
 import type { CivilizationInput, CivilizationOrigin, CivilizationState } from '@/civilization/types';
 import { buildCustomBattle, type CustomBattleInput, type CustomFleetInput } from '@/scenarios';
+import { TargetTelemetry } from './screens/gunneryOverlay';
+import { primaryGunneryMount,isMainGunShot } from '@/rendering/gunnery';
 
 export type ScreenName = 'menu' | 'briefing' | 'battle' | 'results' | 'comparison' | 'codex' | 'database' | 'custom' | 'timelines' | 'settings' | 'campaign' | 'campaign_setup' | 'postwar' | 'saves' | 'au_hub' | 'civilization';
 
@@ -64,6 +66,10 @@ export class BattleController {
   readonly view: BattleView;
   readonly overlay: TacticalOverlay;
   hud: Hud;
+  readonly gunneryOverlay:TargetTelemetry;
+  private lastGunTarget?:string;
+  private lastGunReady=false;
+  private lastCritical=false;
   speedIndex = 2;
   paused = false;
   hudHidden = false;
@@ -102,6 +108,7 @@ export class BattleController {
       this.onSimEvent(e);
     };
     this.hud = createHud(app, this);
+    this.gunneryOverlay = new TargetTelemetry(app.ui);
     this.resize();
     this.bindInput();
     this.loop = this.loop.bind(this);
@@ -165,7 +172,19 @@ export class BattleController {
     this.hud.refresh();
   }
   setCamera(mode: CameraMode): void {
+    if(mode==='gunnery'){
+      const current=this.view.followId?this.sim.getShip(this.view.followId):undefined;
+      if(!current?.alive||!primaryGunneryMount(current)){
+        const preferred=this.sim.ships.find(s=>s.alive&&!s.escaped&&
+          s.side===this.config.perspectiveSide&&!!primaryGunneryMount(s));
+        this.view.followId=preferred?.id;
+      }
+      this.lastGunTarget=undefined;this.lastGunReady=false;this.lastCritical=false;
+      audio.init();
+    }
     this.view.rig.setMode(mode);
+    this.gunneryOverlay.show(mode==='gunnery');
+    this.hud.root.classList.toggle('gunnery-mode',mode==='gunnery');
     this.hud.refresh();
   }
   /** Cycles full HUD → minimal (top bar only) → none (clean frame for recordings). */
@@ -279,6 +298,21 @@ export class BattleController {
   }
 
   private onSimEvent(e: BattleEvent): void {
+    if(this.view.rig.mode==='gunnery'){
+      const id=this.view.followId;
+      this.gunneryOverlay.notify(e,id,this.sim);
+      if(e.type==='weapon_fired'&&e.shipId===id){
+        const shooter=this.sim.getShip(e.shipId);
+        if(shooter&&isMainGunShot(shooter,e.weaponIndex))
+          audio.play('gunner_spinal',0,.65);
+      }else if(e.type==='ship_destroyed'&&e.shipId===id){
+        this.view.gunnerySignalUntilMs=performance.now()+1150;
+        audio.play('gunner_signal',0,.7);
+      }else if(e.type==='projectile_impact'&&e.targetId===id&&e.damage>=100)
+        audio.play('impact_hull',0,.22);
+      if(e.type==='battle_end')this.ended=true;
+      return;
+    }
     // Audio hooks with camera distance attenuation.
     const cam = this.view.rig.camera.position;
     const dist = (p: { x: number; y: number; z: number }) => Math.hypot(p.x * 10 - cam.x, p.y * 10 - cam.y, p.z * 10 - cam.z) / 10;
@@ -353,6 +387,27 @@ export class BattleController {
     const alpha = this.paused ? 1 : Math.min(1, this.accumulator / SIM_DT);
     this.view.update(dtReal, alpha);
     this.view.render();
+    if(this.view.rig.mode==='gunnery'){
+      const id=this.view.followId;
+      this.gunneryOverlay.update(this.sim,this.view,id);
+      const ship=id?this.sim.getShip(id):undefined;
+      const target=ship?.targetId;
+      if(target!==this.lastGunTarget){
+        if(target&&ship?.alive)audio.play('target_lock',0,.3);
+        this.lastGunTarget=target;
+      }
+      const main=ship?primaryGunneryMount(ship):undefined;
+      const ready=!!main&&main.cooldown<=.03;
+      if(ready&&!this.lastGunReady&&ship?.alive)audio.play('gunner_charge',0,.22);
+      this.lastGunReady=ready;
+      const critical=!!ship&&ship.alive&&(
+        ship.hull/Math.max(1,ship.maxHull)<.26||
+        ship.subsystems.engines<.24||
+        ship.subsystems.weapons<.22
+      );
+      if(critical&&!this.lastCritical)audio.play('gunner_warning',0,.28);
+      this.lastCritical=critical;
+    }
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     this.overlay.draw(this.view, w, h, this.view.rig.mode);
@@ -570,6 +625,7 @@ export class BattleController {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('resize', this.onResize);
     this.hud.root.remove();
+    this.gunneryOverlay.root.remove();
     this.view.dispose();
     this.overlay.resize(1, 1, 1);
   }
