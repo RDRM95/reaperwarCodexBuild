@@ -1,0 +1,32 @@
+name: Reference models and large-fleet regression
+on:
+  pull_request:
+    branches:
+      - codex/apex-combat-overhaul
+permissions:
+  contents: read
+jobs:
+  reference-and-fleet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Test P0 data and Reaper mechanical rig
+        run: npx vitest run src/references/ShipReferenceRegistry.test.ts
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Test large-fleet HUD responsiveness
+        run: npx playwright test e2e/fleet-overlay.spec.ts --workers=1
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: reference-and-fleet-failures
+          path: test-results/
+          retention-days: 7
