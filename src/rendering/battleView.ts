@@ -13,6 +13,8 @@ import { KM } from './geometry';
 import { instantiateShip, type BuiltShip } from './ships';
 import { DETAIL_MESH_NAMES, lodLevel, type LodLevel } from './lod';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
+import { weaponWorldOffset } from '@/simulation/fireControl';
+import { primaryGunneryMount,isMainGunShot } from './gunnery';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
 
 /**
@@ -58,6 +60,10 @@ export class BattleView {
   alpha = 0;
   selectedIds = new Set<string>();
   followId?: string;
+  gunneryShot?: {t:number;shipId:string;targetId:string;weaponIndex:number;kind:string};
+  gunnerySignalUntilMs=0;
+  get gunnerySignalLost():boolean {return this.rig.mode==='gunnery'&&performance.now()<this.gunnerySignalUntilMs;}
+
   /** Cinematic director state. */
   private directorRng = new Rng(1);
   private cine: { fromId?: string; toId?: string; age: number; hold: number; wreck?: boolean; members?: string[] } = { age: 0, hold: 0 };
@@ -142,7 +148,9 @@ export class BattleView {
     this.sunLight.target.position.set(0, 0, 0);
     this.scene.add(this.sunLight.target);
     for (const s of sim.ships) this.ensureVisual(s);
-    sim.onEvent = (e) => this.eventQueue.push(e);
+    sim.onEvent = e=>this.eventQueue.push(e);
+    this.gunnerySignalUntilMs=0;
+
     this.selectedIds.clear();
     this.followId = undefined;
     this.cine = { age: 0, hold: 0 };
@@ -419,7 +427,7 @@ export class BattleView {
     v.removed = true;
     const camDist = this.rig.camera.position.distanceTo(pos);
     this.rig.addShake(Math.min(1, (v.built.lengthUnits * 30) / Math.max(50, camDist)));
-    if (this.followId === ship.id) this.followId = undefined;
+    if (this.followId === ship.id && this.rig.mode !== 'gunnery') this.followId = undefined;
     this.selectedIds.delete(ship.id);
   }
 
@@ -429,6 +437,13 @@ export class BattleView {
     for (const e of q) {
       switch (e.type) {
         case 'weapon_fired': {
+          if(this.rig.mode==='gunnery'&&e.shipId===this.followId){
+            const shooter=this.sim.getShip(e.shipId);
+            if(shooter&&isMainGunShot(shooter,e.weaponIndex)){
+              this.gunneryShot={t:e.t,shipId:e.shipId,targetId:e.targetId,weaponIndex:e.weaponIndex,kind:e.kind};
+              this.rig.addShake(.045);
+            }
+          }
           if (e.kind !== 'mass_accelerator') break;
           const ship = this.sim.getShip(e.shipId);
           const v = ship ? this.visuals.get(ship.id) : undefined;
@@ -530,6 +545,48 @@ export class BattleView {
       }
       subject = this.subjectFor(ship);
     }
+    let gunnery: { position: THREE.Vector3; aim: THREE.Vector3 } | undefined;
+    if (this.rig.mode === 'gunnery') {
+      let ship = this.followId ? sim.getShip(this.followId) : undefined;
+      if ((!ship || !ship.alive || ship.escaped) && this.gunnerySignalLost) {
+        // Hold the last optical orientation while the ship's feed drops.
+        const station=this.rig.camera.position.clone();
+        const aim=station.clone().add(new THREE.Vector3(0,0,-1000).applyQuaternion(this.rig.camera.quaternion));
+        gunnery={position:station,aim};
+      } else if (!ship || !ship.alive || ship.escaped) {
+        // Fallback picks one persistent live warship, never a random camera cut.
+        ship = sim.ships.find(s => s.alive && !s.escaped &&
+          s.side === sim.config.perspectiveSide && s.role === 'dreadnought') ??
+          sim.ships.find(s => s.alive && !s.escaped &&
+          s.side === sim.config.perspectiveSide && s.weapons.some(w => !w.def.antiSmall));
+        this.followId = ship?.id;
+        this.gunneryWeaponIndex = undefined;
+      }
+      if (ship && ship.alive && !ship.escaped && !this.gunnerySignalLost) {
+        // First-person optics always remain on the selected MAIN emitter.
+        const weapon = primaryGunneryMount(ship);
+        if (weapon) {
+          // The weapon offset and selected target come from the current sim tick.
+          const pos = weaponWorldOffset(ship, weapon);
+          const interpolation = Math.max(0, Math.min(1, this.alpha));
+          const fwd = new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z).normalize();
+          const station = new THREE.Vector3(
+            (pos.x + (ship.prevPos.x - ship.pos.x) * (1 - interpolation)) * KM,
+            (pos.y + (ship.prevPos.y - ship.pos.y) * (1 - interpolation)) * KM,
+            (pos.z + (ship.prevPos.z - ship.pos.z) * (1 - interpolation)) * KM
+          ).addScaledVector(fwd, Math.max(0.18, ship.radiusKm * KM * 0.2));
+          const targetId = weapon.beamRemaining > 0 && weapon.beamTargetId ?
+            weapon.beamTargetId : ship.targetId;
+          const target = targetId ? sim.getShip(targetId) : undefined;
+          const aim = target && target.alive && !target.escaped ?
+            new THREE.Vector3(target.pos.x, target.pos.y, target.pos.z).multiplyScalar(KM) :
+            station.clone().addScaledVector(fwd, 2000);
+          // Optical alignment is observational; the combat solver still
+          // determines if the actual mount can fire or hit the target.
+          gunnery = { position: station, aim };
+        }
+      }
+    }
     let cinematic: CinematicFrame | undefined;
     if (this.rig.mode === 'cinematic') {
       this.cine.hold -= dt;
@@ -574,7 +631,7 @@ export class BattleView {
         }
       }
     }
-    this.rig.update(dt, { subject, cinematic, projectile, fleetCentre });
+    this.rig.update(dt, { subject, cinematic, projectile, gunnery, fleetCentre });
   }
 
   private pickCinematicShot(): void {
