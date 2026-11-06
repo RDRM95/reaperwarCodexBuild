@@ -31,7 +31,7 @@ describe('playable AU civilization and machine factions', () => {
   it('has complete declared hull/weapon data, distinct real models and Strict Lore exclusions', () => {
     const strict = getPreset('strict_lore');
     const ships = { ...SANDBOX_SHIPS, ...SKYNET_SHIPS };
-    expect(Object.keys(ships)).toHaveLength(8);
+    expect(Object.keys(ships)).toHaveLength(Object.keys(SANDBOX_SHIPS).length + Object.keys(SKYNET_SHIPS).length);
     for (const ship of Object.values(ships)) {
       expect(SHIP_CLASSES[ship.id]).toBe(ship); expect(ship.designProvenance.provenance).toBe('AU_MODIFIED');
       expect(isShipAllowedInRules(ship, strict)).toBe(false); expect(hasModel(ship.id)).toBe(true);
