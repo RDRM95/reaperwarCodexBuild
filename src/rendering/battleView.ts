@@ -212,12 +212,23 @@ export class BattleView {
     this.tmpA.set(s.prevHeading.x + (s.heading.x - s.prevHeading.x) * alpha, s.prevHeading.y + (s.heading.y - s.prevHeading.y) * alpha, s.prevHeading.z + (s.heading.z - s.prevHeading.z) * alpha).normalize();
     this.tmpQ.setFromUnitVectors(this.fwd, this.tmpA);
     g.quaternion.copy(this.tmpQ);
-    // Subtle bank for small ships based on lateral velocity.
-    if (s.role === 'fighter' || s.role === 'frigate') {
-      const right = this.tmpB.set(this.tmpA.z, 0, -this.tmpA.x);
-      const lat = s.vel.x * right.x + s.vel.z * right.z;
-      g.rotateZ(-lat * (s.role === 'fighter' ? 0.5 : 0.25));
+    // Engine exhaust is driven by commanded acceleration, not current speed.
+    // Coasting / disabled engines retain only a dim idle lens.
+    const output=THREE.MathUtils.clamp(s.engineThrust??0.5,0,1);
+    for(const glow of v.glows) {
+      const material=glow.material as THREE.SpriteMaterial;
+      material.opacity=s.inertialCoast?.12:(.22+.62*Math.sqrt(output));
     }
+
+    // Controlled ME-style turns: fighter banking, mild escort corrections,
+    // and heavy Reapers/dreadnoughts staying essentially level.
+    const turn=s.prevHeading.x*s.heading.z-s.prevHeading.z*s.heading.x;
+    const right=this.tmpB.set(this.tmpA.z,0,-this.tmpA.x);
+    const lateral=s.vel.x*right.x+s.vel.z*right.z;
+    const factor=s.role==='fighter'?.36:s.role==='frigate'?.12:
+      s.role==='cruiser'?.025:s.role==='reaper_destroyer'?.015:0;
+    const bank=THREE.MathUtils.clamp(turn*3.5+lateral*factor*.12,-factor,factor);
+    if(bank)g.rotateZ(bank);
   }
 
   // ------------------------------------------------------------- per frame
