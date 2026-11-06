@@ -25,6 +25,7 @@ const BUILDERS: Record<string, () => BuiltShip> = {
   compact_gunship: buildCompactGunship,
   alliance_dreadnought: buildAllianceDreadnought,
   alliance_omaha: buildAllianceOmaha,
+  alliance_valkyrie: buildAllianceValkyrie, buildAllianceValkyrie,
   alliance_aegis_command: buildAllianceAegis,
   alliance_carrier: buildAllianceCarrier,
   alliance_cruiser: buildAllianceCruiser,
