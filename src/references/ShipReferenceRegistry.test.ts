@@ -15,7 +15,7 @@ describe('ship reference pack provenance + geometry QA',()=>{
   it('never labels a procedural mesh as approved official model',()=>{
     const audit=auditShipReferences();
     expect(audit).toHaveLength(43);
-    expect(audit.every(a=>a.actualGameMesh===false&&a.approval!=='pass')).toBe(true);
+    expect(audit.every(a=>a.actualGameMesh===false&&a.approval==='not_reviewed')).toBe(true);
     expect(audit.find(a=>a.reference.id==='ALL-001')?.modelAvailable).toBe(false);
   });
   it('reports scale deltas, hardpoint locations and actual modelling gaps',()=>{
