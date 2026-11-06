@@ -560,7 +560,6 @@ export class BattleView {
           sim.ships.find(s => s.alive && !s.escaped &&
           s.side === sim.config.perspectiveSide && s.weapons.some(w => !w.def.antiSmall));
         this.followId = ship?.id;
-        this.gunneryWeaponIndex = undefined;
       }
       if (ship && ship.alive && !ship.escaped && !this.gunnerySignalLost) {
         // First-person optics always remain on the selected MAIN emitter.
