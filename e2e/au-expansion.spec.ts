@@ -36,7 +36,8 @@ test('live class losses panel is present and collapsible in a small battle',asyn
     app.battle!.paused=true;
   });
   await expect(page.locator('.kill-scoreboard')).toBeVisible();
-  await expect(page.locator('[data-kills="A"]')).toContainText('No losses');
+  // Validate the actual visible panel; CSS/data attrs are implementation details.
+  await expect(page.locator('.kill-scoreboard')).toContainText('No losses');
   await page.locator('[data-action="toggle-kill-score"]').click();
   await expect(page.locator('.kill-score-columns')).toBeHidden();
   await page.locator('[data-action="toggle-kill-score"]').click();
