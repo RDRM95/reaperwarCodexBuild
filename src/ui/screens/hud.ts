@@ -409,6 +409,10 @@ export function createHud(app: App, ctrl: BattleController): Hud {
         ? [stat('Point defence', s.weapons.filter((w) => w.def.burst).every((w) => (w.burstLeft ?? 1) <= 0) ? 'RECOVERING' : `${s.weapons.filter((w) => w.def.burst && (w.burstLeft ?? 1) > 0).length} / ${s.weapons.filter((w) => w.def.burst).length} mounts ready`)]
         : []),
       stat('Speed', `${(Math.hypot(s.vel.x, s.vel.y, s.vel.z) * 1000 / BATTLESPACE_SCALE).toFixed(0)} m/s`),
+      stat('Propulsion', s.inertialCoast ? 'INERTIAL COAST / NO MAIN BURN' :
+        (s.engineThrust??0)>.09 ?
+          'POWERED THRUST '+Math.round((s.engineThrust??0)*100)+'%' :
+          'RCS / STATION KEEPING'),
       stat('Subsystems', `ENG ${fmtNum(s.subsystems.engines * 100)}% · WPN ${fmtNum(s.subsystems.weapons * 100)}% · SNS ${fmtNum(s.subsystems.sensors * 100)}%`),
       stat('Target', target ? target.name : '—'),
       feedbackStat('Main battery', batteryText, 'ship-battery-status'),
