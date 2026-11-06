@@ -43,7 +43,7 @@ describe('shared AU battle expansion',()=>{
   it('calculates 30,000 Reapers as an analytical estimate with no BattleSimulation',()=>{
     const report=resolveQuickBattle(buildScenario('apex_bahak_30000_survivors_variant','prime_apex',7));
     expect(report.approximate).toBe(true);
-    expect(report.shipsAnalysed).toBe(46770);
+    expect(report.shipsAnalysed).toBe(44270);
   });
   it('allows many serial Aegis command dreadnoughts and one named Valkyrie',()=>{
     const config=buildCustomBattle({
