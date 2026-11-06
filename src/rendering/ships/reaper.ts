@@ -110,6 +110,11 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // Transform node; the geometry itself is never deformed or vertex-skinned.
   const armLen = L * opts.armLengthFactor;
   const n = opts.arms;
+  // The old Codex renderer draws individual ship objects. These two merged
+  // static limb layers keep distant/bulk Reapers at ~2 limb draw calls each.
+  // Only close/selected hero vessels expose the expensive articulated rig.
+  const staticArms:THREE.BufferGeometry[]=[];
+  const staticSeams:THREE.BufferGeometry[]=[];
   for (let i = 0; i < n; i++) {
     const spread = n === 4 ? Math.PI * 1.65 : Math.PI * 1.35;
     const ang = -Math.PI / 2 - spread / 2 + (spread * (i + 0.5)) / n;
@@ -125,6 +130,17 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     const upperEnd = c2.clone().sub(root);
     const lowerEnd = tip.clone().sub(c2);
     const baseR = R * 0.34;
+    const staticCurve=new THREE.CatmullRomCurve3([root,c1,c2,tip]);
+    staticArms.push(taperedTube(staticCurve,
+      t=>baseR*(1-t*.82)*(1+.1*Math.sin(t*22)),26,9,.78));
+    staticArms.push(new THREE.SphereGeometry(baseR*.95,8,6).translate(c2.x,c2.y,c2.z));
+    const staticSeamCurve=new THREE.CatmullRomCurve3([
+      root.clone().addScaledVector(outward,baseR*.86),
+      c1.clone().addScaledVector(outward,baseR*.68),
+      c2.clone().addScaledVector(outward,baseR*.47),
+      tip.clone()
+    ]);
+    staticSeams.push(taperedTube(staticSeamCurve,t=>baseR*.07*(1-t*.6),16,5));
     const pivot = new THREE.Group();
     pivot.name = 'reaper-shoulder';
     pivot.userData = { reaperRig: 'shoulder', index: i, side: Math.sign(outward.x) || 1, destroyer: n === 4 };
@@ -185,6 +201,15 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     claw.name = 'reaper-claw';
     elbow.add(claw);
   }
+
+  const staticHull=new THREE.Mesh(merge(staticArms),p.hullDark);
+  staticHull.name='reaper-static-arms';
+  staticHull.visible=false;
+  group.add(staticHull);
+  const staticLights=new THREE.Mesh(merge(staticSeams),p.windows);
+  staticLights.name='reaper-static-seams';
+  staticLights.visible=false;
+  group.add(staticLights);
 
   // Five short jointed facial feelers, distinct from the four/six locomotor
   // limbs. The head moves in very small increments, like heavy actuators.
