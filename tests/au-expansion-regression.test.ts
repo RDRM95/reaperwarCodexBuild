@@ -13,7 +13,7 @@ describe('shared AU battle expansion',()=>{
   it('registers playable scenario chapter data with matching hulls, guns and factions',()=>{
     const report=auditAULibrary();
     expect(report.issues).toEqual([]);
-    expect(report.chapters).toBeGreaterThanOrEqual(37);
+    expect(report.chapters).toBeGreaterThanOrEqual(43);
     expect(report.strategicMathRecommended).toBeGreaterThan(0);
     const ids=new Set(AU_CHAPTERS.map(c=>c.id));
     for(const chapter of AU_CHAPTERS){
@@ -23,6 +23,27 @@ describe('shared AU battle expansion',()=>{
       expect(config.fleets.length).toBeGreaterThanOrEqual(2);
       expect(config.fleets.every(f=>f.ships.every(s=>s.count>=1))).toBe(true);
     }
+  });
+  it('preserves the 300-hull fortified colony, including 60 command/dreadnought hulls',()=>{
+    const scenario=buildScenario('apex_colony_300_hulls','prime_apex',7);
+    const ships=scenario.fleets.find(f=>f.side==='A')!.ships;
+    expect(ships.reduce((sum,c)=>sum+c.count,0)).toBe(300);
+    expect(ships.filter(s=>['alliance_dreadnought','alliance_aegis_command'].includes(s.classId))
+      .reduce((sum,c)=>sum+c.count,0)).toBe(60);
+  });
+  it('keeps the two Bahak survivor force estimates in separate entries',()=>{
+    const estimateA=buildScenario('apex_52500_final_offensive','prime_apex',7);
+    const estimateB=buildScenario('apex_bahak_30000_survivors_variant','prime_apex',7);
+    const countReapers=(c:typeof estimateA)=>c.fleets.filter(f=>f.faction==='reaper')
+      .flatMap(f=>f.ships).reduce((sum,s)=>sum+s.count,0);
+    expect(countReapers(estimateA)).toBe(52500);
+    expect(countReapers(estimateB)).toBe(30000);
+    expect(estimateA.alternateHistory&&estimateB.alternateHistory).toBe(true);
+  });
+  it('calculates 30,000 Reapers as an analytical estimate with no BattleSimulation',()=>{
+    const report=resolveQuickBattle(buildScenario('apex_bahak_30000_survivors_variant','prime_apex',7));
+    expect(report.approximate).toBe(true);
+    expect(report.shipsAnalysed).toBe(46770);
   });
   it('allows many serial Aegis command dreadnoughts and one named Valkyrie',()=>{
     const config=buildCustomBattle({
