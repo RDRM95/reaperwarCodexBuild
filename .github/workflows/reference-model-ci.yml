@@ -23,7 +23,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Test large-fleet HUD responsiveness
-        run: npx playwright test e2e/fleet-overlay.spec.ts --workers=1
+        run: npx playwright test e2e/fleet-overlay.spec.ts e2e/au-expansion.spec.ts --workers=1
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
