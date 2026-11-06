@@ -19,7 +19,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - name: Test P0 data and Reaper mechanical rig
-        run: npx vitest run src/references/ShipReferenceRegistry.test.ts
+        run: npx vitest run tests/ship-reference.test.ts
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Test large-fleet HUD responsiveness
