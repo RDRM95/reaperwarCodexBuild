@@ -303,8 +303,13 @@ export class BattleController {
       this.gunneryOverlay.notify(e,id,this.sim);
       if(e.type==='weapon_fired'&&e.shipId===id){
         const shooter=this.sim.getShip(e.shipId);
-        if(shooter&&isMainGunShot(shooter,e.weaponIndex))
-          audio.play('gunner_spinal',0,.65);
+        if(shooter&&isMainGunShot(shooter,e.weaponIndex)){
+          const kind=shooter.weapons[e.weaponIndex].def.kind;
+          audio.play(kind==='reaper_beam'?'gunner_beam':
+            kind==='thanix'?'gunner_thanix':'gunner_spinal',0,.54);
+        }
+      }else if(e.type==='projectile_impact'&&e.shipId===id&&e.glancing){
+        audio.play('gunner_glance',0,.24);
       }else if(e.type==='ship_destroyed'&&e.shipId===id){
         this.view.gunnerySignalUntilMs=performance.now()+1150;
         audio.play('gunner_signal',0,.7);
