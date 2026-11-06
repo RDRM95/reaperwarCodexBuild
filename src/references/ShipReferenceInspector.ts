@@ -16,7 +16,7 @@ const heroViews = [
   {name:'HERO 3/4 AFT',pos:[-1,.7,-1.4],up:[0,1,0]},
 ] as const;
 const css=`
-.shipref-open{position:fixed;right:12px;top:12px;bottom:auto;z-index:9998;cursor:pointer;
+.shipref-open{position:fixed;right:0;top:52%;bottom:auto;z-index:9998;cursor:pointer;min-width:26px;max-width:30px;padding:10px 4px;font-size:9px;writing-mode:vertical-rl;
   font:600 12px ui-monospace,monospace;padding:10px 14px;color:#d8ebfb;
   background:#10283b;border:1px solid #6a9ebf}
 .shipref-panel{position:fixed;inset:5vh 4vw;z-index:9999;display:flex;flex-direction:column;
@@ -61,7 +61,16 @@ export function installShipReferenceInspector():void{
   if(document.getElementById('ship-reference-launch'))return;
   const style=document.createElement('style');style.textContent=css;document.head.append(style);
   const open=button('SHIP REFERENCES · 6 VIEWS',()=>showInspector());
-  open.id='ship-reference-launch';open.className='shipref-open';document.body.append(open);
+  open.id='ship-reference-launch';open.className='shipref-open';
+  open.textContent='REF';
+  open.title='Ship references: six views (Alt+R)';
+  open.setAttribute('aria-label','SHIP REFERENCES · 6 VIEWS');
+  document.body.append(open);
+  document.addEventListener('keydown',event=>{
+    if(event.altKey&&!event.ctrlKey&&!event.metaKey&&event.key.toLowerCase()==='r'){
+      event.preventDefault();showInspector();
+    }
+  });
 }
 
 /** In-engine orthographic geometry review. The uploaded reference images are
