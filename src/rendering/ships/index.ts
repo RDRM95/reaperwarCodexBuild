@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildNormandySR1 } from './normandySR1';
 import { buildAxiomAncient, buildAxiomWarden, buildExileArk, buildExileRaider, buildCompactSiege, buildCompactGunship } from './expansion';
-import { buildAllianceCarrier, buildAllianceCruiser, buildAllianceDreadnought, buildAllianceFighter, buildAllianceFrigate, buildAllianceAegis, buildAllianceOmaha } from './alliance';
+import { buildAllianceCarrier, buildAllianceCruiser, buildAllianceDreadnought, buildAllianceFighter, buildAllianceFrigate, buildAllianceAegis, buildAllianceOmaha, buildAllianceValkyrie } from './alliance';
 import { buildAsariCruiser, buildAsariDreadnought, buildDestinyAscension } from './asari';
 import { buildCerberusCruiser, buildCerberusDreadnought, buildCerberusFighter, buildCerberusFrigate } from './cerberus';
 import { buildGethCruiser, buildGethDreadnought, buildGethFighter, buildGethFrigate } from './geth';
@@ -25,7 +25,7 @@ const BUILDERS: Record<string, () => BuiltShip> = {
   compact_gunship: buildCompactGunship,
   alliance_dreadnought: buildAllianceDreadnought,
   alliance_omaha: buildAllianceOmaha,
-  alliance_valkyrie: buildAllianceValkyrie, buildAllianceValkyrie,
+  alliance_valkyrie: buildAllianceValkyrie,
   alliance_aegis_command: buildAllianceAegis,
   alliance_carrier: buildAllianceCarrier,
   alliance_cruiser: buildAllianceCruiser,
