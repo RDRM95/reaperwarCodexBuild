@@ -157,8 +157,17 @@ export class EffectsSystem {
   }
 
   /** Impact: barrier hit shimmer or hull hit sparks. */
-  impact(pos: THREE.Vector3, barrierDamage: number, hullDamage: number, targetRadiusUnits: number, targetPos: () => THREE.Vector3 | undefined, damageType: string): void {
+  impact(pos: THREE.Vector3, barrierDamage: number, hullDamage: number, targetRadiusUnits: number, targetPos: () => THREE.Vector3 | undefined, damageType: string, glancing = false): void {
     const total = barrierDamage + hullDamage;
+    if(glancing){
+      // Glancing rounds leave a short grazing flare. Avoid using the same
+      // large impact cloud as a direct HADES/NOVA penetration.
+      const size=Math.min(1.6,.24+Math.sqrt(total)*.016);
+      this.spark(pos,new THREE.Vector3(),.13,size*.4,size*1.1,
+        barrierDamage>hullDamage?this.blueTex:this.fireTex,
+        barrierDamage>hullDamage?0x86c7ff:0xe8a876);
+      return;
+    }
     const size = Math.min(8, 0.4 + Math.sqrt(total) * 0.09);
     if (barrierDamage > hullDamage && barrierDamage > 3) {
       this.spark(pos, new THREE.Vector3(), 0.2, size * 0.6, size * 1.4, this.blueTex, 0x9fd0ff);
@@ -266,10 +275,14 @@ export class EffectsSystem {
   // --------------------------------------------------------- per-frame sync
 
   /** Update tracers from simulation projectiles (positions in km). */
-  setTracers(items: { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; big: boolean }[], alpha: number, dt: number): void {
+  setTracers(items: readonly { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; big?: boolean; weapon?: { damage: number } }[], alpha: number, dt: number): void {
     let n = 0;
     const dir = new THREE.Vector3();
-    for (const it of items) {
+    const stride=Math.max(1,Math.ceil(items.length/this.tracerMax));
+    for(let i=0;i<items.length;i+=stride){
+      const it=items[i];
+      const calibre=it.weapon?.damage??(it.big?900:50);
+      const big=calibre>=600;
       if (n >= this.tracerMax) break;
       const px = (it.pos.x + it.vel.x * alpha * dt) * KM;
       const py = (it.pos.y + it.vel.y * alpha * dt) * KM;
@@ -279,8 +292,13 @@ export class EffectsSystem {
       dir.normalize();
       this.tracerDummy.position.set(px, py, pz);
       this.tracerDummy.lookAt(px + dir.x, py + dir.y, pz + dir.z);
-      const len = Math.max(1.5, speed * 0.06) * (it.big ? 1.3 : 0.7);
-      const w = it.big ? 1.1 : 0.45;
+      // Subtle calibre-dependent visual thickness: large HADES/NOVA
+      // projectiles read as heavy axial slugs, not a global bloom flash.
+      // Projectile origin, timing, trajectory and impact remain sim-owned.
+      const superHeavy=calibre>=10000?
+        Math.min(2.7,1.6+Math.log10(calibre/10000)*0.55):1;
+      const len = Math.max(1.5, speed * 0.06) * (big ? 1.3 : 0.7) * Math.sqrt(superHeavy);
+      const w = (big ? 1.1 : 0.45)*superHeavy;
       this.tracerDummy.scale.set(w, w, len);
       this.tracerDummy.updateMatrix();
       this.tracerMesh.setMatrixAt(n++, this.tracerDummy.matrix);
@@ -289,9 +307,12 @@ export class EffectsSystem {
     this.tracerMesh.instanceMatrix.needsUpdate = true;
   }
 
-  setMissiles(items: { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number } }[], alpha: number, dt: number): void {
+  setMissiles(items: readonly { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; alive?: boolean }[], alpha: number, dt: number): void {
     let n = 0;
-    for (const it of items) {
+    const stride=Math.max(1,Math.ceil(items.length/512));
+    for(let i=0;i<items.length;i+=stride){
+      const it=items[i];
+      if(it.alive===false)continue;
       if (n >= 512) break;
       this.tracerDummy.position.set((it.pos.x + it.vel.x * alpha * dt) * KM, (it.pos.y + it.vel.y * alpha * dt) * KM, (it.pos.z + it.vel.z * alpha * dt) * KM);
       this.tracerDummy.rotation.set(0, 0, 0);
@@ -350,25 +371,31 @@ export class EffectsSystem {
     }
   }
 
-  setPointDefence(lines: { from: THREE.Vector3; to: THREE.Vector3; reaper: boolean }[]): void {
-    let n = 0;
-    for (const l of lines) {
-      if (n >= 512) break;
-      const i = n * 6;
-      this.pdPositions[i] = l.from.x;
-      this.pdPositions[i + 1] = l.from.y;
-      this.pdPositions[i + 2] = l.from.z;
-      this.pdPositions[i + 3] = l.to.x;
-      this.pdPositions[i + 4] = l.to.y;
-      this.pdPositions[i + 5] = l.to.z;
-      const c = l.reaper ? [1, 0.25, 0.15] : [0.5, 0.95, 1];
-      this.pdColors.set(c, i);
-      this.pdColors.set(c, i + 3);
-      n++;
+  /** Read fixed-tick GARDIAN/Reaper PD vectors directly; no GPU-frame
+   * THREE.Vector3 allocations or array mapping per shot. Optional scale
+   * converts km into render units. Uniform sampling retains all battle wings.
+   */
+  setPointDefence(lines: readonly { from: {x:number;y:number;z:number}; to: {x:number;y:number;z:number}; kind?: 'gardian'|'reaper_pd'; reaper?:boolean }[], positionScale = 1): void {
+    let n=0;
+    const capacity=512;
+    const stride=Math.max(1,Math.ceil(lines.length/capacity));
+    for(let index=0;index<lines.length&&n<capacity;index+=stride){
+      const l=lines[index];
+      const i=n++*6;
+      this.pdPositions[i]=l.from.x*positionScale;
+      this.pdPositions[i+1]=l.from.y*positionScale;
+      this.pdPositions[i+2]=l.from.z*positionScale;
+      this.pdPositions[i+3]=l.to.x*positionScale;
+      this.pdPositions[i+4]=l.to.y*positionScale;
+      this.pdPositions[i+5]=l.to.z*positionScale;
+      const reaper=l.reaper??(l.kind==='reaper_pd');
+      const r=reaper?1:.5, g=reaper?.25:.95, b=reaper?.15:1;
+      this.pdColors[i]=r;this.pdColors[i+1]=g;this.pdColors[i+2]=b;
+      this.pdColors[i+3]=r;this.pdColors[i+4]=g;this.pdColors[i+5]=b;
     }
-    this.pdGeometry.setDrawRange(0, n * 2);
-    (this.pdGeometry.attributes.position as THREE.BufferAttribute).needsUpdate = true;
-    (this.pdGeometry.attributes.color as THREE.BufferAttribute).needsUpdate = true;
+    this.pdGeometry.setDrawRange(0,n*2);
+    (this.pdGeometry.attributes.position as THREE.BufferAttribute).needsUpdate=true;
+    (this.pdGeometry.attributes.color as THREE.BufferAttribute).needsUpdate=true;
   }
 
   update(dt: number): void {
