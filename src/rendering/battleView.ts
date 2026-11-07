@@ -493,12 +493,17 @@ export class BattleView {
           if (e.kind !== 'mass_accelerator') break;
           const ship = this.sim.getShip(e.shipId);
           const v = ship ? this.visuals.get(ship.id) : undefined;
-          if (!ship || !v) break;
+          if (!ship) break;
           const w = ship.weapons[e.weaponIndex];
           if (!w) break;
           const big = w.def.damage >= 600;
           if (!big && Math.random() > 0.35) break; // thin out small-gun flashes
-          const pose = weaponFlashPose(v.built.group, v.built.muzzle, w);
+          const pose = v ? weaponFlashPose(v.built.group, v.built.muzzle, w) : {
+            position: new THREE.Vector3().copy(
+              this.tmpA.set(weaponWorldOffset(ship, w).x, weaponWorldOffset(ship, w).y, weaponWorldOffset(ship, w).z)
+            ).multiplyScalar(KM),
+            direction: new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z).normalize()
+          };
           const pov = this.rig.mode === 'gunnery' && ship.id === this.followId;
           this.effects.muzzleFlash(pose.position, pose.direction,
             pov ? (big ? 1.8 : 0.75) : (big ? 3.6 : 1.2), ship.faction === 'reaper');
@@ -516,8 +521,9 @@ export class BattleView {
         case 'hades_detonation': {
           const ship = this.sim.getShip(e.targetId);
           const visual = ship ? this.visuals.get(ship.id) : undefined;
-          if (!ship || !visual || visual.removed) break;
-          this.effects.hadesBurst(new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM), visual.built.lengthUnits,
+          if (!ship || visual?.removed) break;
+          this.effects.hadesBurst(new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM),
+            visual?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
             e.payloadDamage, new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z), new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM));
           break;
         }
@@ -533,6 +539,14 @@ export class BattleView {
         }
         case 'ship_destroyed': {
           const v = this.visuals.get(e.shipId);
+          // A distant GPU-instanced hull still produces a full explosion when
+          // destroyed; only its close-up debris pieces require a hero mesh.
+          if (!v) {
+            const ship = this.sim.getShip(e.shipId);
+            if (ship) this.effects.explosion(
+              new THREE.Vector3(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM),
+              getShipTemplate(ship.classId).lengthUnits, ship.faction === 'reaper');
+          }
           if (v && this.rig.mode === 'cinematic' && this.cine.age >= 5 && (e.role === 'dreadnought' || e.role === 'reaper_capital' || e.role === 'carrier')) {
             // Cinematic director jumps to capital ship deaths.
             this.cine = { fromId: e.shipId, toId: undefined, age: 0, hold: 7, wreck: true };
