@@ -52,6 +52,7 @@ test('Battle startup exception does not clear a working Custom Battle editor', a
         },
       ],
     };
+    const beforeVisibility = app.canvas.style.visibility;
     let error = '';
     try {
       app.startBattle(config);
@@ -61,11 +62,11 @@ test('Battle startup exception does not clear a working Custom Battle editor', a
     return {
       error, screen: app.screen,
       visible: !!document.querySelector('[data-action="launch-custom"]'),
-      canvasHidden: app.canvas.style.visibility === 'hidden',
+      canvasRestored: app.canvas.style.visibility === beforeVisibility,
     };
   });
   expect(state.error).toContain('missing_ship_design');
   expect(state.screen).toBe('custom');
   expect(state.visible).toBe(true);
-  expect(state.canvasHidden).toBe(true);
+  expect(state.canvasRestored).toBe(true);
 });
