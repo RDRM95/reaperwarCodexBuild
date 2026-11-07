@@ -31,3 +31,15 @@ export function lodLevel(distance: number, lengthUnits: number, role: ShipRole, 
   if (distance > L * REDUCED_FACTOR) return 'reduced';
   return 'full';
 }
+
+/** Match the original LOD thresholds using squared camera distance. */
+export function lodLevelSquared(distanceSquared: number, lengthUnits: number, role: ShipRole, enabled = true): LodLevel {
+  if (!enabled) return 'full';
+  if (role === 'fighter') {
+    return distanceSquared > FIGHTER_POINT_DISTANCE ** 2 ? 'point'
+      : distanceSquared > FIGHTER_REDUCED_DISTANCE ** 2 ? 'reduced' : 'full';
+  }
+  const length = Math.max(0.5, lengthUnits);
+  return distanceSquared > (length * POINT_FACTOR) ** 2 ? 'point'
+    : distanceSquared > (length * REDUCED_FACTOR) ** 2 ? 'reduced' : 'full';
+}
