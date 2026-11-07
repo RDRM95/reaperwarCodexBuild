@@ -45,7 +45,7 @@ describe('APEX dual Omaha fidelity and canon isolation', () => {
   });
 
   it('is not available in canonical Strict Lore', () => {
-    expect(isShipAllowedInRules(SHIP_CLASSES.cerberus_omaha, CANON_ME3)).toBe(false);
+    expect(isShipAllowedInRules(SHIP_CLASSES.cerberus_omaha, { ...CANON_ME3, strictLore: true })).toBe(false);
     expect(isShipAllowedInRules(SHIP_CLASSES.cerberus_omaha, PRIME_APEX)).toBe(true);
   });
 });
