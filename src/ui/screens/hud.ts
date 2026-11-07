@@ -12,6 +12,7 @@ import type { ComparisonReport } from '@/scenarios/comparison';
 import { engagementBand, shipEngagementRange } from '@/simulation/ai';
 import { BATTLESPACE_SCALE } from '@/simulation/constants';
 import { distance } from '@/core/vec3';
+import { ShipKillScoreboard } from '@/simulation/killScoreboard';
 
 export interface Hud {
   root: HTMLElement;
@@ -47,6 +48,36 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   let menuOpen = false;
   let resumeAfterMenu = false;
   let endShown = false;
+  const killLedger = new ShipKillScoreboard();
+  let killVisible = true;
+  let killRendered = -1;
+  const killsA = el('div', {class:'kill-type-list','data-kills':'A'}, 'No losses');
+  const killsB = el('div', {class:'kill-type-list','data-kills':'B'}, 'No losses');
+  const scoreTitle = el('div',{class:'panel-title'},'SHIP LOSSES BY CLASS');
+  const killBody = el('div',{class:'kill-score-columns'},[
+    el('div',{},[el('strong',{},'SIDE A DESTROYED'),killsA]),
+    el('div',{},[el('strong',{},'SIDE B DESTROYED'),killsB])
+  ]);
+  const killToggle = el('button',{class:'btn small','data-action':'toggle-kill-score',onclick:()=>{
+    killVisible=!killVisible;killBody.hidden=!killVisible;killToggle.textContent=killVisible?'Hide':'Show';
+  }},'Hide');
+  scoreTitle.append(killToggle);
+  const killScorePanel=el('div',{class:'panel kill-scoreboard'},[scoreTitle,killBody]);
+  const syncKillScores = () => {
+    const updated=killLedger.sync(sim().events);
+    if (!updated && killRendered===killLedger.totalDestroyed) return;
+    killRendered=killLedger.totalDestroyed;
+    for(const [side,host] of [['A',killsA],['B',killsB]] as const) {
+      const rows=killLedger.rows(side);
+      host.replaceChildren(...(rows.length ? rows.map(row=>
+        el('div',{class:'kill-type-row'},[
+          el('span',{title:row.faction+' / '+row.classId},row.className),
+          el('b',{},fmtNum(row.destroyed))
+        ])
+      ): [el('span',{class:'dim'},'No losses')]));
+    }
+  };
+
 
   const clock = el('div', { class: 'hud-clock' });
   const speedRow = el('div', { class: 'row hud-speed' });
@@ -145,6 +176,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
 
   const bottom = el('div', { class: 'hud-bottom' }, [
     el('div', { class: 'panel', style: { flex: '1', maxWidth: '640px' } }, [el('div', { class: 'panel-title' }, 'FLEET COMMUNICATIONS'), commsBox]),
+    killScorePanel,
   ]);
 
   const root = el('div', { class: 'hud' }, [header, left, right, bottom, subtitle, toastHost]);
@@ -377,6 +409,10 @@ export function createHud(app: App, ctrl: BattleController): Hud {
         ? [stat('Point defence', s.weapons.filter((w) => w.def.burst).every((w) => (w.burstLeft ?? 1) <= 0) ? 'RECOVERING' : `${s.weapons.filter((w) => w.def.burst && (w.burstLeft ?? 1) > 0).length} / ${s.weapons.filter((w) => w.def.burst).length} mounts ready`)]
         : []),
       stat('Speed', `${(Math.hypot(s.vel.x, s.vel.y, s.vel.z) * 1000 / BATTLESPACE_SCALE).toFixed(0)} m/s`),
+      stat('Propulsion', s.inertialCoast ? 'INERTIAL COAST / NO MAIN BURN' :
+        (s.engineThrust??0)>.09 ?
+          'POWERED THRUST '+Math.round((s.engineThrust??0)*100)+'%' :
+          'RCS / STATION KEEPING'),
       stat('Subsystems', `ENG ${fmtNum(s.subsystems.engines * 100)}% · WPN ${fmtNum(s.subsystems.weapons * 100)}% · SNS ${fmtNum(s.subsystems.sensors * 100)}%`),
       stat('Target', target ? target.name : '—'),
       feedbackStat('Main battery', batteryText, 'ship-battery-status'),
@@ -474,6 +510,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
 
   const refresh = () => {
     const s = sim();
+    syncKillScores();
     clock.replaceChildren(fmtTime(s.time), el('small', {}, `${ctrl.paused ? 'PAUSED' : `${ctrl.speed}× SPEED`} · ${ctrl.isReplay ? 'REPLAY · ' : ''}SEED ${s.config.seed} · ${ctrl.view.drawCalls} DRAWS`));
     const a = s.ships.filter((x) => x.side === 'A' && x.alive && !x.escaped && x.role !== 'fighter').length;
     const b = s.ships.filter((x) => x.side === 'B' && x.alive && !x.escaped && x.role !== 'fighter').length;
