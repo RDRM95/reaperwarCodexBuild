@@ -4,6 +4,15 @@
  * starts only after a user gesture, per browser policy.
  */
 export type SoundId =
+  | 'gunner_spinal'
+  | 'gunner_beam'
+  | 'gunner_thanix'
+  | 'gunner_glance'
+  | 'gunner_charge'
+  | 'gunner_signal'
+  | 'gunner_warning'
+  | 'target_lock'
+  | 'battery_ready'
   | 'ui_open'
   | 'ui_click'
   | 'ui_hover'
@@ -126,7 +135,7 @@ export class AudioEngine {
       this.budgetTime = now;
       this.budget = 0;
     }
-    if (this.budget > 10) return;
+    if (this.budget > 10 && !id.startsWith('gunner_')) return;
     const last = this.lastPlay.get(id) ?? -1;
     const minGap = id.startsWith('ui') ? 0.03 : id === 'gardian' ? 0.08 : 0.05;
     if (now - last < minGap) return;
@@ -142,7 +151,7 @@ export class AudioEngine {
         this.tone('sine', 720, 940, 0.26, 0.013 * att, bus, 0.08);
         break;
       case 'ui_click':
-        // Original, procedural cockpit/terminal contact feedback.
+        // Soft mechanical console feedback, not a harsh click.
         this.tone('triangle', 1120, 720, 0.055, 0.038 * att, bus);
         this.tone('sine', 1600, 1250, 0.07, 0.014 * att, bus);
         break;
@@ -156,6 +165,50 @@ export class AudioEngine {
       case 'alert':
         this.tone('square', 440, 440, 0.12, 0.06 * att, bus);
         this.tone('square', 440, 440, 0.12, 0.06 * att, bus, 0.2);
+        break;
+      case 'gunner_spinal':
+        // Heard INSIDE the hull: dense actuator click, pressure pulse,
+        // low-frequency structure-borne rumble. No sharp external explosion.
+        this.tone('triangle', 75, 36, .46, .24*att, bus);
+        this.noise(.16, 'lowpass', 240, .8, .25*att, bus);
+        this.tone('sine', 48, 33, .82, .13*att, bus, .07);
+        break;
+      case 'gunner_beam':
+        // Inside a Reaper: structural field resonance, not a duplicated
+        // exterior MHD beam blast. All frequencies low and short.
+        this.tone('triangle', 62, 41, .75, .16*att, bus);
+        this.noise(.48, 'lowpass', 260, .7, .12*att, bus);
+        this.tone('sine', 125, 82, .45, .07*att, bus, .06);
+        break;
+      case 'gunner_thanix':
+        // Mass-effect liquid-metal pump and breech pressure.
+        this.tone('triangle', 120, 64, .44, .12*att, bus);
+        this.noise(.22, 'bandpass', 480, 1.1, .10*att, bus);
+        this.tone('sine', 59, 39, .55, .09*att, bus, .06);
+        break;
+      case 'gunner_glance':
+        // A subdued fire-control confirmation for a shallow hull strike.
+        this.tone('sine', 715, 540, .09, .025*att, bus);
+        break;
+      case 'gunner_charge':
+        this.tone('triangle', 105, 195, .3, .07*att, bus);
+        this.tone('sine', 230, 330, .17, .03*att, bus, .19);
+        break;
+      case 'gunner_signal':
+        this.noise(.18,'bandpass',980,1.3,.13*att,bus);
+        this.tone('triangle',640,170,.5,.11*att,bus);
+        this.noise(.3,'highpass',2400,1,.025*att,bus,.15);
+        break;
+      case 'gunner_warning':
+        this.tone('sine',560,560,.12,.047*att,bus);
+        this.tone('sine',560,560,.12,.037*att,bus,.19);
+        break;
+      case 'target_lock':
+        this.tone('sine',890,1060,.08,.055*att,bus);
+        this.tone('sine',1100,1330,.11,.03*att,bus,.11);
+        break;
+      case 'battery_ready':
+        this.tone('triangle',370,690,.14,.055*att,bus);
         break;
       case 'ma_small':
         this.noise(0.12, 'bandpass', 1800, 1.2, 0.25 * att, bus);
