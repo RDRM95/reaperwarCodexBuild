@@ -86,3 +86,28 @@ Large fleets deploy in staggered mixed battlegroups with varied organic spacing 
 **Strict Lore** is a separate timeline with a sourced two-second Alliance main-gun base cycle and canonical roster restrictions; other unknown numbers remain estimates. **Custom Battle → Roster → Multiverse crossover** enables UNSC, Covenant, Imperium, Chaos and Skynet fleets with ten original hulls and declared setting-weighted power conversions. AU Worlds also supplies Prothean, past-cycle and player-civilization factions with six further hulls. **O** toggles the overlay; Settings offers **Keep tactical overlay** when H hides the HUD. See [lore, cadence and crossover notes](docs/LORE_CADENCE_AND_CROSSOVERS.md).
 
 Open **AU Worlds & Civilizations** from the main menu to choose a branch, build a fleet or found a civilization. **Overlay labels** offers Auto, individual ships or fleet names/counts in Settings and the pause menu; Auto switches to fleets at 80 living deployed ships and returns to ships below 64. Fleet HUD rows can expand with **Show ships**. See [AU Worlds and civilization notes](docs/AU_WORLDS_AND_CIVILIZATIONS.md) for persistence, politics and scope.
+
+## One-click local GPU edition (Windows)
+
+Download and extract this repository, then double-click **`PLAY_LOCAL_GPU.cmd`**.
+Requires Git for Windows and Node.js 20.19+ on the first installation.
+The launcher safely installs this Codex build in
+`%LOCALAPPDATA%\\ReaperWarCodex\\source` and builds a production release
+instead of running the Vite development server.
+
+- A later launch tries a fast-forward update from `codex/apex-combat-overhaul`;
+  if offline or if local source files were edited, the existing installation
+  is kept. Nothing overwrites the original Reaper War or Spectator installs.
+- The game runs at **http://127.0.0.1:5174/**, avoiding ports 4180 (original)
+  and 5173 (spectator). A production preview server must remain open during
+  play. Once installed, the battles themselves require no internet connection.
+- Saves are tied to the browser origin. Export your older browser saves and
+  import them if moving from the published site or a different local port.
+- Close the launcher window or press Ctrl+C to stop. WebGL still requires
+  browser graphics acceleration and working GPU drivers.
+
+The renderer now retains the original detailed ship models, moving Reaper
+rigs for camera subjects, weapon impacts and death effects in large battles,
+but renders other repeated hulls in shared GPU batches. Under 150 ships,
+the original close-up path remains in use. No FPS claim is made without
+a benchmark on the actual target GPU.
