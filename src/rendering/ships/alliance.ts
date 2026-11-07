@@ -113,6 +113,30 @@ function buildAllianceGunship(L: number, kind: 'dreadnought' | 'omaha' | 'cruise
 export const buildAllianceDreadnought = (): BuiltShip => buildAllianceGunship(8.88, 'dreadnought');
 export const buildAllianceOmaha = (): BuiltShip => buildAllianceGunship(18, 'omaha');
 
+/** Serial-production Apex AU command capital ship.
+ * Shares Alliance structural construction, but adds a broad bridge spine and
+ * paired spinal bracing rails. Distinct from the named Valkyrie prototype.
+ */
+export const buildAllianceAegis = (): BuiltShip => {
+  const hull = buildAllianceGunship(16.5, 'omaha');
+  const p = paletteFor('alliance');
+  const parts = newParts();
+  for(const side of [-1, 1]){
+    parts.hull.push(at(taperedBox(.53,.38,7.8,.3,.88,{frontHeight:.27}),side*1.53,-.16,.42));
+    parts.hullDark.push(at(taperedBox(.30,.23,5.4,.44,.9),side*2.14,-.18,-1.65));
+    parts.accent.push(at(new THREE.BoxGeometry(.075,.045,4.8),side*1.75,.23,-.24));
+  }
+  parts.hull.push(at(taperedBox(1.40,.34,4.4,.41,.95),0,.83,1.1));
+  parts.windows.push(at(new THREE.BoxGeometry(.88,.045,.95),0,1.02,1.82));
+  const extra = assemble(parts,'alliance',[],16.5);
+  // Keep batch geometry cheap: five additional existing material classes.
+  for(const mesh of [...extra.group.children])hull.group.add(mesh);
+  hull.muzzle = new THREE.Vector3(0,-.38,8.03);
+  hull.group.name = 'Aegis-pattern command dreadnought (Apex AU)';
+  return hull;
+};
+
+
 /** Alliance carrier: dreadnought-sized hull with a flight deck and hangar mouths. */
 export function buildAllianceCarrier(): BuiltShip {
   const L = 9.0;
@@ -197,3 +221,27 @@ export function buildAllianceFighter(): BuiltShip {
   parts.windows.push(at(new THREE.BoxGeometry(0.02 * scale, 0.012 * scale, 0.03 * scale), 0, 0.02 * scale, 0.02 * scale));
   return assemble(parts, 'alliance', [new THREE.Vector3(0.03 * scale, 0, -0.1 * scale), new THREE.Vector3(-0.03 * scale, 0, -0.1 * scale)], L);
 }
+
+/** Apex-only experimental hull. Original geometry, distinct from Omaha's
+ * reinforced conventional dreadnought through outboard lance rails, dorsal
+ * command block and a separate dedicated NOVA emitter. */
+export const buildAllianceValkyrie = (): BuiltShip => {
+  const built = buildAllianceGunship(20.2, 'omaha');
+  const hull = built.group.getObjectByName('hull') as THREE.Mesh;
+  const dark = built.group.getObjectByName('hullDark') as THREE.Mesh;
+  const plateMaterial = (hull?.material as THREE.Material) ?? paletteFor('alliance').hull;
+  const darkMaterial = (dark?.material as THREE.Material) ?? paletteFor('alliance').hullDark;
+  for (const side of [-1,1]) {
+    const rail = taperedBox(0.82,0.55,11.6,0.18,1,{frontHeight:0.21});
+    rail.translate(side*2.15,-0.36,1.0);
+    const mesh = new THREE.Mesh(rail,plateMaterial);mesh.name='hull';built.group.add(mesh);
+    const fin = taperedBox(0.48,0.30,4.2,0.24,1);
+    fin.translate(side*3.0,0,-4.0);
+    const wing = new THREE.Mesh(fin,plateMaterial);wing.name='hull';built.group.add(wing);
+  }
+  const emitter = new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.65,3.0,16),darkMaterial);
+  emitter.rotation.x=Math.PI/2;emitter.position.set(0,-0.55,9.25);
+  emitter.name='hullDark';built.group.add(emitter);
+  built.muzzle = new THREE.Vector3(0,-0.55,10.2);
+  return built;
+};
