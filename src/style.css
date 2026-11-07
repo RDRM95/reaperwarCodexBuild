@@ -223,6 +223,127 @@ td.num { font-family: var(--mono); text-align: right; }
 .galaxy-map { width: 100%; height: auto; display: block; background: #06090f; border: 1px solid var(--line); cursor: pointer; }
 
 
+/* Live, event-sourced kill scoreboard by actual destroyed ship class. */
+.kill-scoreboard{width:350px;max-width:38vw;flex:0 0 auto;max-height:250px;overflow:hidden}
+.kill-scoreboard .panel-title{display:flex;justify-content:space-between;align-items:center}
+.kill-score-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;min-height:0}
+.kill-score-columns[hidden]{display:none}
+.kill-score-columns>div>strong{display:block;color:var(--text-dim,#94b5cb);font:10px ui-monospace,monospace;margin:0 0 6px}
+.kill-type-list{max-height:170px;overflow:auto;scrollbar-width:thin}
+.kill-type-row{display:flex;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid #284056;padding:4px 0;font:10px ui-monospace,monospace}
+.kill-type-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.kill-type-row b{color:#d1e9fa;font-variant-numeric:tabular-nums}
+@media(max-width:900px){.kill-scoreboard{width:245px;max-width:42vw}}
+
+
+/* Codex: fire-control camera suppresses panels, not tactical controls. */
+.hud.gunnery-mode .hud-left,.hud.gunnery-mode .hud-right,.hud.gunnery-mode .hud-bottom{display:none}
+.hud.gunnery-mode .hud-top{opacity:.7}
+.hud.gunnery-mode .hud-top:hover{opacity:1}
+#ui>.target-telemetry{position:absolute;inset:0;z-index:14;pointer-events:none;
+  color:#9dcae0;font:11px ui-monospace,monospace;text-shadow:0 1px 8px #000}
+#ui>.target-telemetry[hidden]{display:none!important}
+.target-telemetry .target-scope{position:absolute;inset:0}
+.target-telemetry .scope-top{position:absolute;top:112px;left:50%;transform:translateX(-50%);
+  color:#a2cbdc;font-size:10px;letter-spacing:.1em}
+.target-telemetry .scope-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  font-size:38px;opacity:.78;color:#a3d6ec}
+.target-telemetry .scope-center:before{content:'';position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%);width:118px;height:118px;border:1px solid #81b9d244;border-radius:50%}
+.target-telemetry .scope-bottom{position:absolute;left:50%;bottom:55px;transform:translateX(-50%);
+  color:#89abbf;font-size:10px;letter-spacing:.05em}
+.target-telemetry .gunnery-line{position:absolute;top:153px;left:50%;transform:translateX(-50%);
+  white-space:nowrap;font-size:10px;color:#b0d0de;letter-spacing:.07em}
+.target-telemetry .target-marker{position:absolute;width:55px;height:55px;
+  transform:translate(-50%,-50%);border:1px solid #8ab8d488}
+.target-telemetry .target-marker:before,.target-telemetry .target-marker:after{
+  content:'';position:absolute;background:#a1d0e1;left:50%;top:50%;transform:translate(-50%,-50%)}
+.target-telemetry .target-marker:before{width:12px;height:1px}
+.target-telemetry .target-marker:after{width:1px;height:12px}
+.target-telemetry .target-marker[hidden]{display:none}
+.target-telemetry .gunner-readout-panel,.target-telemetry .fire-readout{
+  position:absolute;bottom:80px;min-width:215px;max-width:30%;padding:10px;
+  background:#04111dc4;border:1px solid #43687b77;line-height:1.7;font-size:10px
+}
+.target-telemetry .gunner-readout-panel{left:16px}
+.target-telemetry .fire-readout{right:16px}
+.target-telemetry .gunner-readout-panel strong,.target-telemetry .gunner-readout-panel small{display:block}
+.target-telemetry .gunner-readout-panel strong{font-size:12px;color:#d5ecf6}
+.target-telemetry .gunner-readout-panel small{color:#91b4c9}
+.target-telemetry .gunner-readout-panel b,.target-telemetry .fire-readout b{color:#d9e9f3}
+.target-telemetry .gunner-readout-panel div,.target-telemetry .fire-readout div{display:flex;gap:12px;justify-content:space-between}
+.target-telemetry .charge-track{position:absolute;bottom:58px;left:calc(50% - 100px);
+  width:200px;height:3px;background:#2c435566;border:1px solid #8cb3c277}
+.target-telemetry .charge-fill{display:block;width:0;height:100%;background:#85bdcf}
+.target-telemetry.cerberus-hud .scope-center{color:#e0b589}
+.target-telemetry.reaper-hud .scope-center{color:#bf7179}
+@media(max-width:800px){
+  .target-telemetry .gunner-readout-panel,.target-telemetry .fire-readout{
+    max-width:47%;min-width:0;font-size:9px;bottom:65px}
+  .target-telemetry .scope-bottom{display:none}
+}
+
+
+/* Diegetic optical cues: restrained, no flashing or full-screen whiteout. */
+.target-telemetry .gunnery-warning{
+  position:absolute;left:50%;top:17%;transform:translateX(-50%);
+  color:#ddb988;letter-spacing:.1em;font:10px ui-monospace,monospace;
+  text-shadow:0 1px 5px #000;white-space:nowrap;opacity:.86
+}
+.target-telemetry .gunnery-warning:empty{display:none}
+.target-telemetry.signal-lost{
+  background:rgba(2,6,11,.86);
+  color:#9aafbf;
+  transition:background .17s ease-out;
+}
+.target-telemetry.signal-lost .target-scope .scope-center,
+.target-telemetry.signal-lost .target-scope .scope-bottom,
+.target-telemetry.signal-lost .target-marker,
+.target-telemetry.signal-lost .target-panel,
+.target-telemetry.signal-lost .fire-readout,
+.target-telemetry.signal-lost .charge-track{visibility:hidden}
+.target-telemetry.signal-lost .gunnery-line{
+  top:50%;color:#c5d5df;font-size:14px;letter-spacing:.18em
+}
+
+
+/* Optical tracking is four quiet open corners, never a coloured box painted
+   over the target. No artificial glow, centred square or full-screen flash. */
+.target-telemetry .target-marker{
+  width:60px;height:60px;border:0;box-shadow:none;background:transparent;
+  color:rgba(150,209,235,.65);opacity:.80;
+}
+.target-telemetry .target-marker:before,
+.target-telemetry .target-marker:after,
+.target-telemetry .target-marker span:before,
+.target-telemetry .target-marker span:after{
+  content:'';position:absolute;width:11px;height:11px;
+  background:none;transform:none;
+  box-shadow:none;
+}
+.target-telemetry .target-marker:before{
+  left:0;top:0;right:auto;bottom:auto;
+  border-top:1px solid currentColor;border-left:1px solid currentColor;
+}
+.target-telemetry .target-marker:after{
+  left:auto;top:0;right:0;bottom:auto;
+  border-top:1px solid currentColor;border-right:1px solid currentColor;
+}
+.target-telemetry .target-marker span:before{
+  left:0;top:auto;right:auto;bottom:0;
+  border-bottom:1px solid currentColor;border-left:1px solid currentColor;
+}
+.target-telemetry .target-marker span:after{
+  left:auto;top:auto;right:0;bottom:0;
+  border-bottom:1px solid currentColor;border-right:1px solid currentColor;
+}
+.target-telemetry.impact .target-marker,
+.stage.gunnery-active .target-telemetry.impact .target-marker{
+  animation:none;filter:brightness(1.12);
+}
+.target-telemetry .gunner-readout-panel{pointer-events:none}
+
+
 /* 4K / TV-safe interface: no controls may be stranded beyond a clipped screen.
    The renderer canvases remain native resolution; only #ui scales independently. */
 .screen { min-width: 0; min-height: 0; }
