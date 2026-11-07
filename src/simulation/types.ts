@@ -121,6 +121,10 @@ export interface WeaponState {
   beamRemaining: number;
   beamTargetId?: string;
   beamHit: boolean;
+  /** Stable contact on the target's rotating hull, local kilometres. */
+  beamLocalHit?: Vec3;
+  /** Glancing contact strength, 0.58–1. The weapon's main damage model is unchanged. */
+  beamGlance?: number;
   /** World-space termination point of an active beam (km). */
   beamEnd?: Vec3;
   /** World-space origin of the active beam (km). */
@@ -158,6 +162,10 @@ export interface ShipState {
   pos: Vec3;
   prevPos: Vec3;
   vel: Vec3;
+  /** Engine output requested by motion control, 0 = idle or failed. Render-only telemetry. */
+  engineThrust?: number;
+  /** Inertial unpowered drift is not disguised as engine propulsion. */
+  inertialCoast?: boolean;
   heading: Vec3;
   prevHeading: Vec3;
   lengthKm: number;
@@ -283,7 +291,7 @@ export type BattleEvent =
   | { t: number; type: 'hades_detonation'; shipId: string; targetId: string; weaponId: string; internalDamage: number; payloadDamage: number; pos: Vec3 }
   | { t: number; type: 'primary_volley_issued'; fleetId: string; side: Side }
   | { t: number; type: 'weapon_fired'; shipId: string; weaponId: string; targetId: string; weaponIndex: number; kind: string }
-  | { t: number; type: 'projectile_impact'; shipId: string; targetId: string; damage: number; damageType: DamageType; barrierDamage: number; hullDamage: number; pos: Vec3 }
+  | { t: number; type: 'projectile_impact'; shipId: string; targetId: string; damage: number; damageType: DamageType; barrierDamage: number; hullDamage: number; pos: Vec3; glancing?: boolean }
   | { t: number; type: 'barrier_damaged'; shipId: string; remaining: number }
   | { t: number; type: 'barriers_down'; shipId: string }
   | { t: number; type: 'subsystem_disabled'; shipId: string; subsystem: keyof Subsystems; level: number }

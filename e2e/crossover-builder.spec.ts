@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { App } from '../src/ui/app';
+import { CROSSOVER_FACTION_IDS, MASS_EFFECT_FACTION_IDS, SANDBOX_FACTION_IDS } from '../src/data/types';
 
 async function openBuilder(page: Page) {
   await page.goto('/');
@@ -42,9 +43,9 @@ test('multiverse roster exposes all factions in main, allied and reinforcement s
   await expect(page.locator('[data-faction="sideA"] option')).toHaveCount(8);
   await page.locator('[data-action="roster-mode"]').selectOption('multiverse');
   await expect(page.locator('[data-action="custom-timeline"]')).toHaveValue('multiverse_crossover');
-  for (const key of ['sideA', 'sideB', 'reinforcements']) await expect(page.locator(`[data-faction="${key}"] option`)).toHaveCount(16);
+  for (const key of ['sideA', 'sideB', 'reinforcements']) await expect(page.locator(`[data-faction="${key}"] option`)).toHaveCount(MASS_EFFECT_FACTION_IDS.length + SANDBOX_FACTION_IDS.length + CROSSOVER_FACTION_IDS.length);
   await page.locator('[data-action="add-fleet-A"]').click();
-  await expect(page.locator('[data-faction="A2"] option')).toHaveCount(16);
+  await expect(page.locator('[data-faction="A2"] option')).toHaveCount(MASS_EFFECT_FACTION_IDS.length + SANDBOX_FACTION_IDS.length + CROSSOVER_FACTION_IDS.length);
   await page.locator('[data-faction="A2"]').selectOption('imperium');
   await expect(page.locator('[data-count="A2:imperium_retribution"]')).toBeVisible();
   await page.locator('[data-faction="reinforcements"]').selectOption('chaos');

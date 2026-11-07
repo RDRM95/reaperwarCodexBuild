@@ -36,6 +36,9 @@ export const FACTION_DEFAULTS: Record<CustomFaction, { name: string; formation: 
   prothean: { name: 'Prothean imperial fleet', formation: 'defensive_screen', counts: { prothean_cruiser: 6, prothean_dreadnought: 2 } },
   past_cycle: { name: 'Past-cycle expedition', formation: 'defensive_screen', counts: { past_cycle_cruiser: 6, past_cycle_dreadnought: 2 } },
   player_civ: { name: 'Player civilization fleet', formation: 'line_abreast', counts: { player_civ_cruiser: 6, player_civ_dreadnought: 2 } },
+  axiom_guard: { name: 'Axiom protective fleet', formation: 'defensive_screen', counts: { axiom_ancient: 1, axiom_warden: 12 } },
+  exile_hegemony: { name: 'Exile Hegemony reclamation fleet', formation: 'strike_wedge', counts: { exile_ark: 3, exile_raider: 18 } },
+  terminus_compact: { name: 'Terminus Compact battle group', formation: 'defensive_screen', counts: { compact_siege: 6, compact_gunship: 36 } },
 };
 const CUSTOM_FACTIONS: CustomFaction[] = [...MASS_EFFECT_FACTION_IDS, ...SANDBOX_FACTION_IDS, ...CROSSOVER_FACTION_IDS];
 

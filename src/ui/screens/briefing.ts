@@ -2,6 +2,7 @@ import type { App } from '../app';
 import { el } from '../dom';
 import { SCENARIOS, defaultWorldState, getScenario } from '@/scenarios';
 import { getShipClass } from '@/data/ships';
+import { resolveQuickBattle, type QuickBattleReport } from '@/simulation/quickBattle';
 
 export function renderBriefing(app: App, params?: { scenarioId?: string }): HTMLElement {
   let scenarioId = params?.scenarioId ?? app.prefs.lastScenarioId;
@@ -21,12 +22,65 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
     return { campaignAllied: JSON.stringify(allied), campaignReaper: JSON.stringify(reaper) };
   };
   const body = el('div', { class: 'screen-body' });
+  const estimatedOutput = el('div', { class:'panel', 'data-action':'instant-battle-report',
+    style: { display:'none',maxHeight:'450px',overflowY:'auto' } });
+  let lastEstimate:QuickBattleReport|null=null;
+  const calculate = () => {
+    const rules=app.getTimeline(timelineId);
+    if(rules.strictLore&&scenario.auOnly)return app.toast('CHOOSE AN AU TIMELINE FOR THIS BATTLE');
+    try {
+      const config=scenario.build(rules,seed,{...worldState,...campaignWorldState()});
+      const result=resolveQuickBattle(config);
+      lastEstimate=result;
+      const rows=(side:'A'|'B')=>{
+        const summary=result.battle.sides[side];
+        const losses=Object.values(summary.lossesByClass)
+          .sort((a,b)=>b.lost-a.lost)
+          .slice(0,24)
+          .map(cls=>el('tr',{},[
+            el('td',{},cls.name),el('td',{class:'num'},String(cls.deployed)),
+            el('td',{class:'num'},String(cls.lost)),el('td',{class:'num'},String(cls.deployed-cls.lost))
+          ]));
+        return el('div',{class:'panel'},[
+          el('div',{class:'panel-title'},'SIDE '+side+' — '+summary.destroyed.toLocaleString('en-GB')+' LOST'),
+          el('p',{},summary.survivors.toLocaleString('en-GB')+' survivors / '+summary.deployed.toLocaleString('en-GB')+' deployed'),
+          el('table',{},[
+            el('thead',{},el('tr',{},['Ship type','Deployed','Lost','Survived'].map(label=>el('th',{},label)))),
+            el('tbody',{},losses)
+          ])
+        ]);
+      };
+      estimatedOutput.replaceChildren(
+        el('div',{class:'panel-title'},'INSTANT NUMERICAL BATTLE — APPROXIMATE, NOT A SIMULATION'),
+        el('h3',{},result.battle.winner==='draw'?'INCONCLUSIVE':'SIDE '+result.battle.winner+' FAVOURED'),
+        el('p',{},result.shipsAnalysed.toLocaleString('en-GB')+
+          ' vessels · '+Math.round(result.battle.duration)+' simulated seconds (estimate)'),
+        el('div',{class:'grid2'},[rows('A'),rows('B')]),
+        el('p',{class:'dim'},result.warnings.join(' ')),
+        el('button',{class:'btn small','data-action':'export-instant-report',onclick:()=>{
+          if(!lastEstimate)return;
+          const blob=new Blob([JSON.stringify(lastEstimate,null,2)],{type:'application/json'});
+          const url=URL.createObjectURL(blob);
+          const link=document.createElement('a');link.href=url;link.download='reaper-war-instant-report.json';
+          document.body.append(link);link.click();link.remove();URL.revokeObjectURL(url);
+        }},'Export JSON')
+      );
+      estimatedOutput.style.display='block';
+    }catch(err){app.toast('INSTANT CALCULATOR: '+String(err));}
+  };
+  const instantButton = el('button',{class:'btn','data-action':'instant-resolve',onclick:calculate},
+    'Σ Instant battle results (no simulation)');
   const launchButton = el('button', { class: 'btn primary', 'data-action': 'launch', onclick: () => {
     const rules = app.getTimeline(timelineId);
     if (rules.strictLore && scenario.auOnly) return app.toast('CHOOSE A CANON SCENARIO FOR STRICT LORE');
+    const config=scenario.build(rules, seed, { ...worldState, ...campaignWorldState() });
+    const hullCount=config.fleets.reduce((n,f)=>n+f.ships.reduce((k,c)=>k+c.count,0),0);
+    if(hullCount>12000 && !window.confirm(
+      hullCount.toLocaleString('en-GB')+' real-time ships may stall this browser. Use Instant battle results instead, or continue with a very large 3D battle?'
+    ))return;
     app.playUi('ui_confirm');
     app.selectTimeline(timelineId);
-    app.startBattle(scenario.build(rules, seed, { ...worldState, ...campaignWorldState() }));
+    app.startBattle(config);
   } }, 'Launch battle →');
   const render = () => {
     body.replaceChildren();
@@ -103,12 +157,14 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
         ]),
       ]),
     );
+    body.append(estimatedOutput);
   };
   render();
 
   const footer = el('div', { class: 'screen-footer' }, [
     el('button', { class: 'btn', onclick: () => app.show('menu') }, '← Main menu'),
     el('div', { class: 'spacer' }),
+    instantButton,
     launchButton,
   ]);
 
