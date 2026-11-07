@@ -290,7 +290,7 @@ export function applyRulesToWeapon(
   if (isTorp) damage *= t.torpedoDamage;
   if (isGardian) damage *= t.gardianEffectiveness;
 
-  const hades = (w.id === 'cerberus_hades_spinal' && !rules.strictLore) ||
+  const hades = (w.id === 'cerberus_hades_spinal' && rules.category !== 'canon' && !rules.strictLore) ||
     (faction !== 'reaper' && isMassEffectFaction(faction) && !rules.strictLore && rules.special.hadesRounds && isMA);
 
   return {
