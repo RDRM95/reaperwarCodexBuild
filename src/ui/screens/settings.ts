@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { el } from '../dom';
 import { storage } from '@/core/storage';
+import { UI_SCALE_LEVELS } from '../tvDisplay';
 import { OVERLAY_DETAIL_LABELS, type OverlayDetail } from '../fleetLabels';
 
 export function renderSettings(app: App): HTMLElement {
@@ -16,6 +17,19 @@ export function renderSettings(app: App): HTMLElement {
     el('div', { class: 'grid3' }, [
       el('div', { class: 'panel' }, [
         el('div', { class: 'panel-title' }, 'GRAPHICS'),
+        el('label', { class: 'field' }, ['TV / 4K interface scale', el('select', {
+          'data-setting': 'ui-scale',
+          onchange: (e: Event) => {
+            p.uiScale = Number((e.target as HTMLSelectElement).value);
+            void app.savePrefs();
+          },
+        }, UI_SCALE_LEVELS.map((scale) => el('option', {
+          value: scale,
+          selected: p.uiScale === scale,
+        }, Math.round(scale * 100) + '%')))]),
+        el('p', { class: 'dim', style: { fontSize: '12px' } },
+          'Enlarges menus, labels and the HUD without reducing 3D render resolution. Ctrl+Alt+Up / Down adjusts the scale anywhere; Ctrl+Alt+0 resets to 100%.'),
+
         el('label', { class: 'field' }, ['Quality', el('select', { onchange: (e: Event) => {
           p.graphics.quality = (e.target as HTMLSelectElement).value as typeof p.graphics.quality;
           p.graphics.pixelRatioCap = p.graphics.quality === 'high' ? 2 : p.graphics.quality === 'medium' ? 1.5 : 1;
