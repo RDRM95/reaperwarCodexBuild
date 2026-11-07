@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 
 # Install/update in a dedicated local folder. The extracted ZIP, developer
 # branches and existing game folders are never deleted or overwritten.
-$source = Join-Path $env:LOCALAPPDATA 'ReaperWarSandbox\source'
+$source = Join-Path $env:LOCALAPPDATA 'ReaperWarCodex\source'
 $repo = 'https://github.com/RDRM95/reaperwarCodexBuild.git'
 
 function Require-Tool([string]$name) {
