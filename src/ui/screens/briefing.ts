@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { el } from '../dom';
 import { SCENARIOS, defaultWorldState, getScenario } from '@/scenarios';
+import { stageThreeDimensionalTheatre } from '@/scenarios/theatre';
 import { getShipClass } from '@/data/ships';
 import { resolveQuickBattle, type QuickBattleReport } from '@/simulation/quickBattle';
 
@@ -11,6 +12,7 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
   let timelineId = app.prefs.lastTimelineId;
   let seed = Math.floor(Math.random() * 100000);
   let worldState = defaultWorldState(scenario);
+  let theatreLayout: 'three_dimensional' | 'legacy_plane' = 'three_dimensional';
 
   /** Campaign-linked scenarios receive the saved war's fleets through world state. */
   const campaignWorldState = (): Record<string, string> => {
@@ -73,7 +75,7 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
   const launchButton = el('button', { class: 'btn primary', 'data-action': 'launch', onclick: () => {
     const rules = app.getTimeline(timelineId);
     if (rules.strictLore && scenario.auOnly) return app.toast('CHOOSE A CANON SCENARIO FOR STRICT LORE');
-    const config=scenario.build(rules, seed, { ...worldState, ...campaignWorldState() });
+    const config=stageThreeDimensionalTheatre(scenario.build(rules, seed, { ...worldState, ...campaignWorldState(), theatre_layout: theatreLayout }));
     const hullCount=config.fleets.reduce((n,f)=>n+f.ships.reduce((k,c)=>k+c.count,0),0);
     if(hullCount>12000 && !window.confirm(
       hullCount.toLocaleString('en-GB')+' real-time ships may stall this browser. Use Instant battle results instead, or continue with a very large 3D battle?'
@@ -147,6 +149,12 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
             el('label', { class: 'field' }, ['Timeline', timelineSelect]),
             el('p', { class: 'dim', style: { fontSize: '12px' } }, rules.tagline),
             el('p', { class: 'dim', style: { fontSize: '11px' } }, 'Weapon cycles use simulated seconds. Multiple guns fire independently; 4× playback makes a four-second cycle appear to take one real second. Fleet Database lists individual mount cycles.'),
+            el('label', { class: 'field' }, ['Battlespace layout', el('select', { 'data-action': 'briefing-theatre', onchange: (e: Event) => {
+              theatreLayout = (e.target as HTMLSelectElement).value as 'three_dimensional' | 'legacy_plane';
+            } }, [
+              el('option', { value: 'three_dimensional', selected: theatreLayout === 'three_dimensional' }, 'OPEN 3D — FLEET APPROACHES'),
+              el('option', { value: 'legacy_plane', selected: theatreLayout === 'legacy_plane' }, 'ORIGINAL — SAVED REPLAY LAYOUT'),
+            ])]),
             ...worldStateControls,
             el('label', { class: 'field' }, ['Random seed', el('input', { type: 'number', value: seed, onchange: (e: Event) => {
               seed = Number((e.target as HTMLInputElement).value) || 0;
