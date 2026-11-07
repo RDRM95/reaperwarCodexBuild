@@ -156,8 +156,9 @@ export class BattleView {
     this.sunLight.position.copy(this.env.sunDirection).multiplyScalar(10_000);
     this.sunLight.target.position.set(0, 0, 0);
     this.scene.add(this.sunLight.target);
-    // Detailed models are created only for nearby/selected/cinematic subjects;
-    // remaining hulls retain their own simulation state and use GPU instancing.
+    // Preserve the original small-battle rendering path and its close-up detail.
+    // Only larger fleets lazily create hero hulls and batch the rest on the GPU.
+    if (sim.ships.length < 150) for (const ship of sim.ships) this.ensureVisual(ship);
     sim.onEvent = e=>this.eventQueue.push(e);
     this.gunnerySignalUntilMs=0;
 
@@ -269,11 +270,12 @@ export class BattleView {
     const sim = this.sim;
     const cam = this.rig.camera.position;
     const lodOn = this.settings.lod !== false;
+    const useInstancing = sim.ships.length >= 150;
     let far = 0;
     let articulatedHeroes = 0;
     let nearVisuals = 0;
     this.lodCounts = { full: 0, reduced: 0, point: 0 };
-    this.instances.begin(sim.ships);
+    if (useInstancing) this.instances.begin(sim.ships);
     this.ensureFarCapacity(sim.ships.length);
     this.rig.camera.updateMatrixWorld();
     this.frustumMatrix.multiplyMatrices(this.rig.camera.projectionMatrix, this.rig.camera.matrixWorldInverse);
@@ -296,7 +298,8 @@ export class BattleView {
       const dx = px - cam.x, dy = py - cam.y, dz = pz - cam.z;
       const distanceSquared = dx * dx + dy * dy + dz * dz;
       const priority = this.selectedIds.has(ship.id) || this.followId === ship.id ||
-        this.cine.fromId === ship.id || this.cine.toId === ship.id;
+        this.cine.fromId === ship.id || this.cine.toId === ship.id ||
+        (this.cine.members?.includes(ship.id) ?? false);
       const level = priority ? 'full' : lodLevelSquared(distanceSquared, lengthUnits, ship.role, lodOn);
       this.lodCounts[level]++;
       this.sphere.center.set(px, py, pz);
@@ -321,12 +324,13 @@ export class BattleView {
         }
         continue;
       }
-      if (!onScreen && !priority) {
+      if (useInstancing && !onScreen && !priority) {
         if (previous) previous.built.group.visible = false;
         continue;
       }
       const nearbyRange = Math.max(75, lengthUnits * 22);
-      const hero = priority || (distanceSquared <= nearbyRange * nearbyRange && nearVisuals < this.MAX_HERO_VISUALS);
+      const hero = !useInstancing || priority ||
+        (distanceSquared <= nearbyRange * nearbyRange && nearVisuals < this.MAX_HERO_VISUALS);
       if (!hero) {
         if (previous) previous.built.group.visible = false;
         this.instances.add(ship, alpha, level);
@@ -361,7 +365,7 @@ export class BattleView {
         }
       }
     }
-    this.instances.end();
+    if (useInstancing) this.instances.end();
     const farGeom = this.farPoints.geometry;
     farGeom.setDrawRange(0, far);
     (farGeom.attributes.position as THREE.BufferAttribute).needsUpdate = true;
