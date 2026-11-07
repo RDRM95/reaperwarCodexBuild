@@ -664,6 +664,20 @@ export function countsForFaction(counts: Record<string, number>, faction: Custom
 export function buildCustomBattle(input: CustomBattleInput, rules?: RuleSet): BattleConfig {
   const r = rules ?? getPreset(input.rulesId);
   const requested = [input.sideA, input.sideB, ...(input.extraA ?? []), ...(input.extraB ?? [])];
+  // Old saves and manual scenario imports can contain non-finite ship counts.
+  // Never let NaN/Infinity reach the deployFleet loop (Infinity hangs startup).
+  for (const f of requested) {
+    for (const [classId, count] of Object.entries(f.counts ?? {})) {
+      if (!Number.isSafeInteger(count) || count < 0) {
+        throw new Error(`Invalid ship count for ${classId}: enter a finite, non-negative whole number.`);
+      }
+    }
+  }
+  for (const [classId, count] of Object.entries(input.reinforcementCounts ?? {})) {
+    if (!Number.isSafeInteger(count) || count < 0) {
+      throw new Error(`Invalid reinforcement count for ${classId}: enter a finite, non-negative whole number.`);
+    }
+  }
   const hasCrossover = requested.some(f => isCrossoverFaction(f.faction)) ||
     ((input.reinforcementTime ?? 0) > 0 && isCrossoverFaction(input.reinforcementFaction ?? input.sideB.faction));
   if (hasCrossover && (r.strictLore || r.category === 'canon')) {
