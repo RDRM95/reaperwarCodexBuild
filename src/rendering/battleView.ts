@@ -498,10 +498,9 @@ export class BattleView {
           if (!w) break;
           const big = w.def.damage >= 600;
           if (!big && Math.random() > 0.35) break; // thin out small-gun flashes
+          const worldMuzzle = v ? undefined : weaponWorldOffset(ship, w);
           const pose = v ? weaponFlashPose(v.built.group, v.built.muzzle, w) : {
-            position: new THREE.Vector3().copy(
-              this.tmpA.set(weaponWorldOffset(ship, w).x, weaponWorldOffset(ship, w).y, weaponWorldOffset(ship, w).z)
-            ).multiplyScalar(KM),
+            position: new THREE.Vector3(worldMuzzle!.x, worldMuzzle!.y, worldMuzzle!.z).multiplyScalar(KM),
             direction: new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z).normalize()
           };
           const pov = this.rig.mode === 'gunnery' && ship.id === this.followId;
