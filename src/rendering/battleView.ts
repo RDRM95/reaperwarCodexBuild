@@ -568,8 +568,11 @@ export class BattleView {
     if (!ship) return undefined;
     const v = this.visuals.get(ship.id);
     return {
-      position: v ? v.built.group.position.clone() :
-        new THREE.Vector3(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM),
+      position: new THREE.Vector3(
+        (ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * this.alpha) * KM,
+        (ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * this.alpha) * KM,
+        (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * this.alpha) * KM
+      ),
       velocity: new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM),
       heading: new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z),
       size: v?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
@@ -717,13 +720,17 @@ export class BattleView {
       if (!ship.alive || ship.escaped) continue;
       const v = this.visuals.get(ship.id);
       if (v?.removed) continue;
-      const p = this.tmpA.copy(v ? v.built.group.position :
-        this.tmpB.set(ship.pos.x * KM, ship.pos.y * KM, ship.pos.z * KM)).project(cam);
+      const centre = this.tmpB.set(
+        (ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * this.alpha) * KM,
+        (ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * this.alpha) * KM,
+        (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * this.alpha) * KM
+      );
+      const p = this.tmpA.copy(centre).project(cam);
       if (p.z > 1 || p.z < -1) continue;
       const sx = (p.x * .5 + .5) * width;
       const sy = (-p.y * .5 + .5) * height;
       const length = v?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits;
-      const distance = cam.position.distanceTo(v ? v.built.group.position : this.tmpB);
+      const distance = cam.position.distanceTo(centre);
       const radiusPx = Math.max(14, ((length * .5) / Math.max(1, distance)) *
         (height / (2 * Math.tan(cam.fov * Math.PI / 360))));
       const d = Math.hypot(sx - x, sy - y);
