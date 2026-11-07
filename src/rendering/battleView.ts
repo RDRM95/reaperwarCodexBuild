@@ -300,7 +300,7 @@ export class BattleView {
       const priority = this.selectedIds.has(ship.id) || this.followId === ship.id ||
         this.cine.fromId === ship.id || this.cine.toId === ship.id ||
         (this.cine.members?.includes(ship.id) ?? false);
-      const level = priority ? 'full' : lodLevelSquared(distanceSquared, lengthUnits, ship.role, lodOn);
+      const level = useInstancing && priority ? 'full' : lodLevelSquared(distanceSquared, lengthUnits, ship.role, lodOn);
       this.lodCounts[level]++;
       this.sphere.center.set(px, py, pz);
       this.sphere.radius = lengthUnits * .8 + 2;
