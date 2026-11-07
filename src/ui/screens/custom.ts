@@ -94,10 +94,12 @@ export function renderCustom(app: App, params?: { template?: CustomBattleInput }
   const reportLaunchError = (error: unknown) => {
     const message = error instanceof Error ? error.message : 'Unknown initialization error';
     body.querySelector('[data-action="custom-launch-error"]')?.remove();
-    body.prepend(el('div', {
+    const warning = el('div', {
       class: 'entry-block', role: 'alert', 'data-action': 'custom-launch-error',
-      style: { color: 'var(--orange)', border: '1px solid var(--orange)', marginBottom: '12px' },
-    }, `BATTLE COULD NOT START: ${message}. Your custom setup has been kept; adjust it and retry.`));
+      style: { color: 'var(--orange)', border: '1px solid var(--orange)', marginTop: '12px' },
+    }, `BATTLE COULD NOT START: ${message}. Your custom setup has been kept; adjust it and retry.`);
+    body.append(warning);
+    warning.scrollIntoView({ block: 'nearest' });
   };
   const currentRules = () => app.getTimeline(input.rulesId);
   const allowedFactions = (): CustomFaction[] => currentRules().category === 'canon' || currentRules().strictLore ? [...MASS_EFFECT_FACTION_IDS]
