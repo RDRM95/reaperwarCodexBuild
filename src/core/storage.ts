@@ -9,6 +9,8 @@ import type { AudioSettings } from '@/audio/engine';
 import type { OverlayDetail } from '@/ui/fleetLabels';
 
 export interface Preferences {
+  /** HTML menu/HUD scale; WebGL canvas stays at native pixel density. */
+  uiScale: number;
   graphics: GraphicsSettings;
   audio: AudioSettings;
   subtitles: boolean;
@@ -38,6 +40,7 @@ export interface SaveData {
 }
 
 export const DEFAULT_PREFERENCES: Preferences = {
+  uiScale: 1,
   graphics: { quality: 'high', showEngineGlow: true, pixelRatioCap: 2, lod: true },
   audio: { master: 0.8, sfx: 0.9, music: 0.5, muted: false },
   subtitles: true,
