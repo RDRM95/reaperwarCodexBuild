@@ -1,4 +1,5 @@
 import { v3, type Vec3 } from '@/core/vec3';
+import { stageThreeDimensionalTheatre } from './theatre';
 import { AU_CHAPTERS, type AUChapterFleet } from './auLibrary';
 import { getPreset } from '@/timelines/presets';
 import { TECH_KEYS, type RuleSet, type TechModifiers } from '@/timelines/rules';
@@ -655,7 +656,7 @@ export const defaultWorldState = (s: ScenarioDef): Record<string, string> => {
 export function buildScenario(scenarioId: string, rulesId: string, seed: number, worldState?: Record<string, string>): BattleConfig {
   const s = getScenario(scenarioId);
   const rules = getPreset(rulesId);
-  return s.build(rules, seed, { ...defaultWorldState(s), ...(worldState ?? {}) });
+  return stageThreeDimensionalTheatre(s.build(rules, seed, { ...defaultWorldState(s), ...(worldState ?? {}) }));
 }
 
 // ------------------------------------------------------------ custom battles
@@ -756,5 +757,5 @@ export function buildCustomBattle(input: CustomBattleInput, rules?: RuleSet): Ba
     fleets: fleets.filter((f) => f.ships.length > 0),
   };
   assertLoreCompatible(config);
-  return config;
+  return stageThreeDimensionalTheatre(config);
 }
