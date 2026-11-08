@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { getShipTemplate, instantiateShip } from '@/rendering/ships';
 import { buildAllianceDreadnought, buildAllianceOmaha } from '@/rendering/ships/alliance';
-import { buildHarbinger, buildReaperCapital } from '@/rendering/ships/reaper';
+import { buildHarbinger, buildReaperCapital, buildReaperDestroyer } from '@/rendering/ships/reaper';
 import { buildBarrierGeometry, HullBarriers } from '@/rendering/barriers';
 
 const bounds = (group: THREE.Group) => new THREE.Box3().setFromObject(group).getSize(new THREE.Vector3());
@@ -47,6 +47,17 @@ describe('original hull silhouettes and impact shells', () => {
     const bossColour = (boss.group.getObjectByName('eye') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>).material.emissive.getHex();
     expect(bossColour).not.toBe(before);
     expect((normal.group.getObjectByName('eye') as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>).material.emissive.getHex()).toBe(before);
+  });
+
+  it('Harbinger and destroyer retain independent class-specific armour silhouettes', () => {
+    const plateVertices = (model: ReturnType<typeof buildReaperCapital>): number => {
+      const mesh = model.group.getObjectByName('plates') as THREE.Mesh<THREE.BufferGeometry>;
+      expect(mesh).toBeDefined();
+      return mesh.geometry.getAttribute('position').count;
+    };
+    const capital = buildReaperCapital();
+    expect(plateVertices(buildHarbinger())).toBeGreaterThan(plateVertices(capital));
+    expect(plateVertices(buildReaperDestroyer())).toBeGreaterThan(plateVertices(capital));
   });
 
   it('barrier shells retain the long hull shape without modifying shared template geometry', () => {
