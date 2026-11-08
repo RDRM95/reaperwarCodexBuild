@@ -753,7 +753,7 @@ export class BattleSimulation implements AiContext {
         const considerHull = (e: ShipState, index: number) => {
           if (!e.alive || e.escaped) return;
           const d = distance(origin, e.pos);
-          if (d <= def.range && (d < best || (d === best && index < bestIndex))) {
+          if (d <= def.range && this.inArc(ship, w, e.pos) && (d < best || (d === best && index < bestIndex))) {
             best = d;
             bestIndex = index;
             target = e;
