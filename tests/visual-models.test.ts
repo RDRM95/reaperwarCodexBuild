@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { getShipTemplate, instantiateShip } from '@/rendering/ships';
-import { buildAllianceDreadnought, buildAllianceOmaha } from '@/rendering/ships/alliance';
+import { buildAllianceAegis, buildAllianceDreadnought, buildAllianceOmaha } from '@/rendering/ships/alliance';
 import { buildHarbinger, buildReaperCapital, buildReaperDestroyer } from '@/rendering/ships/reaper';
 import { buildBarrierGeometry, HullBarriers } from '@/rendering/barriers';
 
@@ -38,6 +38,14 @@ describe('original hull silhouettes and impact shells', () => {
     const before = bounds(ordinary.group).clone();
     omaha.group.traverse(o => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).geometry.scale(2, 2, 2); });
     expect(bounds(ordinary.group)).toEqual(before);
+  });
+
+  it('repeatable Aegis command hull batches all extra armour into five meshes', () => {
+    const aegis = buildAllianceAegis();
+    const meshes = aegis.group.children.filter(c => (c as THREE.Mesh).isMesh);
+    expect(meshes).toHaveLength(5);
+    expect(meshes.map(m => m.name).sort()).toEqual(['accent', 'engine', 'hull', 'hullDark', 'windows']);
+    expect(aegis.muzzle!.z).toBeGreaterThan(aegis.lengthUnits * 0.4);
   });
 
   it('Harbinger illumination does not repaint ordinary Reapers', () => {
