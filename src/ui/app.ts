@@ -180,8 +180,11 @@ export class BattleController {
           s.side===this.config.perspectiveSide&&!!primaryGunneryMount(s));
         this.view.followId=preferred?.id;
       }
+      this.view.gunneryLockedShipId=this.view.followId;
       this.lastGunTarget=undefined;this.lastGunReady=false;this.lastCritical=false;
       audio.init();
+    } else {
+      this.view.gunneryLockedShipId=undefined;
     }
     this.view.rig.setMode(mode);
     this.gunneryOverlay.show(mode==='gunnery');
@@ -268,7 +271,7 @@ export class BattleController {
     if (id) {
       if (additive && this.view.selectedIds.has(id)) this.view.selectedIds.delete(id);
       else this.view.selectedIds.add(id);
-      this.view.followId = id;
+      if(this.view.rig.mode!=='gunnery') this.view.followId = id;
     }
     this.hud.refresh();
   }
@@ -287,7 +290,7 @@ export class BattleController {
     for (const ship of ships) {
       if (remove) this.view.selectedIds.delete(ship.id); else this.view.selectedIds.add(ship.id);
     }
-    if (!remove && ships.length > 0) this.view.followId = ships.reduce((a, b) => a.pointValue >= b.pointValue ? a : b).id;
+    if (this.view.rig.mode!=='gunnery' && !remove && ships.length > 0) this.view.followId = ships.reduce((a, b) => a.pointValue >= b.pointValue ? a : b).id;
     this.hud.refresh();
   }
 
@@ -295,12 +298,12 @@ export class BattleController {
     const s = this.sim.getShip(id);
     if (!s) return;
     this.view.rig.focus.set(s.pos.x * 10, s.pos.y * 10, s.pos.z * 10);
-    this.view.followId = id;
+    if(this.view.rig.mode!=='gunnery') this.view.followId = id;
   }
 
   private onSimEvent(e: BattleEvent): void {
     if(this.view.rig.mode==='gunnery'){
-      const id=this.view.followId;
+      const id=this.view.gunneryLockedShipId??this.view.followId;
       this.gunneryOverlay.notify(e,id,this.sim);
       if(e.type==='weapon_fired'&&e.shipId===id){
         const shooter=this.sim.getShip(e.shipId);
@@ -394,7 +397,7 @@ export class BattleController {
     this.view.update(dtReal, alpha);
     this.view.render();
     if(this.view.rig.mode==='gunnery'){
-      const id=this.view.followId;
+      const id=this.view.gunneryLockedShipId??this.view.followId;
       this.gunneryOverlay.update(this.sim,this.view,id);
       const ship=id?this.sim.getShip(id):undefined;
       const target=ship?.targetId;
@@ -571,6 +574,9 @@ export class BattleController {
       case '-':
       case '[':
         this.setSpeed(this.speedIndex - 1);
+        break;
+      case 'z':
+        if(this.view.rig.mode==='gunnery' && !e.repeat){e.preventDefault();this.view.rig.toggleGunneryZoom();}
         break;
       case 'h':
         this.toggleHud();
