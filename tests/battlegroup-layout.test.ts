@@ -56,9 +56,13 @@ describe('cinematic battlegroup deployment', () => {
   it('keeps organic spacing varied and Reaper wings ordered without random per-battle placement', () => {
     expect(nearestVariation(capitals('dreadnought', 0.888))).toBeGreaterThan(0.025);
     expect(nearestVariation(capitals('reaper_capital', 2))).toBeLessThan(0.01);
-    const a = deployment(7), b = deployment(83);
-    expect(a.ships.map(s => s.pos)).toEqual(b.ships.map(s => s.pos));
-    expect(a.ships.map(s => s.slot)).toEqual(b.ships.map(s => s.slot));
+    const a = deployment(7), b = deployment(83), replay = deployment(7);
+    // Different battles get different strategic silhouettes; the same battle
+    // replays exactly, including its deterministic battle-group allocation.
+    expect(a.ships.map(s => s.pos)).toEqual(replay.ships.map(s => s.pos));
+    expect(a.ships.map(s => s.slot)).toEqual(replay.ships.map(s => s.slot));
+    expect(a.ships.filter(s => s.side === 'A').map(s => s.slot))
+      .not.toEqual(b.ships.filter(s => s.side === 'A').map(s => s.slot));
   });
 
   it('retains the selected column silhouette instead of making every large order a generic block', () => {
