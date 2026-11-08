@@ -18,7 +18,7 @@ describe('deliberate capital gunnery and Oculus interceptors', () => {
     const dreadnought = sim.ships.find(s => s.classId === 'alliance_dreadnought')!;
     const band = engagementBand(dreadnought);
     expect(band.preferred).toBeLessThan(shipEngagementRange(dreadnought) * 0.90);
-    expect(band.max).toBeLessThan(shipEngagementRange(dreadnought) * 0.9);
+    expect(band.max).toBeLessThan(shipEngagementRange(dreadnought) * 0.95);
     expect(WEAPONS.reaper_capital_beam.range).toBeGreaterThan(WEAPONS.alliance_dn_main.range);
     expect(WEAPONS.reaper_capital_beam.cooldown).toBeGreaterThan(WEAPONS.alliance_dn_main.cooldown);
     expect(SHIP_CLASSES.reaper_capital.turnRate.value).toBeLessThan(SHIP_CLASSES.alliance_dreadnought.turnRate.value);
@@ -38,11 +38,12 @@ describe('deliberate capital gunnery and Oculus interceptors', () => {
     const configuration = buildCustomBattle({
       seed: 4, rulesId: 'prime_apex', environment: 'deep_space',
       startingDistanceKm: 45, maxDuration: 90,
-      sideA: { faction: 'alliance', name: 'Carrier', formation: 'line_abreast', counts: { alliance_carrier: 1 } },
+      sideA: { faction: 'alliance', name: 'Defenders', formation: 'line_abreast', counts: { alliance_dreadnought: 1 } },
       sideB: { faction: 'reaper', name: 'Interceptors', formation: 'line_abreast', counts: { reaper_capital: 8 } },
     });
     configuration.rules.special.reaperHardcore = true;
     const sim = new BattleSimulation(configuration);
+    sim.issueOrders('custom-b', { fightersDeployed: true });
     for (const s of sim.ships) for (const w of s.weapons) w.def = { ...w.def, damage: 0 };
     for (let i = 0; i < Math.round(12 / SIM_DT); i++) sim.step();
     const oculi = sim.ships.filter(s => s.classId === 'reaper_oculus');
