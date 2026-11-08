@@ -65,8 +65,13 @@ describe('deliberate capital gunnery and Oculus interceptors', () => {
     const launchers=sim.ships.filter(s=>s.classId==='reaper_capital');
     expect(launchers).toHaveLength(8);
     expect(launchers.every(s=>s.hangar?.classId==='reaper_oculus'&&s.hangar.remaining===4)).toBe(true);
-    for (const s of sim.ships) for (const w of s.weapons) w.def = { ...w.def, damage: 0 };
-    for (let i = 0; i < Math.round(12 / SIM_DT); i++) sim.step();
+    // In Hardcore the damage override intentionally ignores ordinary weapon
+    // tuning. Prevent the unrelated one-shot battle ending during launch QA.
+    for (const s of sim.ships) for (const w of s.weapons) {
+      w.def = { ...w.def, damage: 0 };
+      w.cooldown = 1000;
+    }
+    for (let i = 0; i < Math.round(3.5 / SIM_DT); i++) sim.step();
     expect(sim.time).toBeGreaterThan(2.0);
     const oculi = sim.ships.filter(s => s.classId === 'reaper_oculus');
     expect(oculi).toHaveLength(24); // fleet cap, not 32 simultaneous drones
