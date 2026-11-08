@@ -6,6 +6,8 @@ import { engagementBand, shipEngagementRange } from '@/simulation/ai';
 import { SHIP_CLASSES } from '@/data/ships';
 import { WEAPONS } from '@/data/weapons';
 import { buildReaperOculus } from '@/rendering/ships/oculus';
+import { inWeaponArc } from '@/simulation/fireControl';
+import { add, normalize, scale, v3 } from '@/core/vec3';
 
 describe('deliberate capital gunnery and Oculus interceptors', () => {
   it('keeps spinal batteries comfortably within firing range', () => {
@@ -22,6 +24,20 @@ describe('deliberate capital gunnery and Oculus interceptors', () => {
     expect(WEAPONS.reaper_capital_beam.range).toBeGreaterThan(WEAPONS.alliance_dn_main.range);
     expect(WEAPONS.reaper_capital_beam.cooldown).toBeGreaterThan(WEAPONS.alliance_dn_main.cooldown);
     expect(SHIP_CLASSES.reaper_capital.turnRate.value).toBeLessThan(SHIP_CLASSES.alliance_dreadnought.turnRate.value);
+  });
+
+  it('allows actual vertical alignment without making narrow main guns omnidirectional', () => {
+    const sim = new BattleSimulation(buildCustomBattle({
+      seed: 17, rulesId: 'canon_me3', environment: 'deep_space',
+      startingDistanceKm: 100, maxDuration: 60,
+      sideA: { faction: 'alliance', name: 'Elevated mount', formation: 'line_abreast', counts: { alliance_dreadnought: 1 } },
+      sideB: { faction: 'reaper', name: 'Contact', formation: 'line_abreast', counts: { reaper_capital: 1 } },
+    }));
+    const ship = sim.ships.find(s => s.side === 'A')!;
+    const primary = ship.weapons.find(w => w.def.arc < 90 && w.def.antiCapital)!;
+    ship.heading = normalize(v3(0, 0.8, 0.6));
+    expect(inWeaponArc(ship, primary, add(ship.pos, scale(ship.heading, 20)))).toBe(true);
+    expect(inWeaponArc(ship, primary, add(ship.pos, scale(ship.heading, -20)))).toBe(false);
   });
 
   it('builds the red-eye interceptor with economical render geometry', () => {
