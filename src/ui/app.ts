@@ -334,7 +334,8 @@ export class BattleController {
           const w = s.weapons[e.weaponIndex];
           if (w && w.def.damage >= 600) audio.play('ma_large', d);
           else if (s.role !== 'fighter') audio.play('ma_small', d, 0.6);
-        } else if (e.kind === 'reaper_beam') audio.play('reaper_beam', d, s.role === 'reaper_capital' ? 1 : 0.6);
+        } else if (e.weaponId === 'oculus_beam') audio.play('oculus_pulse', d, 0.42);
+        else if (e.kind === 'reaper_beam') audio.play('reaper_beam', d, s.role === 'reaper_capital' ? 1 : 0.6);
         else if (e.kind === 'thanix') audio.play('thanix', d);
         else if (e.kind === 'gardian') audio.play('gardian', d, 0.4);
         else if (e.kind === 'disruptor_torpedo') audio.play('torpedo', d, 0.5);
