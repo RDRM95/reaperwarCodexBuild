@@ -36,8 +36,8 @@ test('fleet database distinguishes per-mount rates, beam cycles, lore anchors an
 
   await page.locator('[data-class="reaper_capital"]').click();
   const beam = page.locator('[data-weapon="reaper_capital_beam"] [data-stat="mount-cycle"]').first();
-  await expect(beam).toContainText('2.8 s burst + 7.5 s recharge');
-  await expect(beam).toContainText('10.3 s between burst starts');
+  await expect(beam).toContainText('2.8 s burst + 9.2 s recharge');
+  await expect(beam).toContainText('12 s between burst starts');
   await expect(beam).toContainText('rate estimate');
 
   await timeline('prime_apex');
