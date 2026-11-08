@@ -743,7 +743,7 @@ export class BattleSimulation implements AiContext {
         if (this.weaponTargetField) this.weaponTargetField.forRange(ship.side, origin, def.range, considerFighter);
         else this.enemiesOf(ship.side).forEach(considerFighter);
       }
-      if (!missile && !target && def.kind === 'gardian') {
+      if (!missile && !target && (def.kind === 'gardian' || def.id === 'oculus_beam')) {
         // GARDIAN lasers can scorch nearby hulls (bypassing barriers) — low priority.
         let bestIndex = Infinity;
         const considerHull = (e: ShipState, index: number) => {
