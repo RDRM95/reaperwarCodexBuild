@@ -37,7 +37,7 @@ describe('deliberate capital gunnery and Oculus interceptors', () => {
   it('deploys a bounded Oculus screen in four-craft squadron lanes', () => {
     const configuration = buildCustomBattle({
       seed: 4, rulesId: 'prime_apex', environment: 'deep_space',
-      startingDistanceKm: 45, maxDuration: 90,
+      startingDistanceKm: 230, maxDuration: 90,
       sideA: { faction: 'alliance', name: 'Defenders', formation: 'line_abreast', counts: { alliance_dreadnought: 1 } },
       sideB: { faction: 'reaper', name: 'Interceptors', formation: 'line_abreast', counts: { reaper_capital: 8 } },
     });
