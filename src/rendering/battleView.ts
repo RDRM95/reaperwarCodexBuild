@@ -66,6 +66,8 @@ export class BattleView {
   alpha = 0;
   selectedIds = new Set<string>();
   followId?: string;
+  /** A gunnery camera can never jump to another hull after locking. */
+  gunneryLockedShipId?: string;
   gunneryShot?: {t:number;shipId:string;targetId:string;weaponIndex:number;kind:string};
   gunnerySignalUntilMs=0;
   get gunnerySignalLost():boolean {return this.rig.mode==='gunnery'&&performance.now()<this.gunnerySignalUntilMs;}
@@ -628,19 +630,14 @@ export class BattleView {
     }
     let gunnery: { position: THREE.Vector3; aim: THREE.Vector3 } | undefined;
     if (this.rig.mode === 'gunnery') {
-      let ship = this.followId ? sim.getShip(this.followId) : undefined;
-      if ((!ship || !ship.alive || ship.escaped) && this.gunnerySignalLost) {
-        // Hold the last optical orientation while the ship's feed drops.
-        const station=this.rig.camera.position.clone();
-        const aim=station.clone().add(new THREE.Vector3(0,0,-1000).applyQuaternion(this.rig.camera.quaternion));
-        gunnery={position:station,aim};
-      } else if (!ship || !ship.alive || ship.escaped) {
-        // Fallback picks one persistent live warship, never a random camera cut.
-        ship = sim.ships.find(s => s.alive && !s.escaped &&
-          s.side === sim.config.perspectiveSide && s.role === 'dreadnought') ??
-          sim.ships.find(s => s.alive && !s.escaped &&
-          s.side === sim.config.perspectiveSide && s.weapons.some(w => !w.def.antiSmall));
-        this.followId = ship?.id;
+      const id = this.gunneryLockedShipId ?? this.followId;
+      const ship = id ? sim.getShip(id) : undefined;
+      if (!ship || !ship.alive || ship.escaped || this.gunnerySignalLost) {
+        // Never switch ship, barrel or target after signal loss. Hold the last
+        // optical orientation until the user explicitly chooses another POV.
+        const station = this.rig.camera.position.clone();
+        const aim = station.clone().add(new THREE.Vector3(0,0,-1000).applyQuaternion(this.rig.camera.quaternion));
+        gunnery = { position: station, aim };
       }
       if (ship && ship.alive && !ship.escaped && !this.gunnerySignalLost) {
         // First-person optics always remain on the selected MAIN emitter.
