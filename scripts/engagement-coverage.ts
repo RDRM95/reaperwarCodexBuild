@@ -8,22 +8,26 @@ import { dot, length, sub } from '../src/core/vec3';
 import { buildCustomBattle } from '../src/scenarios';
 import { BattleSimulation, SIM_DT } from '../src/simulation/battle';
 import { shipEngagementRange } from '../src/simulation/ai';
-import type { ShipState } from '../src/simulation/types';
+import type { FormationType, ShipState } from '../src/simulation/types';
 
-const [sizeArg = '1000', seedArg = '42', secondsArg = '180', mode = 'harmless', roster = 'mixed'] = process.argv.slice(2);
+const [sizeArg = '1000', seedArg = '42', secondsArg = '180', mode = 'harmless', roster = 'mixed',
+  layout = 'legacy_plane', formation = 'line_abreast'] = process.argv.slice(2);
 const size = Number(sizeArg), seed = Number(seedArg), seconds = Number(secondsArg);
 if (![size, seed, seconds].every(Number.isFinite) || size < 2 || size > 20000 || seconds <= 0 ||
-    !['harmless', 'natural'].includes(mode) || !['mixed', 'gunline'].includes(roster)) {
-  throw new Error('Expected total ships (2..20000), seed, seconds (>0), harmless|natural, mixed|gunline');
+    !['harmless', 'natural'].includes(mode) || !['mixed', 'gunline'].includes(roster) ||
+    !['legacy_plane', 'three_dimensional'].includes(layout) ||
+    !['line_abreast', 'strike_wedge', 'defensive_screen', 'capital_column', 'fighter_screen', 'dispersed'].includes(formation)) {
+  throw new Error('Expected ships (2..20000), seed, seconds (>0), harmless|natural, mixed|gunline, legacy_plane|three_dimensional, formation');
 }
 const a = Math.floor(size / 2), b = Math.ceil(size / 2);
 const aDN = Math.max(1, Math.floor(a * .1)), aCR = Math.floor(a * .4);
 const bRC = Math.max(1, Math.floor(b * .25));
 const sim = new BattleSimulation(buildCustomBattle({
   seed, rulesId: 'prime_apex', environment: 'deep_space', startingDistanceKm: 90, maxDuration: seconds + SIM_DT * 2,
-  sideA: { faction: 'alliance', name: 'Coverage A', formation: 'line_abreast', counts: roster === 'gunline' ?
+  theatreLayout: layout as 'legacy_plane' | 'three_dimensional',
+  sideA: { faction: 'alliance', name: 'Coverage A', formation: formation as FormationType, counts: roster === 'gunline' ?
     { alliance_dreadnought: a } : { alliance_dreadnought: aDN, alliance_cruiser: aCR, alliance_frigate: a - aDN - aCR } },
-  sideB: { faction: 'reaper', name: 'Coverage B', formation: 'line_abreast', counts: roster === 'gunline' ?
+  sideB: { faction: 'reaper', name: 'Coverage B', formation: formation as FormationType, counts: roster === 'gunline' ?
     { reaper_capital: b } : { reaper_capital: bRC, reaper_destroyer: b - bRC } },
 }));
 const original = [...sim.ships];
@@ -84,7 +88,7 @@ for (let tick = 0; tick < Math.ceil(seconds / SIM_DT) && !sim.finished; tick++) 
     next++;
   }
 }
-console.log(JSON.stringify({ size, seed, mode, roster, duration: +sim.time.toFixed(2),
+console.log(JSON.stringify({ size, seed, mode, roster, layout, formation, duration: +sim.time.toFixed(2),
   wallSeconds: +((performance.now() - started) / 1000).toFixed(3),
   motion: [...motion].map(([classId, m]) => ({ classId, meanSpeedFraction: +(m.speed / m.samples).toFixed(3),
     peakSpeedFraction: +m.peak.toFixed(3), reversePercent: +(m.reverse * 100 / m.samples).toFixed(1),
