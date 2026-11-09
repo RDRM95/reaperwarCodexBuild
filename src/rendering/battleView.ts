@@ -629,7 +629,7 @@ export class BattleView {
       }
       subject = this.subjectFor(ship);
     }
-    let gunnery: { position: THREE.Vector3; aim: THREE.Vector3 } | undefined;
+    let gunnery: { position: THREE.Vector3; aim: THREE.Vector3; signalLost?: boolean } | undefined;
     if (this.rig.mode === 'gunnery') {
       const id = this.gunneryLockedShipId ?? this.followId;
       const ship = id ? sim.getShip(id) : undefined;
@@ -638,7 +638,7 @@ export class BattleView {
         // optical orientation until the user explicitly chooses another POV.
         const station = this.rig.camera.position.clone();
         const aim = station.clone().add(new THREE.Vector3(0,0,-1000).applyQuaternion(this.rig.camera.quaternion));
-        gunnery = { position: station, aim };
+        gunnery = { position: station, aim, signalLost: true };
       }
       if (ship && ship.alive && !ship.escaped && !this.gunnerySignalLost) {
         // First-person optics always remain on the selected MAIN emitter.

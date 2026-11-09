@@ -30,4 +30,10 @@ describe('stable optical gunnery camera', () => {
     rig.setMode('tactical');rig.toggleGunneryZoom();
     expect(rig.gunneryZoomed).toBe(false);expect(rig.camera.fov).toBe(50);
   });
+  it('does not accumulate recoil movement after a station loses its signal',()=>{
+    const rig=new CameraRig(16/9);rig.setMode('gunnery');rig.addShake(1);
+    const position=new THREE.Vector3(2,3,4),aim=new THREE.Vector3(2,3,1004);
+    for(let n=0;n<30;n++)rig.update(.05,{gunnery:{position,aim,signalLost:true},fleetCentre:new THREE.Vector3()});
+    expect(rig.camera.position.toArray()).toEqual(position.toArray());
+  });
 });

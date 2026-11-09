@@ -128,7 +128,7 @@ export class CameraRig {
    * modes; `cinematic` supplies a framing pair; `projectile` is the tracked
    * round. Any may be undefined, in which case the rig falls back to tactical.
    */
-  update(dt: number, opts: { subject?: CameraSubject; cinematic?: CinematicFrame; projectile?: CameraSubject; gunnery?: { position: THREE.Vector3; aim: THREE.Vector3 }; fleetCentre: THREE.Vector3 }): void {
+  update(dt: number, opts: { subject?: CameraSubject; cinematic?: CinematicFrame; projectile?: CameraSubject; gunnery?: { position: THREE.Vector3; aim: THREE.Vector3; signalLost?: boolean }; fleetCentre: THREE.Vector3 }): void {
     const cam = this.camera;
     let instant = false;
     switch (this.mode) {
@@ -146,6 +146,7 @@ export class CameraRig {
       case 'gunnery': {
         const station = opts.gunnery;
         if (!station) return this.fallback(dt, opts.fleetCentre);
+        if (station.signalLost) this.shake = 0;
         this.desiredPos.copy(station.position);
         this.desiredLook.copy(station.aim);
         instant = true;
