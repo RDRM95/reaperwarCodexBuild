@@ -8,7 +8,7 @@ import type { BattleEvent, ShipState } from '@/simulation/types';
 import { getFaction } from '@/data/factions';
 import { CameraRig, type CameraSubject, type CinematicFrame } from './cameras';
 import { EffectsSystem } from './effects';
-import { buildEnvironment, type EnvironmentBuild } from './environment';
+import { buildEnvironment, disposeEnvironment, type EnvironmentBuild } from './environment';
 import { KM } from './geometry';
 import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
 import { InstancedFleet } from './instancedFleet';
@@ -152,7 +152,7 @@ export class BattleView {
     this.instances.dispose();
     this.effects.clear();
     this.nextBeamShieldAt.clear();
-    if (this.env) this.scene.remove(this.env.group);
+    if (this.env) { this.scene.remove(this.env.group); disposeEnvironment(this.env); }
     this.env = buildEnvironment(sim.config.environment);
     this.scene.add(this.env.group);
     this.sunLight.position.copy(this.env.sunDirection).multiplyScalar(10_000);
@@ -771,6 +771,8 @@ export class BattleView {
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();
+    disposeEnvironment(this.env);
+    this.scene.environment?.dispose();
     for (const v of this.visuals.values()) {
       for (const glow of v.glows) glow.material.dispose();
       if (v.tinted && !v.removed) v.built.group.traverse(object => {
