@@ -81,13 +81,14 @@ export function makePlanetTexture(style: PlanetStyle, size = 1024): THREE.Canvas
     const img = ctx.createImageData(w, h);
     const d = img.data;
     for (let y = 0; y < h; y++) {
-      const lat = (y / h - 0.5) * 2; // -1..1
+      const lat = (y / Math.max(1, h - 1) - 0.5) * 2; // -1..1
       const polar = Math.pow(Math.abs(lat), 6);
       for (let x = 0; x < w; x++) {
         // Wrap horizontally by sampling in a cylinder.
         const u = x / w;
-        const nx = Math.cos(u * Math.PI * 2) * 3 + 10;
-        const ny = Math.sin(u * Math.PI * 2) * 3 + 10;
+        const ring = Math.cos(lat * Math.PI / 2);
+        const nx = Math.cos(u * Math.PI * 2) * 3 * ring + 10;
+        const ny = Math.sin(u * Math.PI * 2) * 3 * ring + 10;
         const e = fbm(noise, nx + lat * 4, ny + lat * 7, 6) + 0.1 * fbm(noise, nx * 4, ny * 4, 3);
         const i = (y * w + x) * 4;
         let r: number, g: number, b: number;
@@ -130,29 +131,73 @@ export function makePlanetTexture(style: PlanetStyle, size = 1024): THREE.Canvas
   });
 }
 
+/** A planetary surface receives sunlight, not the camera-relative studio fill
+ * used to keep metallic ships legible. Its day/night boundary stays fixed as
+ * the spectator camera moves. Cloud alpha uses the same solar shading. */
+function planetSurfaceMaterial(map: THREE.Texture, sunDirection: THREE.Vector3, opacity = 1): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: { map: { value: map }, sunDirection: { value: sunDirection.clone().normalize() }, opacity: { value: opacity } },
+    vertexShader: `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
+      varying vec2 vUv; varying vec3 vWorldNormal;
+      void main(){
+        vUv = uv;
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: `
+      #include <logdepthbuf_pars_fragment>
+      uniform sampler2D map; uniform vec3 sunDirection; uniform float opacity;
+      varying vec2 vUv; varying vec3 vWorldNormal;
+      void main(){
+        #include <logdepthbuf_fragment>
+        vec4 albedo = texture2D(map, vUv);
+        float alpha = albedo.a * opacity;
+        if(alpha < 0.015) discard;
+        float daylight = max(0.0, dot(normalize(vWorldNormal), sunDirection));
+        vec3 irradiance = vec3(0.008, 0.012, 0.020) + vec3(1.12, 1.06, 0.98) * daylight;
+        gl_FragColor = vec4(albedo.rgb * irradiance, alpha);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false,
+  });
+}
+
 const ATMOSPHERE_VERT = `
+uniform vec3 sunDirection;
 varying vec3 vNormal;
 varying vec3 vView;
+varying vec3 vSun;
 void main(){
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vNormal = normalize(normalMatrix * normal);
-  vec4 mv = modelViewMatrix * vec4(position,1.0);
   vView = normalize(-mv.xyz);
+  vSun = normalize((viewMatrix * vec4(sunDirection, 0.0)).xyz);
   gl_Position = projectionMatrix * mv;
 }`;
 const ATMOSPHERE_FRAG = `
 uniform vec3 color;
-uniform float power;
+uniform float strength;
 varying vec3 vNormal;
 varying vec3 vView;
+varying vec3 vSun;
 void main(){
-  float rim = 1.0 - max(dot(vNormal, vView), 0.0);
-  float a = pow(rim, power);
-  gl_FragColor = vec4(color, a * 0.7);
+  float horizon = clamp(1.0 - dot(normalize(vNormal), normalize(vView)), 0.0, 1.0);
+  float limb = pow(horizon, 2.6);
+  float day = smoothstep(-0.25, 0.48, dot(normalize(vNormal), normalize(vSun)));
+  float forward = pow(max(0.0, dot(normalize(vSun), normalize(vView))), 12.0);
+  // No wide veil over the planet: scattering stays confined to its sunlit limb.
+  float density = limb * (0.025 + 0.46 * day + 0.055 * forward) * strength;
+  vec3 scattering = color * vec3(0.72, 0.86, 1.12) * (0.75 + 0.25 * forward);
+  gl_FragColor = vec4(scattering, clamp(density, 0.0, 0.75));
 }`;
 
-export function makeAtmosphere(radius: number, color: number): THREE.Mesh {
+export function makeAtmosphere(radius: number, color: number, sunDirection = new THREE.Vector3(0.55, 0.35, -0.75), strength = 1): THREE.Mesh {
   const mat = new THREE.ShaderMaterial({
-    uniforms: { color: { value: new THREE.Color(color) }, power: { value: 5.0 } },
+    uniforms: { color: { value: new THREE.Color(color) }, sunDirection: { value: sunDirection.clone().normalize() }, strength: { value: strength } },
     vertexShader: ATMOSPHERE_VERT,
     fragmentShader: ATMOSPHERE_FRAG,
     transparent: true,
@@ -160,7 +205,7 @@ export function makeAtmosphere(radius: number, color: number): THREE.Mesh {
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
-  const m = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.018, 64, 48), mat);
+  const m = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.012, 96, 64), mat);
   m.renderOrder = -1;
   return m;
 }
@@ -377,13 +422,15 @@ export function buildEnvironment(env: Environment): EnvironmentBuild {
 
   const addPlanet = (style: PlanetStyle, radius: number, position: THREE.Vector3, label: string, moon?: boolean) => {
     const tex = makePlanetTexture(style);
-    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0.0, color: 0xb8c0cc });
+    const mat = planetSurfaceMaterial(tex, sunDirection);
+    mat.transparent = false;
+    mat.depthWrite = true;
     const p = new THREE.Mesh(new THREE.SphereGeometry(radius, 96, 64), mat);
     p.position.copy(position);
-    p.rotation.y = 1.2;
+    p.rotation.set(0, 1.2, 1.1);
     p.name = 'planet';
     group.add(p);
-    const atm = makeAtmosphere(radius, style.atmosphere);
+    const atm = makeAtmosphere(radius, style.atmosphere, sunDirection);
     atm.position.copy(position);
     group.add(atm);
     planet = p;
@@ -457,4 +504,42 @@ export function buildEnvironment(env: Environment): EnvironmentBuild {
   sky.push(sun);
 
   return { group, sunDirection, skyObjects: sky, planet, name };
+}
+
+/** Release all procedural landmark/sky GPU resources between redeployments.
+ * Materials/geometries are often shared by dozens of relay/Citadel meshes,
+ * so every distinct resource is disposed exactly once.
+ */
+export function disposeEnvironment(env: EnvironmentBuild): void {
+  const geometries = new Set<THREE.BufferGeometry>();
+  const materials = new Set<THREE.Material>();
+  const textures = new Set<THREE.Texture>();
+  env.group.traverse((node) => {
+    const renderable = node as THREE.Object3D & {
+      geometry?: THREE.BufferGeometry;
+      material?: THREE.Material | THREE.Material[];
+    };
+    // Three.js sprites may share the engine's global quad geometry.
+    // Only dispose the geometries this environment created itself.
+    if (!(node as THREE.Sprite).isSprite && renderable.geometry) geometries.add(renderable.geometry);
+    const candidates = renderable.material === undefined ? []
+      : Array.isArray(renderable.material) ? renderable.material : [renderable.material];
+    for (const material of candidates) {
+      if (materials.has(material)) continue;
+      materials.add(material);
+      if ((material as THREE.ShaderMaterial).isShaderMaterial) {
+        for (const uniform of Object.values((material as THREE.ShaderMaterial).uniforms)) {
+          const texture = uniform.value as THREE.Texture | null;
+          if (texture?.isTexture) textures.add(texture);
+        }
+      }
+      for (const property of Object.values(material)) {
+        const texture = property as THREE.Texture | null;
+        if (texture && texture.isTexture) textures.add(texture);
+      }
+    }
+  });
+  for (const geometry of geometries) geometry.dispose();
+  for (const material of materials) material.dispose();
+  for (const texture of textures) texture.dispose();
 }
