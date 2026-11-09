@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test('a thousand-ship battle brings rear batteries into action without collapsing its width', async ({ page }, info) => {
-  test.setTimeout(240_000);
+  // Full-suite software WebGL runs share CPU with other browser workers. One
+  // CI run exceeded four minutes while an identical parallel run passed.
+  // This is a correctness/visual fixture; its assertions do not imply GPU FPS.
+  test.setTimeout(420_000);
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto('/');
