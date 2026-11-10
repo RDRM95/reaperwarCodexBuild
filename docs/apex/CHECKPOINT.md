@@ -2,7 +2,7 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 10 Nov 2026, 15:00 UTC — Reaper visual overhaul
+## State on 10 Nov 2026, 15:30 UTC — Reaper visual overhaul
 
 Read this section first. Everything below it is older.
 
@@ -11,31 +11,33 @@ Read this section first. Everything below it is older.
 | PR | What | Evidence |
 |---|---|---|
 | #28 (`a1d2d9c`) | Instanced batches skip a template's hidden stand-in limbs (46–57 % fewer vertices per instanced Reaper); Ascendant renders at 300 units | `docs/apex/qa/INSTANCED_REAPER_LIMBS_2026-11-10.md` |
-| #29 (`2270474`) | Reaper hulls rebuilt: lofted carapace with armour bands, stepped hood, ribbed ventral cavity, faceted plated limbs with knuckles and blade claws, readable graphite palette; lengths, muzzle and engine nodes unchanged; triangles 1.16–1.29× | `docs/apex/REAPER_VISUAL_QA_2026-11-10.md`, `docs/apex/qa/reaper-visual-20261110/` |
+| #29 (`2270474`) | Reaper hulls rebuilt: lofted carapace with armour bands, stepped hood, ribbed ventral cavity, faceted plated limbs with knuckles and blade claws, readable graphite palette; lengths, muzzle and engine nodes unchanged | `docs/apex/REAPER_VISUAL_QA_2026-11-10.md`, `docs/apex/qa/reaper-visual-20261110/` |
 | #30 (`ca6f4c5`) | Limb travel and combat stances, slow and limb by limb (claw-tip shift on a capital 14 m → 230 m) | `docs/apex/REAPER_LIMB_STANCES_QA_2026-11-10.md` |
+| #31 (`6dcd03f`) | Camera presence: over-the-carapace Reaper view; follow share of a Reaper 25 % → 45 % of the frame's width, solo cinematic 16 % → 27 %; small hulls unchanged | `docs/apex/REAPER_CAMERA_QA_2026-11-10.md` |
+| #32 (`e5c9b41`) | Local weapon light: a fixed pool of two point lights for charging and firing emitters | `docs/apex/REAPER_EMITTER_LIGHT_QA_2026-11-10.md` |
+| #34 (`496ebe5`) | Curved armour shading (creased normals) on bands, hood shells and limb sleeves; triangle budgets nearly used up | `docs/apex/REAPER_CURVED_ARMOUR_QA_2026-11-10.md` |
 
-**Merged today (sandbox, base `main`):** #32 (`bfb66b5`, port of #28) and #33 (`7ba24bd`, port of #29); Pages deployed from `7ba24bd`.
+**Merged today (sandbox, base `main`):** #32 (`bfb66b5`, port of Codex #28), #33 (`7ba24bd`, port of #29), #34 (`40f7e32`, port of #30). Pages deployed after each.
 
 **Open at the time of writing — check their state before doing anything else:**
 
-- Codex #31 `feat/reaper-camera-presence-20261110`: over-the-carapace Reaper view, closer follow and solo cinematic orbit for capital-scale hulls (follow share 25 % → 45 %); gate green locally. Sandbox port is committed locally on `feat/reaper-camera-presence-20261110` in that repository (not pushed; push after sandbox #34 merges).
-- Codex #32 `feat/reaper-emitter-glow-20261110`: a pool of two point lights at the emitters of charging and firing Reapers; gate green locally. Not yet ported to the sandbox (copy `src/rendering/emitterLights.ts` and the `BattleView` hunk; the sandbox's `battleView.ts` differs, apply by hand).
-- Sandbox #34 `feat/reaper-limb-stances-20261110`: port of Codex #30.
-- All three were opened with every check still running. Merge each when its checks pass and the head is mergeable; #31 and #32 touch disjoint files.
+- Codex #35 `feat/reaper-damage-glow-20261110`: Reaper damage response (seams run hot and flicker below 60 % hull, armour stays graphite). Gate green locally on top of #32; merge when its checks pass. Then port to the sandbox: copy `src/rendering/damageGlow.ts` and apply the `tintDamage` and per-frame hunks of `BattleView` by hand (the sandbox's `battleView.ts` differs), with a node test like `tests/emitter-lights.test.mjs`.
+- Sandbox #35 `feat/reaper-camera-presence-20261110`: combined port of Codex #31, #32 and #34; `cameras.ts`, `emitterLights.ts` and `ships/reaper.ts` are byte-identical with the Codex build. Merge when its checks pass.
 
-**Concurrent work by the other assistant — do not duplicate:** `fix/reaper-structural-lod-20261110` (no pull request yet): level-of-detail policy for Reapers (`shipLod.ts`, `applyShipLod`, `selectReaperRigDetail(level)`), which covers the defect that hero Reapers never reduce detail. It was branched before #29 and edits `battleView.ts` near the `animateReaperRig` call and the signature of `selectReaperRigDetail`; merging it after #30/#32 is a small mechanical merge. Their open PRs #26 (draft, reach) and #27 (Oculus damage) are untouched.
+**Concurrent work by the other assistant — do not duplicate:** `fix/reaper-structural-lod-20261110` (no pull request when this was written): level-of-detail policy for Reapers (`shipLod.ts`, `applyShipLod`, `selectReaperRigDetail(level)`), covering the defect that hero Reapers never reduce detail. It was branched before #29 and edits `battleView.ts` near the `animateReaperRig` call and the signature of `selectReaperRigDetail`; merging it after today's work is a small mechanical merge. Their open PRs #26 (draft, reach) and #27 (Oculus damage) are untouched.
 
-**How to reproduce the evidence.** `npm run build && npx vite preview --port 4191 --strictPort`, then `node --import tsx/esm scripts/reaper-visual-qa.mjs <outDir> http://127.0.0.1:4191 after`: six exact-orbit views plus quarter and close views of each Reaper class, close/medium/distant, frigate-beside-capital, a 20-Reaper fleet, deep space and Earth orbit, and triangle counts. All captures so far are cloud Chromium with SwiftShader: shape, materials and framing only; nothing was measured on the RTX 5090.
+**How to reproduce the evidence.** `npm run build && npx vite preview --port 4191 --strictPort`, then `node --import tsx/esm scripts/reaper-visual-qa.mjs <outDir> http://127.0.0.1:4191 after`: six exact-orbit views plus quarter and close views of each Reaper class, close/medium/distant, frigate-beside-capital, a 20-Reaper fleet, deep space and Earth orbit, and triangle counts. All captures so far are cloud Chromium with SwiftShader: shape, materials and framing only; nothing was measured on the RTX 5090, including the cost of the two emitter lights.
 
 **What still falls short, in order of visible gain:**
 
-1. Surfaces are flat-shaded facets: no curved shells, normal maps or micro-detail. Smooth normals on the carapace bands with hard edges only at plate lips would read as curved armour.
-2. Damage response: only the mesh named `hull` gets the damage tint; the carapace, plates and limbs do not, and there is no local light from hits.
-3. No bloom or exposure pass in the Codex build (the sandbox has an optional bloom preset); the emitter and seams would benefit from a restrained one.
-4. Two-subject cinematic shots still frame by the distance between ships; a Reaper fighting a target 20 km away is small in them. The tactical default distance is unchanged.
-5. Hull rotation, acceleration and inertia are the simulation's (P1 work package A, below); the render side adds no hull motion.
-6. Static stand-in limbs and instanced Reapers show the neutral pose; a hull crossing the articulated range mid-fight changes pose.
-7. Issue #16's P0 checklist (Sovereign-class, Harbinger, destroyer) is not ticked: that needs the owner's manual silhouette judgement against private references.
+1. Reaper death: the hull vanishes whole, because the debris code only takes a visual's direct children and the Reaper's meshes sit under one model root. A staged breakup (limbs, hood, blade) is the next visible step.
+2. No bloom or exposure pass in the Codex build (the sandbox has an optional bloom preset); the emitter, seams and beams would benefit from a restrained one.
+3. Two-subject cinematic shots frame by the distance between ships; a Reaper fighting a target 20 km away is small in them. The tactical default distance is unchanged.
+4. No normal maps or micro-detail; silhouettes of the eight-sided limb sleeves are still eight-sided up close; further geometry needs a level-of-detail split first (see the other assistant's branch).
+5. The emitter itself is hidden under the hood from most angles; its light shows, the lens does not.
+6. Hull rotation, acceleration and inertia are the simulation's (P1 work package A, below); the render side adds no hull motion.
+7. Static stand-in limbs and instanced Reapers show the neutral pose and no damage glow.
+8. Issue #16's P0 checklist (Sovereign-class, Harbinger, destroyer) is not ticked: that needs the owner's manual silhouette judgement against private references.
 
 **P1 combat-flow branches (not merged, no pull requests):** `feat/combat-reach-targeting-mass-20261109` (work package A: has PR #26 merged in, RC1+RC5 at `57bf531`, then a work-in-progress commit `0f01204` with the interrupted agent's unfinished RC2 edits and `tests/feasible-targeting.test.ts`) and `feat/fleet-composer-silhouette-20261109` (work package B: composer, headings, altitude bands and staging to `8725e8f`, then work-in-progress `6d30592`). Both are pushed; the work-in-progress commits typecheck but their tests were not run. The agents stopped when the session was interrupted. Do not interfere with #26.
 
