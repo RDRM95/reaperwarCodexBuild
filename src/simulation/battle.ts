@@ -25,7 +25,7 @@ import { assertLoreCompatible } from '@/timelines/lore';
 import { fleetDecision, fleetEngagementRange, movementGoal, shipDecision, type AiContext } from './ai';
 import { hardcoreReaperBeamDamage } from './reaperHardcore';
 import { applyDamage, applyProjectileDamage, hitProbability } from './damage';
-import { FLEET_LAYOUT_VERSION_KEY, composeFleetLayout, fleetSlotSeed, parseFleetLayoutVersion } from './formations';
+import { FLEET_LAYOUT_VERSION_KEY, composeFleetLayout, fleetSlotSeed, layoutNoise, parseFleetLayoutVersion } from './formations';
 import { summarise } from './results';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
@@ -43,6 +43,13 @@ import {
 
 /** Hangar time for a fighter to reload torpedoes alongside its carrier. */
 const REARM_SECONDS = 12;
+/** Seeded wing stations of one carrier (fleet-local, relative to the carrier's
+ * own slot): the four squadron lanes in a seeded order, the side of the carrier
+ * the wings stand on, their stand-off beside and ahead of it, above or below
+ * its plane, and the echelon skew of successive wings. SIMULATION_ESTIMATE:
+ * a wing block is kept within about two kilometres of its carrier so a recall
+ * or rearm is a short flight; the lane pitch (1.45 nominal km) is unchanged. */
+interface CarrierWingPattern { lanes: number[]; side: 1 | -1; beside: number; ahead: number; above: 1 | -1; skew: number }
 import type {
   BattleConfig,
   BattleEvent,
@@ -107,6 +114,7 @@ export class BattleSimulation implements AiContext {
   private readonly carrierFighters = new Map<string, ShipState[]>();
   /** Immutable squadron lane numbers; capped Oculus deployments per fleet. */
   private readonly fighterLaunchSerial = new Map<string, number>();
+  private readonly carrierWingPatterns = new Map<string, CarrierWingPattern>();
   private readonly oculusLaunchCount = new Map<string, number>();
   private primaryVolleys = new PrimaryVolleyControl();
   /** Listener for events (renderer/UI). */
@@ -632,17 +640,24 @@ export class BattleSimulation implements AiContext {
           const f = this.createShip(h.classId, fleet.spec, undefined, ship.id);
           const number = this.fighterLaunchSerial.get(ship.id) ?? 0;
           this.fighterLaunchSerial.set(ship.id, number + 1);
-          const lane = number % 4 - 1.5;
+          const pattern = this.carrierWingPattern(ship);
+          const lane = pattern.lanes[number % 4];
           const wing = Math.floor(number / 4);
-          const off = rotateY(v3(lane * 0.30, -0.06, 0.18 + wing * 0.11), Math.atan2(ship.heading.x, ship.heading.z));
+          const off = rotateY(v3(lane * 0.30, -0.06 * pattern.above, 0.18 + wing * 0.11), Math.atan2(ship.heading.x, ship.heading.z));
           f.pos = add(ship.pos, off);
           f.prevPos = clone(f.pos);
           f.heading = clone(ship.heading);
           f.prevHeading = clone(ship.heading);
           f.vel = scale(ship.heading, 0.6);
-          // Repeatable four-craft wing structure, with spacing across wings.
-          f.slot = v3(lane * 1.45 * S, (1.1 + wing * 0.65 + (number % 2) * 0.25) * S,
-            (2.5 + wing * 1.30) * S);
+          // Repeatable four-craft wing structure beside the carrier's own
+          // station, with spacing across wings: every carrier's wings form
+          // their own pattern next to it instead of one shared knot ahead of
+          // the fleet centre (combat audit FS7).
+          f.slot = v3(
+            ship.slot.x + pattern.side * pattern.beside + lane * 1.45 * S + wing * pattern.skew * S,
+            ship.slot.y + pattern.above * (1.1 + wing * 0.65 + (number % 2) * 0.25) * S,
+            ship.slot.z + pattern.ahead + wing * 1.30 * S,
+          );
           this.ships.push(f);
           this.shipById.set(f.id, f);
           this.emit({ t: this.time, type: 'ship_deployed', shipId: f.id, classId: f.classId, faction: f.faction, side: f.side, name: f.name });
@@ -674,6 +689,33 @@ export class BattleSimulation implements AiContext {
       f.rearmTimer = undefined;
       this.emit({ t: this.time, type: 'fighter_rearmed', shipId: f.id, carrierId: ship.id });
     }
+  }
+
+  /** The seeded, fixed wing geometry of a carrier, from the battle seed and the
+   * carrier's id only (layout noise, never the combat RNG). The wings stand on
+   * the carrier's outboard side (away from the fleet centre line; seeded when
+   * the carrier is on it), 0.8-1.6 km beside it and 1-1.6 km ahead, above or
+   * below its plane by seed, in a seeded lane order with a seeded echelon skew. */
+  private carrierWingPattern(carrier: ShipState): CarrierWingPattern {
+    let pattern = this.carrierWingPatterns.get(carrier.id);
+    if (pattern) return pattern;
+    const seed = fleetSlotSeed(this.config.seed, carrier.id);
+    const noise = (salt: number): number => layoutNoise(seed, 0, salt);
+    const lanes = [-1.5, -0.5, 0.5, 1.5];
+    for (let i = lanes.length - 1; i > 0; i--) {
+      const j = Math.floor(layoutNoise(seed, i, 1) * (i + 1));
+      [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+    }
+    pattern = {
+      lanes,
+      side: Math.abs(carrier.slot.x) > 1e-6 ? (carrier.slot.x > 0 ? 1 : -1) : noise(2) < 0.5 ? -1 : 1,
+      beside: (2.0 + noise(3) * 2.0) * S,
+      ahead: (2.5 + noise(4) * 1.5) * S,
+      above: noise(5) < 0.5 ? 1 : -1,
+      skew: (noise(6) - 0.5) * 0.8,
+    };
+    this.carrierWingPatterns.set(carrier.id, pattern);
+    return pattern;
   }
 
   // ---------------------------------------------------------------- weapons
