@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SCENE_COLOUR_GLSL, sceneDefines } from './sceneColour';
 import { merge } from './geometry';
 import { getShipTemplate, type BuiltShip } from './ships';
 
@@ -28,7 +29,8 @@ function shieldMaterial(): THREE.ShaderMaterial {
     vertexShader: `varying vec3 vP; varying vec3 vN; varying vec3 vV;
       void main(){ vP=position; vN=normalize(normalMatrix*normal);
         vec4 mv=modelViewMatrix*vec4(position,1.0); vV=-mv.xyz; gl_Position=projectionMatrix*mv; }`,
-    fragmentShader: `uniform vec3 colour; uniform float opacity; uniform vec3 impact;
+    fragmentShader: `${SCENE_COLOUR_GLSL}
+      uniform vec3 colour; uniform float opacity; uniform vec3 impact;
       uniform float age; uniform float extent; uniform float collapse;
       varying vec3 vP; varying vec3 vN; varying vec3 vV;
       void main(){
@@ -38,8 +40,9 @@ function shieldMaterial(): THREE.ShaderMaterial {
         vec2 q=abs(mod(vP.xz/max(extent,0.01)*28.0,vec2(1.0,1.732))-vec2(0.5,0.866));
         float hex=smoothstep(0.38,0.47,max(dot(q,vec2(0.866,0.5)),q.y));
         float alpha=opacity*(0.12+rim*0.65+wave*(0.35+hex*0.45)+collapse*0.25);
-        gl_FragColor=vec4(mix(colour,vec3(0.85,0.95,1.0),wave*0.65+collapse*0.25),min(0.8,alpha));
+        gl_FragColor=additiveOut(mix(colour,vec3(0.85,0.95,1.0),wave*0.65+collapse*0.25),min(0.8,alpha));
       }`,
+    defines: sceneDefines(),
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide,
   });
 }

@@ -20,6 +20,7 @@ import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRi
 import { DAMAGE_ONSET, REAPER_ARMOUR_MESHES, REAPER_SEAM_MESHES, reaperDamageGlow, type ReaperDamageGlow } from './damageGlow';
 import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
 import { bloomFor, createBloomPipeline, type BloomPipeline } from './bloom';
+import { TONE_EXPOSURE, setHdrScene } from './sceneColour';
 
 /**
  * Binds a BattleSimulation to a Three.js scene. The simulation owns all
@@ -115,11 +116,13 @@ export class BattleView {
   constructor(canvas: HTMLCanvasElement, sim: BattleSimulation, settings: GraphicsSettings) {
     this.settings = settings;
     this.instances.configure(settings.quality);
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'low', powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+    const bloom = bloomFor(settings);
+    // With bloom the scene is antialiased in its own target, so the canvas does not need a multisampled buffer too.
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'low' && !bloom, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.pixelRatioCap));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = TONE_EXPOSURE;
     this.rig = new CameraRig(canvas.clientWidth / Math.max(1, canvas.clientHeight));
     // Image-based lighting so metallic hull plating reads as metal rather than
     // black: a neutral PMREM environment at low intensity.
@@ -156,7 +159,8 @@ export class BattleView {
     this.farPoints.frustumCulled = false;
     this.farPoints.name = 'far-points';
     this.scene.add(this.farPoints);
-    const bloom = bloomFor(settings);
+    // Hand-written shaders made from here on hand their colours to the HDR target (or straight to the canvas).
+    setHdrScene(bloom !== null);
     if (bloom) {
       this.bloom = createBloomPipeline(this.renderer, this.scene, this.rig.camera, bloom);
       this.effects.setHdrBeams(bloom.beamBoost);
@@ -836,6 +840,7 @@ export class BattleView {
 
   dispose(): void {
     this.bloom?.dispose();
+    setHdrScene(false);
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();

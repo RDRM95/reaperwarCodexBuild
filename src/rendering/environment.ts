@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SCENE_COLOUR_GLSL, sceneDefines } from './sceneColour';
 import type { Environment } from '@/simulation/types';
 import { Rng } from '@/core/rng';
 
@@ -179,6 +180,7 @@ void main(){
   gl_Position = projectionMatrix * mv;
 }`;
 const ATMOSPHERE_FRAG = `
+${SCENE_COLOUR_GLSL}
 uniform vec3 color;
 uniform float strength;
 varying vec3 vNormal;
@@ -192,7 +194,7 @@ void main(){
   // No wide veil over the planet: scattering stays confined to its sunlit limb.
   float density = limb * (0.025 + 0.46 * day + 0.055 * forward) * strength;
   vec3 scattering = color * vec3(0.72, 0.86, 1.12) * (0.75 + 0.25 * forward);
-  gl_FragColor = vec4(scattering, clamp(density, 0.0, 0.75));
+  gl_FragColor = additiveOut(scattering, clamp(density, 0.0, 0.75));
 }`;
 
 export function makeAtmosphere(radius: number, color: number, sunDirection = new THREE.Vector3(0.55, 0.35, -0.75), strength = 1): THREE.Mesh {
@@ -200,6 +202,7 @@ export function makeAtmosphere(radius: number, color: number, sunDirection = new
     uniforms: { color: { value: new THREE.Color(color) }, sunDirection: { value: sunDirection.clone().normalize() }, strength: { value: strength } },
     vertexShader: ATMOSPHERE_VERT,
     fragmentShader: ATMOSPHERE_FRAG,
+    defines: sceneDefines(),
     transparent: true,
     side: THREE.BackSide,
     blending: THREE.AdditiveBlending,
@@ -243,9 +246,10 @@ export function makeStarfield(count = 6000, radius = 180_000): THREE.Points {
     vertexShader: `
       attribute float size; attribute vec3 color; varying vec3 vColor; uniform float pixelRatio;
       void main(){ vColor = color; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = size * pixelRatio; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `
+    fragmentShader: `${SCENE_COLOUR_GLSL}
       varying vec3 vColor;
-      void main(){ vec2 c = gl_PointCoord - 0.5; float d = length(c); float a = smoothstep(0.5, 0.1, d); gl_FragColor = vec4(vColor, a); }`,
+      void main(){ vec2 c = gl_PointCoord - 0.5; float d = length(c); float a = smoothstep(0.5, 0.1, d); gl_FragColor = blendedOut(vColor, a); }`,
+    defines: sceneDefines(),
     transparent: true,
     depthWrite: false,
   });
