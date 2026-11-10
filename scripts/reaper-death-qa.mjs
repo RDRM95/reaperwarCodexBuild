@@ -1,4 +1,4 @@
-/** Reaper death QA: a destroyed capital 3.2 s and 7 s into its breakup, against a running build.
+/** Reaper death QA: a destroyed capital 1.2, 3.2, 5, 7 and 10 s after the kill, against a running build.
  *
  *   npx vite preview --port 4191 --strictPort
  *   node --import tsx/esm scripts/reaper-death-qa.mjs <outDir> <baseURL> <repoRoot> <label>
@@ -22,7 +22,7 @@ try {
   const config = buildCustomBattle({ seed: 42, rulesId: 'canon_me3', environment: 'deep_space', startingDistanceKm: 40, maxDuration: 300,
     sideA: { faction: 'alliance', name: 'Fifth Fleet', formation: 'line_abreast', counts: { alliance_cruiser: 2 } },
     sideB: { faction: 'reaper', name: 'Reapers', formation: 'line_abreast', counts: { reaper_capital: 2 } } });
-  for (const after of [3.2, 7]) {
+  for (const after of [1.2, 3.2, 5, 7, 10]) {
     await page.goto(base);
     await page.waitForSelector('[data-menu="quick-battle"]');
     await page.waitForFunction(() => getComputedStyle(document.getElementById('boot')).opacity === '0');
@@ -38,11 +38,11 @@ try {
       ship.hull = 0; ship.alive = false;
       const steps = Math.round(after * 30);
       for (let i = 0; i < steps; i++) b.view.update(1 / 30, 1);
-      const cam = b.view.rig.camera; const d = 30, pitch = 0.25, yaw = h + 0.7, cp = Math.cos(pitch);
+      const cam = b.view.rig.camera; const d = 34, pitch = 0.25, yaw = h + 0.7, cp = Math.cos(pitch);
       cam.position.set(c.x + Math.sin(yaw) * cp * d, c.y + Math.sin(pitch) * d, c.z + Math.cos(yaw) * cp * d);
       cam.lookAt(c.x, c.y, c.z); cam.near = 0.05; cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
       const fl = b.view.fillLight; const dir = cam.getWorldDirection(cam.position.clone()); fl.position.copy(cam.position); fl.target.position.copy(cam.position).add(dir.multiplyScalar(100)); fl.target.updateMatrixWorld(true);
-      b.view.renderer.render(b.view.scene, cam);
+      b.view.render();
       return { debris: b.view.effects.debris?.length ?? null };
     }, { cfg: config, after });
     await page.screenshot({ path: `${outDir}/${label}-death-${after}s.jpg`, type: 'jpeg', quality: 88 });
