@@ -45,12 +45,14 @@ export const PALETTES: Record<string, FactionPalette> = {
     glow: new THREE.MeshBasicMaterial({ color: 0x64b7ff, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }),
   },
   reaper: {
-    hull: std(0x111924, { metalness: 0.78, roughness: 0.35, emissive: 0x07101c, emissiveIntensity: 0.2 }),
-    hullDark: std(0x080e18, { metalness: 0.8, roughness: 0.38, emissive: 0x030914, emissiveIntensity: 0.15 }),
-    accent: std(0x263447, { metalness: 0.72, roughness: 0.4 }),
-    engine: new THREE.MeshStandardMaterial({ color: 0xff1838, emissive: 0xff1230, emissiveIntensity: 4, roughness: 0.3, metalness: 0 }),
-    windows: new THREE.MeshStandardMaterial({ color: 0xf8334b, emissive: 0xe8203a, emissiveIntensity: 2.5 }),
-    glow: new THREE.MeshBasicMaterial({ color: 0xff2038, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }),
+    // CINEMATIC_DESIGN §7.8: graphite hull, charcoal recesses, cold dark-blue
+    // plate sheen, crimson running lights and an orange-red aperture. No brown.
+    hull: std(0x0e1016, { metalness: 0.85, roughness: 0.32, emissive: 0x02030a, emissiveIntensity: 1 }),
+    hullDark: std(0x07080c, { metalness: 0.8, roughness: 0.44, emissive: 0x010204, emissiveIntensity: 1 }),
+    accent: std(0x1a2230, { metalness: 0.84, roughness: 0.34, envMapIntensity: 1.6 }),
+    engine: new THREE.MeshStandardMaterial({ color: 0xff5a1f, emissive: 0xff5a1f, emissiveIntensity: 4.5, roughness: 0.3, metalness: 0 }),
+    windows: new THREE.MeshStandardMaterial({ color: 0xd01030, emissive: 0xd01030, emissiveIntensity: 2.5 }),
+    glow: new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }),
   },
   asari: {
     hull: std(0xc4bcd9, { metalness: 0.45, roughness: 0.3 }),
