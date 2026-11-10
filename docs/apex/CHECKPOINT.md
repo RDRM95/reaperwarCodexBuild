@@ -2,6 +2,15 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
+## State on 10 Nov 2026, 02:50 UTC
+
+- **Reaper visual overhaul** (the owner's HIGH task of 10 Nov). Diagnosis first: rendered lengths already match the catalogue (Sovereign-class 20 units = 2,000 m, Harbinger 24, destroyer 1.6, frigate 1.7; 1 unit = 100 m), so the "too small" reading comes from the model, not the scale chain: six smooth glossy tube limbs with ball joints that dominate the silhouette, a short smooth lathe body with no layered plating, cavities, dorsal ridge or spinal housing (body diameter about 15 % of length where the design says under a tenth), a navy plastic-like palette with pink confetti running lights, and no surface detail to give a sense of size. Slices, each its own branch and pull request:
+  1. **Carapace, hood cavity, armoured limbs and the §7.8 graphite palette** on `feat/reaper-carapace-limbs-20261110` (in progress; first commit `08f53b3`): aft blade with overlapping longitudinal bands and a split tail housing, stepped hood shells, a ribbed ventral cavity at the limb roots, faceted sleeved limbs with mechanical knuckles and blade claws; lengths, eye/muzzle and engine nodes unchanged; six-view, close/medium/distant, frigate-beside-capital, fleet and two-lighting captures to `docs/apex/qa/reaper-visual-20261110/` with a QA document.
+  2. **Instancing defects.** 2a merged as PR #28 (`a1d2d9c`): `createBatch` merged the Reaper rig's hidden static stand-in limbs into every instanced Reaper (12,744 of the Sovereign template's 22,260 vertices, 57 %; Harbinger 46 %; destroyer 48 %); the batch now skips hidden layers; the Ascendant renders at its catalogue 300 units instead of 360. Sandbox port: PR #32. 2b, after slice 1 names structural parts: plates, eye and lights drop at the reduced level because `plates` is a detail mesh name, and `applyLod` only walks direct children so hero Reapers never reduce.
+  3. **Motion and presence** (limb articulation per class, render-side deliberateness within the simulation's turn rates) and the sandbox ports of slices 1 and 2.
+- **P1 status.** Work package A merged the owner's PR #26 (`fix/class-engagement-reach-20261109`, rear-rank reach and class cruise limits) into its branch as instructed, keeps its modules and fixture, and is on RC1+RC5 (`57bf531`); work package B has the seeded order-of-battle composer, per-hull headings, reach-bounded depth, altitude bands and staging (`8725e8f`) and is at its gate.
+- **Owner's open pull requests:** Codex #26 (draft, reach; reconciled by work package A rather than duplicated), #27 (Oculus damage separated from the Annihilation beam multiplier; independent of P1), sandbox #30 (the port of #26).
+
 ## State on 9 Nov 2026, 21:30 UTC
 
 - **Audit done.** `docs/apex/COMBAT_AUDIT_2026-11-09.md`: combat flow root causes RC1–RC9 and formation findings FS1–FS8, with executed measurements on `be9a99c` (the head after PR #17) and `6148253` (before it), probe scripts and before/after numbers.
