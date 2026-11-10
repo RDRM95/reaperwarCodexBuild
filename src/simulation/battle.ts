@@ -112,6 +112,8 @@ export class BattleSimulation implements AiContext {
   private hadesVolleys = new HadesVolleyCoordinator();
   private separationField?: SeparationField;
   private weaponTargetField?: WeaponTargetField;
+  private readonly mountReaches = new Map<string, number>();
+  private readonly missileNear = { tick: -1, shipId: '', reach: 0, scanned: 0, found: false };
   /** Fighter references indexed by carrier: no full-fleet scan per hangar per tick. */
   private readonly carrierFighters = new Map<string, ShipState[]>();
   /** Immutable squadron lane numbers; capped Oculus deployments per fleet. */
@@ -723,8 +725,44 @@ export class BattleSimulation implements AiContext {
     }
   }
 
+  /** Largest distance of any of a hull's mounts from its centre (a mount's world position is the centre plus its rotated offset). */
+  private mountReach(ship: ShipState): number {
+    let reach = this.mountReaches.get(ship.id);
+    if (reach === undefined) {
+      reach = 0;
+      for (const weapon of ship.weapons) reach = Math.max(reach, length(weapon.offset));
+      this.mountReaches.set(ship.id, reach);
+    }
+    return reach;
+  }
+
+  /** Whether a live hostile missile is within `reach` of the hull's centre. Missiles do not move while hulls act. */
+  private hostileMissileNear(ship: ShipState, reach: number): boolean {
+    const cache = this.missileNear;
+    if (cache.tick !== this.tick || cache.shipId !== ship.id || cache.reach !== reach) {
+      cache.tick = this.tick; cache.shipId = ship.id; cache.reach = reach; cache.scanned = 0; cache.found = false;
+    }
+    // A missile found earlier may since have been shot down, so a hit is re-checked from the start.
+    if (cache.found) { cache.scanned = 0; cache.found = false; }
+    for (let i = cache.scanned; i < this.missiles.length; i++) {
+      const m = this.missiles[i];
+      if (m.alive && m.side !== ship.side && distance(ship.pos, m.pos) <= reach) { cache.found = true; break; }
+    }
+    if (!cache.found) cache.scanned = this.missiles.length;
+    return cache.found;
+  }
+
   private tryFire(ship: ShipState, fleet: FleetState, w: WeaponState): void {
     const def = w.def;
+    // Exact shortcut for the common case of a ready mount with nothing to shoot at. A mount sits within
+    // mountReach of the hull's centre, so if no enemy (and, for point-defence lasers, no hostile missile) is
+    // within the weapon's range plus that distance of the centre, the search below cannot find a solution.
+    const field = this.weaponTargetField;
+    if (field) {
+      const guard = def.range + this.mountReach(ship) + 1e-6;
+      if (!field.hasCandidates(ship.side, ship.pos, guard)
+        && !(def.antiSmall && def.kind === 'gardian' && this.hostileMissileNear(ship, guard))) return;
+    }
     const origin = this.weaponWorldOffset(ship, w);
     let target: ShipState | undefined;
     let missile: Missile | undefined;
