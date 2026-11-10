@@ -1,0 +1,35 @@
+{
+  "baselineCommit": "f8e9681937ca7c1e063265550cc4ee59aeb0ddf8",
+  "comparison": "Reaper structural LOD fix on fix/reaper-structural-lod-20261110",
+  "method": "Node + tsx. Construct InstancedFleet; begin/add/end one live ship at full or reduced LOD; count visible InstancedMesh parts and their geometry position vertices. Values describe a class batch, not rendered FPS, GPU frame time, or per-vessel draw calls.",
+  "baselineObtainedFrom": "git archive f8e9681937ca7c1e063265550cc4ee59aeb0ddf8 into an isolated temporary directory, using the same installed dependencies",
+  "models": [
+    {
+      "classId": "reaper_capital",
+      "baseline": { "full": { "parts": 8, "vertices": 9516 }, "reduced": { "parts": 4, "vertices": 5124 } },
+      "fixed": { "full": { "parts": 8, "vertices": 9516 }, "reduced": { "parts": 6, "vertices": 7716 } }
+    },
+    {
+      "classId": "harbinger",
+      "baseline": { "full": { "parts": 9, "vertices": 15024 }, "reduced": { "parts": 5, "vertices": 5304 } },
+      "fixed": { "full": { "parts": 9, "vertices": 15024 }, "reduced": { "parts": 7, "vertices": 13224 } }
+    },
+    {
+      "classId": "reaper_destroyer",
+      "baseline": { "full": { "parts": 8, "vertices": 9040 }, "reduced": { "parts": 4, "vertices": 3712 } },
+      "fixed": { "full": { "parts": 8, "vertices": 9040 }, "reduced": { "parts": 6, "vertices": 7552 } }
+    },
+    {
+      "classId": "reaper_ascendant",
+      "baseline": { "full": { "parts": 10, "vertices": 9888 }, "reduced": { "parts": 6, "vertices": 5496 } },
+      "fixed": { "full": { "parts": 10, "vertices": 9888 }, "reduced": { "parts": 8, "vertices": 8088 } }
+    }
+  ],
+  "sovereignCounterfactual": {
+    "baselineReducedBatch": { "carapaceVisible": false, "bothAperturePartsVisible": false, "armSeamDetailVisible": true },
+    "fixedReducedBatch": { "carapaceVisible": true, "bothAperturePartsVisible": true, "armSeamDetailVisible": false },
+    "baselineHero": { "nestedArmSeams": 12, "stillVisibleAfterReduced": 12 },
+    "fixedHero": { "nestedArmSeams": 12, "stillVisibleAfterReduced": 0 }
+  },
+  "scope": "No mesh geometry, material, hull dimension, muzzle, engine node, simulation or save-format changes. More structural geometry intentionally remains visible at reduced LOD. Full-detail geometry counts are unchanged. Retained batch parts are shared across all instances of the class."
+}

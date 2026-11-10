@@ -12,7 +12,8 @@ import { buildEnvironment, disposeEnvironment, type EnvironmentBuild } from './e
 import { KM } from './geometry';
 import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
 import { InstancedFleet } from './instancedFleet';
-import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
+import { lodLevelSquared, type LodLevel } from './lod';
+import { applyShipLod, captureLodDetails, type LodDetail } from './shipLod';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -37,6 +38,7 @@ export interface ShipVisual {
   /** Current level of detail. */
   lod: LodLevel;
   reaperRig?: ReaperRig;
+  lodDetails: LodDetail[];
 }
 
 export interface GraphicsSettings {
@@ -215,7 +217,7 @@ export class BattleView {
     built.group.name = ship.id;
     built.group.userData.shipId = ship.id;
     this.scene.add(built.group);
-    v = { ship, built, glows, removed: false, tinted: false, lod: 'full',
+    v = { ship, built, glows, removed: false, tinted: false, lod: 'full', lodDetails: captureLodDetails(built.group, ship.role),
       reaperRig: isArticulatedReaper(ship) ? captureReaperRig(built.group, ship.id) : undefined };
     this.visuals.set(ship.id, v);
     this.placeVisual(v, 1);
@@ -258,12 +260,7 @@ export class BattleView {
   private applyLod(v: ShipVisual, level: LodLevel): void {
     if (v.lod === level) return;
     v.lod = level;
-    const g = v.built.group;
-    g.visible = level !== 'point';
-    for (const child of g.children) {
-      if ((child as THREE.Sprite).isSprite) child.visible = level === 'full';
-      else if (DETAIL_MESH_NAMES.has(child.name)) child.visible = level === 'full';
-    }
+    applyShipLod(v.built.group, v.lodDetails, level);
   }
 
   update(dt: number, alpha: number): void {
@@ -347,7 +344,7 @@ export class BattleView {
         const detailRange = Math.max(55, lengthUnits * 10);
         const detailed = articulatedHeroes < 24 && (priority ||
           (distanceSquared <= detailRange * detailRange && articulatedHeroes < 12));
-        selectReaperRigDetail(v.reaperRig, detailed);
+        selectReaperRigDetail(v.reaperRig, detailed, level);
         if (detailed) {
           articulatedHeroes++;
           animateReaperRig(v.reaperRig, ship, sim.time, dt);

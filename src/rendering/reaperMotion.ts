@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { ShipState } from '@/simulation/types';
+import type { LodLevel } from './lod';
 /** Match the Reaper beam emitter only; this is never weapon control. */
 const primaryGunneryMount = (ship: ShipState) =>
   ship.weapons.find(w => w.def.kind === 'reaper_beam' && !w.def.antiSmall) ??
@@ -106,9 +107,9 @@ export function animateReaperRig(rig: ReaperRig, ship: ShipState, time: number, 
 /** Switch between two merged static meshes and articulated mechanical parts.
  * The bulk fleet remains cheap; only a small number of hero ships animate.
  */
-export function selectReaperRigDetail(rig:ReaperRig,articulated:boolean):void{
+export function selectReaperRigDetail(rig:ReaperRig,articulated:boolean,level:LodLevel='full'):void{
   for(const part of rig.shoulders)part.visible=articulated;
   for(const part of rig.mandibles)part.visible=articulated;
   for(const part of rig.shutters)part.visible=articulated;
-  for(const mesh of rig.staticMeshes)mesh.visible=!articulated;
+  for(const mesh of rig.staticMeshes)mesh.visible=!articulated && (mesh.name !== 'reaper-static-seams' || level === 'full');
 }
