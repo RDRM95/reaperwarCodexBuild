@@ -2,7 +2,7 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 10 Nov 2026, 16:10 UTC — Reaper visual overhaul
+## State on 10 Nov 2026, 16:25 UTC — Reaper visual overhaul
 
 Read this section first. Everything below it is older.
 
@@ -25,7 +25,7 @@ The Pages deploy workflow succeeded on `655824d`. The deployed site itself was n
 
 **Open at the time of writing — check their state before doing anything else:**
 
-- Codex branch `feat/restrained-bloom-20261110` (see its pull request if one is open; otherwise the branch is pushed and complete up to its gate): restrained HDR bloom on light sources. The scene renders to a half-float 4× MSAA target, `UnrealBloomPass` at strength 0.1, radius 0.15, threshold 1.3, tone mapping once at the end; on with the high preset, with a Bloom control in Settings; beam cores get HDR brightness in the beam's hue (`src/rendering/bloom.ts`). The three hand-written shaders (atmosphere, starfield, barrier shells) write display-referred colours, so `src/rendering/sceneColour.ts` converts them to scene values when the HDR target is active (sRGB decode, then the exact inverse of Three's ACES fit); Earth's limb measures (8,30,105) without bloom and (9,30,104) with it. Evidence and limits: `docs/apex/REAPER_BLOOM_QA_2026-11-10.md`, `scripts/bloom-qa.mjs`. Not measured on a hardware GPU. Port to the sandbox afterwards: the sandbox already has an optional bloom on its Ultra preset without the shader conversion, so check its atmosphere and barrier shells with that preset first.
+- Codex #37 `feat/restrained-bloom-20261110` (open with its checks running when this was written; if it is merged, the base carries it and only the port and limits below remain): restrained HDR bloom on light sources. Local gate: 64 test files / 386 unit tests, build, all 38 browser tests with bloom on by default. The scene renders to a half-float 4× MSAA target, `UnrealBloomPass` at strength 0.1, radius 0.15, threshold 1.3, tone mapping once at the end; on with the high preset, with a Bloom control in Settings; beam cores get HDR brightness in the beam's hue (`src/rendering/bloom.ts`). The three hand-written shaders (atmosphere, starfield, barrier shells) write display-referred colours, so `src/rendering/sceneColour.ts` converts them to scene values when the HDR target is active (sRGB decode, then the exact inverse of Three's ACES fit); Earth's limb measures (8,30,105) without bloom and (9,30,104) with it. Evidence and limits: `docs/apex/REAPER_BLOOM_QA_2026-11-10.md`, `scripts/bloom-qa.mjs`. Not measured on a hardware GPU. Port to the sandbox afterwards: the sandbox already has an optional bloom on its Ultra preset without the shader conversion, so check its atmosphere and barrier shells with that preset first.
 - Sandbox `e2e/gunnery-pose.spec.ts:41` (destroyed gunner station) runs a duel at 8× until the gunner's ship dies. It takes 20.1 s locally before today's Reaper ports and 21.5 s after them; CI's software renderer takes about a second per frame, so it sat at the edge of the default 60 s and timed out inside its closing screenshot on #32, #35 and #36, with every assertion already passed. Sandbox #36 marked it `test.slow()` and then passed; no assertion changed. The durable fix is cheaper hero Reapers at the low preset (the level-of-detail work below).
 
 **Concurrent work by the other assistant — do not duplicate:** `fix/reaper-structural-lod-20261110` (no pull request when this was written): level-of-detail policy for Reapers (`shipLod.ts`, `applyShipLod`, `selectReaperRigDetail(level)`), covering the defect that hero Reapers never reduce detail. It was branched before #29 and edits `battleView.ts` near the `animateReaperRig` call and the signature of `selectReaperRigDetail`; merging it after today's work is a small mechanical merge. Their open PRs #26 (draft, reach) and #27 (Oculus damage) are untouched.
@@ -34,7 +34,7 @@ The Pages deploy workflow succeeded on `655824d`. The deployed site itself was n
 
 **What still falls short, in order of visible gain:**
 
-1. Bloom is on the branch above until it merges; additive sprites (explosions, engine glows, impact flashes) were not retuned for linear-light blending, and exposure is unchanged at 1.05.
+1. Bloom is in #37 above until it merges; additive sprites (explosions, engine glows, impact flashes) were not retuned for linear-light blending, and exposure is unchanged at 1.05.
 2. Reaper death is a breakup now, but with no directional blast from the killing hit, no secondary explosions along the limbs and no fracture of the carapace itself.
 3. Two-subject cinematic shots frame by the distance between ships; a Reaper fighting a target 20 km away is small in them. The tactical default distance is unchanged.
 4. No normal maps or micro-detail; silhouettes of the eight-sided limb sleeves are still eight-sided up close; further geometry needs a level-of-detail split first (see the other assistant's branch).
