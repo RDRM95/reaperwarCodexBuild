@@ -1,7 +1,7 @@
 // The vector implementation that src/simulation/separation.ts replaced, kept unchanged as the reference for
 // tests/separation-exact.test.ts: the optimised field must return bit-identical thrust requests.
 import { add, dot, length, lengthSq, normalize, scale, sub, v3, type Vec3 } from '@/core/vec3';
-import type { ShipState } from './types';
+import type { ShipState } from '@/simulation/types';
 
 interface Neighbour {
   id: string;

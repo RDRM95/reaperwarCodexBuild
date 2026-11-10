@@ -9,10 +9,11 @@ import type { ShipState } from './types';
  * arithmetic is the vector code it replaced, operation for operation, and neighbours are visited in the same order:
  * results are bit-identical. */
 export class SeparationField {
-  private cells = new Map<number, number[]>();
-  /** Occupied x slabs and (x, y) columns of the grid: a query skips the empty ones without a cell lookup. */
-  private slabs = new Set<number>();
-  private columns = new Set<number>();
+  /**
+   * The occupied grid, sorted: x slab -> its occupied y columns in ascending order -> each column's occupied z cells
+   * in ascending order -> member indices in ship order. A query walks only cells that exist, in ascending x, y, z.
+   */
+  private slabs = new Map<number, { ys: number[]; columns: { zs: number[]; cells: number[][] }[] }>();
   private index = new Map<string, number>();
   private ids: string[] = [];
   private posX: Float64Array; private posY: Float64Array; private posZ: Float64Array;
@@ -69,21 +70,23 @@ export class SeparationField {
       this.maxStoppingDistance = Math.max(this.maxStoppingDistance, speedSq / (2 * acceleration));
     }
     this.cellSize = Math.max(1.5, this.maxRadius * 2.5);
+    const order: number[] = [];
+    const cellX = new Int32Array(count), cellY = new Int32Array(count), cellZ = new Int32Array(count);
     for (let i = 0; i < count; i++) {
-      const cx = Math.floor(this.posX[i] / this.cellSize), cy = Math.floor(this.posY[i] / this.cellSize), cz = Math.floor(this.posZ[i] / this.cellSize);
-      const key = this.key(cx, cy, cz);
-      const cell = this.cells.get(key);
-      if (cell) cell.push(i); else this.cells.set(key, [i]);
-      this.slabs.add(cx & 65535);
-      this.columns.add((cx & 65535) * 65536 + (cy & 65535));
+      cellX[i] = Math.floor(this.posX[i] / this.cellSize); cellY[i] = Math.floor(this.posY[i] / this.cellSize); cellZ[i] = Math.floor(this.posZ[i] / this.cellSize);
+      order.push(i);
     }
-  }
-
-  private key(x: number, y: number, z: number): number {
-    // Exact 48-bit numeric key avoids allocating hundreds of strings per hull
-    // per tick. Wrapped distant cells remain safe: the distance test rejects
-    // them, and a local query never spans an entire 65,536-cell period.
-    return ((x & 65535) * 65536 + (y & 65535)) * 65536 + (z & 65535);
+    order.sort((a, b) => cellX[a] - cellX[b] || cellY[a] - cellY[b] || cellZ[a] - cellZ[b] || a - b);
+    let slab: { ys: number[]; columns: { zs: number[]; cells: number[][] }[] } | undefined;
+    let column: { zs: number[]; cells: number[][] } | undefined;
+    let cell: number[] | undefined;
+    let lastX = NaN, lastY = NaN, lastZ = NaN;
+    for (const i of order) {
+      if (cellX[i] !== lastX) { slab = { ys: [], columns: [] }; this.slabs.set(cellX[i], slab); lastX = cellX[i]; lastY = NaN; }
+      if (cellY[i] !== lastY) { column = { zs: [], cells: [] }; slab!.ys.push(cellY[i]); slab!.columns.push(column); lastY = cellY[i]; lastZ = NaN; }
+      if (cellZ[i] !== lastZ) { cell = []; column!.zs.push(cellZ[i]); column!.cells.push(cell); lastZ = cellZ[i]; }
+      cell!.push(i);
+    }
   }
 
   // Scratch for the passing direction (no vector is allocated per pair).
@@ -129,17 +132,22 @@ export class SeparationField {
     let fx = 0, fy = 0, fz = 0;
     const reachSq = reach * reach;
     let checks = 0;
-    // Cells are visited in x, y, z order, so forces add up in a fixed order; empty slabs and columns (most of the
-    // block around a hull) are skipped without touching the cell map.
-    for (let gx = cx - radius; gx <= cx + radius; gx++) {
-      if (!this.slabs.has(gx & 65535)) continue;
-      const slab = (gx & 65535) * 65536;
-      for (let gy = cy - radius; gy <= cy + radius; gy++) {
-        const column = slab + (gy & 65535);
-        if (!this.columns.has(column)) continue;
-        for (let gz = cz - radius; gz <= cz + radius; gz++) {
-          const cell = this.cells.get(column * 65536 + (gz & 65535));
-          if (!cell) continue;
+    // Cells are visited in ascending x, y, z and members in ship order, so forces add up in a fixed order. Only
+    // occupied cells are walked: a hull typically has a dozen or two neighbours in a block of several hundred cells.
+    const x1 = cx + radius, y0 = cy - radius, y1 = cy + radius, z0 = cz - radius, z1 = cz + radius;
+    for (let gx = cx - radius; gx <= x1; gx++) {
+      const slab = this.slabs.get(gx);
+      if (!slab) continue;
+      const ys = slab.ys;
+      for (let k = 0; k < ys.length; k++) {
+        if (ys[k] < y0) continue;
+        if (ys[k] > y1) break;
+        const column = slab.columns[k];
+        const zs = column.zs;
+        for (let m = 0; m < zs.length; m++) {
+          if (zs[m] < z0) continue;
+          if (zs[m] > z1) break;
+          const cell = column.cells[m];
           for (let c = 0; c < cell.length; c++) {
             const other = cell[c];
             if (other === self) continue;
