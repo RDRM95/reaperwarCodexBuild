@@ -17,6 +17,7 @@ import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
+import { DAMAGE_ONSET, REAPER_ARMOUR_MESHES, REAPER_SEAM_MESHES, reaperDamageGlow, type ReaperDamageGlow } from './damageGlow';
 import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
 
 /**
@@ -35,6 +36,9 @@ export interface ShipVisual {
   tinted: boolean;
   /** Cached unique hull materials: no whole-ship traversal each frame. */
   tintedMats?: THREE.MeshStandardMaterial[];
+  /** Reaper damage response: unique seam and armour materials (cloned with the tint). */
+  seamMats?: THREE.MeshStandardMaterial[];
+  emberMats?: THREE.MeshStandardMaterial[];
   /** Current level of detail. */
   lod: LodLevel;
   reaperRig?: ReaperRig;
@@ -84,6 +88,7 @@ export class BattleView {
   private readonly glowTex: THREE.Texture;
   private sunLight: THREE.DirectionalLight;
   private fillLight: THREE.DirectionalLight;
+  private readonly damageGlow: ReaperDamageGlow = { seam: new THREE.Color(), seamIntensity: 0, ember: 0 };
   /** Local weapon light for the nearest charging or firing Reaper emitters. */
   readonly emitterLights = new EmitterLightPool();
   private readonly tmpA = new THREE.Vector3();
@@ -388,8 +393,13 @@ export class BattleView {
       if (level === 'full') for (const gl of v.glows)
         (gl.material as THREE.SpriteMaterial).opacity = .35 + .6 * speedFrac * ship.subsystems.engines;
       const hullFrac = ship.hull / ship.maxHull;
-      if (hullFrac < .6 && !v.tinted) this.tintDamage(v);
-      if (v.tintedMats) {
+      if (hullFrac < DAMAGE_ONSET && !v.tinted) this.tintDamage(v);
+      if (v.seamMats && v.emberMats && v.reaperRig) {
+        // Reapers: the seams run hot and flicker; the armour keeps its graphite with a faint ember.
+        const glow = reaperDamageGlow(hullFrac, sim.time, v.reaperRig.phase, this.damageGlow);
+        for (const mat of v.seamMats) { mat.color.copy(glow.seam); mat.emissive.copy(glow.seam); mat.emissiveIntensity = glow.seamIntensity; }
+        for (const mat of v.emberMats) { mat.emissive.setRGB(glow.ember, glow.ember * 0.12, 0); mat.emissiveIntensity = 1; }
+      } else if (v.tintedMats) {
         const t = 1 - hullFrac;
         const red = .25 * t * (.6 + .4 * Math.sin(sim.time * 7 + ship.id.length));
         for (const mat of v.tintedMats) {
@@ -454,6 +464,28 @@ export class BattleView {
   }
 
   private tintDamage(v: ShipVisual): void {
+    if (v.reaperRig) {
+      // One clone per distinct shared material, so this ship's seams and armour can change without touching the fleet's.
+      const clones = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+      const seamMats: THREE.MeshStandardMaterial[] = [], emberMats: THREE.MeshStandardMaterial[] = [];
+      v.built.group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+        const seam = REAPER_SEAM_MESHES.has(mesh.name);
+        if (!seam && !REAPER_ARMOUR_MESHES.has(mesh.name)) return;
+        let clone = clones.get(mesh.material);
+        if (!clone) {
+          clone = (mesh.material as THREE.MeshStandardMaterial).clone();
+          clones.set(mesh.material, clone);
+          (seam ? seamMats : emberMats).push(clone);
+        }
+        mesh.material = clone;
+      });
+      v.seamMats = seamMats;
+      v.emberMats = emberMats;
+      v.tinted = true;
+      return;
+    }
     const tintedMats: THREE.MeshStandardMaterial[] = [];
     v.built.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -794,6 +826,8 @@ export class BattleView {
     this.scene.environment?.dispose();
     for (const v of this.visuals.values()) {
       for (const glow of v.glows) glow.material.dispose();
+      for (const mat of v.seamMats ?? []) mat.dispose();
+      for (const mat of v.emberMats ?? []) mat.dispose();
       if (v.tinted && !v.removed) v.built.group.traverse(object => {
         const mesh = object as THREE.Mesh;
         if (mesh.isMesh && mesh.name === 'hull') (mesh.material as THREE.Material).dispose();
