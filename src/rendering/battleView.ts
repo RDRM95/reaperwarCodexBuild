@@ -350,7 +350,17 @@ export class BattleView {
         selectReaperRigDetail(v.reaperRig, detailed);
         if (detailed) {
           articulatedHeroes++;
-          animateReaperRig(v.reaperRig, ship, sim.time, dt);
+          // Combat stance once the target is within reach of the main battery (render-side reading of the
+          // simulation; nothing is written back).
+          const target = ship.targetId ? sim.getShip(ship.targetId) : undefined;
+          let engaged = false;
+          if (target?.alive && !target.escaped) {
+            let reach = 0;
+            for (const w of ship.weapons) if (!w.def.antiSmall && w.def.range > reach) reach = w.def.range;
+            const tx = target.pos.x - ship.pos.x, ty = target.pos.y - ship.pos.y, tz = target.pos.z - ship.pos.z;
+            engaged = tx * tx + ty * ty + tz * tz <= reach * reach * 1.21;
+          }
+          animateReaperRig(v.reaperRig, ship, sim.time, dt, engaged);
         }
       }
       const speedFrac = Math.min(1, Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z) / Math.max(.01, ship.maxSpeed));
