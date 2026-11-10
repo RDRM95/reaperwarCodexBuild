@@ -19,6 +19,7 @@ import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
 import { DAMAGE_ONSET, REAPER_ARMOUR_MESHES, REAPER_SEAM_MESHES, reaperDamageGlow, type ReaperDamageGlow } from './damageGlow';
 import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
+import { bloomFor, createBloomPipeline, type BloomPipeline } from './bloom';
 
 /**
  * Binds a BattleSimulation to a Three.js scene. The simulation owns all
@@ -50,6 +51,8 @@ export interface GraphicsSettings {
   quality: 'low' | 'medium' | 'high';
   showEngineGlow: boolean;
   pixelRatioCap: number;
+  /** Restrained HDR bloom on light sources. Unset: on with the high preset. */
+  bloom?: boolean;
   /** Distance-based level of detail (default on). */
   lod?: boolean;
 }
@@ -105,6 +108,8 @@ export class BattleView {
   private readonly farColourCache = new Map<string, readonly [number, number, number]>();
   /** Draw calls of the last rendered frame. */
   drawCalls = 0;
+  /** Post-processing chain when bloom is on; the scene renders straight to the canvas otherwise. */
+  private bloom?: BloomPipeline;
   lodCounts = { full: 0, reduced: 0, point: 0 };
 
   constructor(canvas: HTMLCanvasElement, sim: BattleSimulation, settings: GraphicsSettings) {
@@ -151,6 +156,11 @@ export class BattleView {
     this.farPoints.frustumCulled = false;
     this.farPoints.name = 'far-points';
     this.scene.add(this.farPoints);
+    const bloom = bloomFor(settings);
+    if (bloom) {
+      this.bloom = createBloomPipeline(this.renderer, this.scene, this.rig.camera, bloom);
+      this.effects.setHdrBeams(bloom.beamBoost);
+    }
     this.bind(sim);
   }
 
@@ -810,15 +820,22 @@ export class BattleView {
 
   resize(width: number, height: number): void {
     this.renderer.setSize(width, height, false);
+    this.bloom?.setSize(width, height);
     this.rig.resize(width / Math.max(1, height));
   }
 
   render(): void {
+    if (this.bloom) {
+      this.bloom.render();
+      this.drawCalls = this.bloom.sceneDrawCalls();
+      return;
+    }
     this.renderer.render(this.scene, this.rig.camera);
     this.drawCalls = this.renderer.info.render.calls;
   }
 
   dispose(): void {
+    this.bloom?.dispose();
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();
