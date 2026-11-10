@@ -66,21 +66,45 @@ through the instanced path, drop to the reduced tier and then to points as befor
 
 - `compact_siege` and `compact_gunship` are restyled copies of these two hulls and take the new shapes. They are
   rescaled from measured bounds, so their catalogue lengths still hold.
-- Every other Alliance class takes the matt paint (`frigate-paint-before-after.jpg`). The frigate, carrier and
-  fighter geometry is not changed here.
+- Every other Alliance class takes the matt paint (`frigate-paint-before-after.jpg`). The carrier and fighter
+  geometry is not changed; the frigate's is, in the second slice below.
 
 ## Checks
 
-`tests/alliance-hulls.test.ts` (8 tests): length, exact muzzle and engine nodes, five merged meshes, triangle
+`tests/alliance-hulls.test.ts` (9 tests with the frigate's): length, exact muzzle and engine nodes, five merged meshes, triangle
 ceilings, proportions, the arrowhead and fork outlines, the citadel aft, the port rows, the paint bounds, and the
 Omaha hull unchanged. Unit suite: 66 files, 404 tests pass. Typecheck and build clean.
 
 Renders are from cloud Chromium with SwiftShader (software). They show shape, paint and lighting. They are not a
 check on the owner's hardware, and the look has not been judged by the owner.
 
+## Second slice: the frigate
+
+The frigate is the most numerous hull in a fleet shot. It was a box fuselage with a stepped block on top, a flat
+delta plate each side and a slab-faced bow that stopped a tenth of a length short of its own muzzle
+(`qa/alliance-hulls-20261110/frigate-before-after.jpg`, upper row of each pair, already in the matt paint).
+
+`buildAllianceFrigate` is now a slim dart: a fuselage outline drawn to a point at the bow, its upper face sloping
+down over the forward third to a low chisel; a raised spine and bridge; swept wings out to the tip drives, with a
+blue leading band and a dark trailing edge; an armour cap over each nacelle; a swept dorsal fin; a keel gun out
+to the muzzle; nine lit ports a side.
+
+| Frigate | Before | After |
+|---|---:|---:|
+| Triangles (all / left at the reduced level of detail) | 372 / 164 | 736 / 312 |
+| Hull extent along its length (catalogue length 1.7, muzzle at +0.85) | -0.864 to +0.748 | -0.864 to +0.850 |
+| Half-beam at stations -0.3, 0, +0.2, +0.4 of length | 0.270, 0.318, 0.055, 0.043 | 0.493, 0.243, 0.068, 0.034 |
+| Upper face of the pale armour at -0.1, +0.2, +0.45 of length (share of length) | 0.059, 0.109, none | 0.082, 0.037, 0.007 |
+| Muzzle and four engine nodes | | identical |
+
+The frigate costs more triangles than before at every level of detail (312 against 164 at distance). At a
+thousand frigates that is about 150,000 more triangles in a frame, drawn through the same instanced calls.
+`fleet-206-new-frigate.jpg` is the same 206-ship instanced fleet with the new frigate. The SR-2 variant
+(`alliance_frigate_thanix`) has its own model and is not changed.
+
 ## Not done
 
-Hull weathering and fine panel texture (the hulls are flat-shaded paint), the Alliance mark, the frigate's
-silhouette, the carrier, and the other factions' fleets.
+Hull weathering and fine panel texture (the hulls are flat-shaded paint), the Alliance mark, the carrier and
+fighter, and the other factions' fleets.
 
 Reproduce: `node --import tsx/esm scripts/alliance-hull-qa.mjs <outDir> <baseURL> <label> <repoRoot>`.
