@@ -6,7 +6,7 @@
  * Captures 1600×900 CSS pixels at device scale 0.8 (1280×720 files) with
  * SwiftShader: six orthographic-style views plus a three-quarter view of each
  * Reaper class through the follow rig, close/medium/distant capital views, the
- * capital beside an Alliance frigate parked 1.2 km off its beam, a 20-Reaper
+ * capital beside an Alliance frigate parked about 1 km off its beam, a 20-Reaper
  * fleet from the tactical camera and the capital under two environments. The
  * frigate parking is QA-only scene staging in a paused battle, never game
  * behaviour. Also writes triangle counts of the Reaper templates from
@@ -66,6 +66,8 @@ try {
       if (frigate) window.__qaFrigateHome = { x: frigate.pos.x, y: frigate.pos.y, z: frigate.pos.z };
     }, config);
   };
+  // Every hull view is an exact orbit about the hull's centre: `spans` is the camera distance in hull lengths,
+  // yaw 0 is astern and π ahead, pitch is elevation. The battle loop is stopped so the pose holds for the capture.
   const shoot = async (file, shot) => {
     await page.evaluate(sh => {
       const b = window.reaperwar.battle;
@@ -73,26 +75,35 @@ try {
       if (!ship) throw new Error('Missing review hull: ' + sh.classId);
       const frigate = b.sim.ships.find(s => s.classId === 'alliance_frigate');
       if (frigate && window.__qaFrigateHome) {
-        // Simulation positions are kilometres: 1.2 km off the capital's beam, same heading.
-        const target = sh.frigate ? { x: ship.pos.x + 1.2, y: ship.pos.y, z: ship.pos.z } : window.__qaFrigateHome;
+        // Simulation positions are kilometres: the frigate sits about 0.7 km off the capital's beam, same heading.
+        const target = sh.frigate ? { x: ship.pos.x + 0.6, y: ship.pos.y + 0.2, z: ship.pos.z + 0.35 } : window.__qaFrigateHome;
         Object.assign(frigate.pos, target); Object.assign(frigate.prevPos, target);
         if (sh.frigate) { Object.assign(frigate.heading, ship.heading); Object.assign(frigate.prevHeading, ship.heading); }
       }
+      cancelAnimationFrame(b.raf); b.loop = () => {};
       b.select(ship.id); b.setCamera('follow');
-      b.view.rig.distance = sh.distance; b.view.rig.pitch = sh.pitch; b.view.rig.yaw = sh.yaw;
-      for (let i = 0; i < 90; i++) b.view.update(1 / 60, 1);
-      b.view.render();
+      for (let i = 0; i < 60; i++) b.view.update(1 / 60, 1);
+      const KM = 10;
+      const length = b.view.visuals.get(ship.id).built.lengthUnits;
+      const cam = b.view.rig.camera;
+      const cx = ship.pos.x * KM, cy = ship.pos.y * KM, cz = ship.pos.z * KM;
+      const yaw = Math.atan2(ship.heading.x, ship.heading.z) + Math.PI + sh.yaw, cp = Math.cos(sh.pitch), d = sh.spans * length;
+      cam.position.set(cx + Math.sin(yaw) * cp * d, cy + Math.sin(sh.pitch) * d, cz + Math.cos(yaw) * cp * d);
+      cam.lookAt(cx, cy, cz); cam.near = Math.max(0.05, d * 0.002); cam.updateProjectionMatrix(); cam.updateMatrixWorld(true);
+      // The camera-relative fill light follows the pose, as BattleView does every frame.
+      const fill = b.view.fillLight, dir = cam.getWorldDirection(cam.position.clone());
+      fill.position.copy(cam.position); fill.target.position.copy(cam.position).add(dir.multiplyScalar(100)); fill.target.updateMatrixWorld(true);
+      b.view.renderer.render(b.view.scene, cam);
     }, shot);
     await page.screenshot({ path: `${outDir}/${file}.jpg`, type: 'jpeg', quality: 86 });
   };
 
-  // Six orthographic-style views through the follow rig (yaw 0 = astern, π = ahead).
   const ortho = [
-    ['top', { pitch: 1.45, yaw: 0 }], ['bottom', { pitch: -1.5, yaw: 0 }],
-    ['left', { pitch: 0, yaw: Math.PI / 2 }], ['right', { pitch: 0, yaw: -Math.PI / 2 }],
-    ['front', { pitch: 0, yaw: Math.PI }], ['rear', { pitch: 0.05, yaw: 0 }],
+    ['top', { pitch: 1.5, yaw: 0, spans: 1.45 }], ['bottom', { pitch: -1.5, yaw: 0, spans: 1.45 }],
+    ['left', { pitch: 0, yaw: Math.PI / 2, spans: 0.95 }], ['right', { pitch: 0, yaw: -Math.PI / 2, spans: 0.95 }],
+    ['front', { pitch: 0, yaw: Math.PI, spans: 0.85 }], ['rear', { pitch: 0.05, yaw: 0, spans: 0.85 }],
   ];
-  const quarter = { pitch: 0.18, yaw: 2.25 };
+  const quarter = { pitch: 0.2, yaw: 2.3, spans: 1.15 };
   const review = (env) => buildCustomBattle({ seed: 42, rulesId: 'canon_me3', environment: env, startingDistanceKm: 40, maxDuration: 180,
     sideA: { faction: 'alliance', name: 'Scale', formation: 'line_abreast', counts: { alliance_frigate: 1, alliance_dreadnought: 1 } },
     sideB: { faction: 'reaper', name: 'Reapers', formation: 'line_abreast', counts: { reaper_capital: 1, reaper_destroyer: 1, harbinger: 1 } } });
@@ -100,20 +111,19 @@ try {
   await boot(review('deep_space'));
   for (const classId of ['reaper_capital', 'harbinger', 'reaper_destroyer']) {
     const short = classId.replace('reaper_', '');
-    for (const [view, angles] of ortho) await shoot(`${label}-${short}-${view}`, { classId, distance: 320, ...angles });
-    await shoot(`${label}-${short}-quarter-470`, { classId, distance: 470, ...quarter });
+    for (const [view, angles] of ortho) await shoot(`${label}-${short}-${view}`, { classId, ...angles });
+    await shoot(`${label}-${short}-quarter`, { classId, ...quarter });
+    await shoot(`${label}-${short}-close`, { classId, pitch: 0.14, yaw: 2.55, spans: 0.6 });
   }
-  await shoot(`${label}-capital-close-150`, { classId: 'reaper_capital', distance: 150, pitch: 0.12, yaw: 2.6 });
-  await shoot(`${label}-capital-close-150-aft-quarter`, { classId: 'reaper_capital', distance: 150, pitch: 0.3, yaw: 0.75 });
-  await shoot(`${label}-harbinger-close-200`, { classId: 'harbinger', distance: 200, pitch: 0.15, yaw: 2.4 });
-  await shoot(`${label}-destroyer-close-200`, { classId: 'reaper_destroyer', distance: 200, pitch: 0.15, yaw: 2.4 });
-  await shoot(`${label}-capital-distant-1500`, { classId: 'reaper_capital', distance: 1500, pitch: 0.25, yaw: 2.0 });
-  await shoot(`${label}-capital-frigate-scale`, { classId: 'reaper_capital', distance: 470, pitch: 0.22, yaw: 1.9, frigate: true });
+  await shoot(`${label}-capital-aft-quarter`, { classId: 'reaper_capital', pitch: 0.3, yaw: 0.75, spans: 1.0 });
+  await shoot(`${label}-capital-medium`, { classId: 'reaper_capital', pitch: 0.22, yaw: 2.2, spans: 4 });
+  await shoot(`${label}-capital-distant`, { classId: 'reaper_capital', pitch: 0.25, yaw: 2.0, spans: 12 });
+  await shoot(`${label}-capital-frigate-scale`, { classId: 'reaper_capital', pitch: 0.2, yaw: 1.95, spans: 1.25, frigate: true });
 
   await boot(review('earth_orbit'));
-  await shoot(`${label}-capital-earth-orbit-quarter-470`, { classId: 'reaper_capital', distance: 470, ...quarter });
-  await shoot(`${label}-capital-earth-orbit-close-150`, { classId: 'reaper_capital', distance: 150, pitch: 0.12, yaw: 2.6 });
-  await shoot(`${label}-capital-earth-orbit-front`, { classId: 'reaper_capital', distance: 320, pitch: 0.0, yaw: Math.PI });
+  await shoot(`${label}-capital-earth-orbit-quarter`, { classId: 'reaper_capital', ...quarter });
+  await shoot(`${label}-capital-earth-orbit-close`, { classId: 'reaper_capital', pitch: 0.14, yaw: 2.55, spans: 0.6 });
+  await shoot(`${label}-capital-earth-orbit-left`, { classId: 'reaper_capital', pitch: 0.05, yaw: Math.PI / 2, spans: 0.95 });
 
   // Twenty capital Reapers from the tactical camera.
   await boot(buildCustomBattle({ seed: 7, rulesId: 'canon_me3', environment: 'deep_space', startingDistanceKm: 60, maxDuration: 180,
@@ -125,7 +135,7 @@ try {
     const c = reapers.reduce((acc, s) => ({ x: acc.x + s.pos.x / reapers.length, y: acc.y + s.pos.y / reapers.length, z: acc.z + s.pos.z / reapers.length }), { x: 0, y: 0, z: 0 });
     b.setCamera('tactical');
     b.view.rig.focus.set(c.x * 10, c.y * 10, c.z * 10);
-    b.view.rig.distance = 260; b.view.rig.pitch = 0.32; b.view.rig.yaw = 2.55;
+    b.view.rig.distance = 150; b.view.rig.pitch = 0.32; b.view.rig.yaw = 2.55;
     for (let i = 0; i < 90; i++) b.view.update(1 / 60, 1);
     b.view.render();
   });
