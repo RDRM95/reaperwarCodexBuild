@@ -345,9 +345,11 @@ function approachLane(fleet: FleetState): number {
 export const HOLD_ROTATION_THRESHOLD = 30 * Math.PI / 180;
 /** Enemy line closing speed, as a fraction of the own line's slowest hull,
  * that counts as pressing the line (retire starts) and as having stopped
- * (retire ends). SIMULATION_ESTIMATE: a hull settling onto a station after
- * its fleet stops moves slower than this, so settling never reads as a push. */
-const PRESSING_CLOSING_FRACTION = 0.1;
+ * (retire ends). SIMULATION_ESTIMATE: capitals settling onto their stations
+ * after their fleet stops crab inside their lateral envelope at a fifth of
+ * their speed or less, so settling never reads as a push, while a line
+ * still advancing at formation pace (0.85 of its slowest hull) does. */
+const PRESSING_CLOSING_FRACTION = 0.25;
 const RELIEVED_CLOSING_FRACTION = 0.05;
 
 /** Stable fleet fire control and formation translation. Tactical observations
@@ -669,6 +671,27 @@ const broadsideBearings = new WeakMap<ShipState, BroadsideBearing>();
 /** Warhammer hulls bring their actual side batteries to bear after arrival.
  * This changes only gun facing: station translation never becomes an orbit.
  * Other factions retain their existing spinal/forward engagement policy. */
+/** How far inside the edge of its sector a hull keeps a target while its bow
+ * is turned onto a leg (degrees). SIMULATION_ESTIMATE: inWeaponArc allows
+ * 0.05 rad beyond the half arc, so two degrees inside the edge survives a
+ * tick of target motion and heading lag. */
+const SECTOR_MARGIN_DEG = 2;
+/** Narrower principal arcs keep the bow on the target: a 12° spinal gun gains
+ * nothing inside the lateral envelope from a 4° offset and loses its target at
+ * the sector edge to heading lag. SIMULATION_ESTIMATE. */
+const SECTOR_FACING_MIN_ARC_DEG = 30;
+
+/** Arc (degrees) of the mount that sets the ship's engagement range. */
+function principalArc(ship: ShipState): number {
+  const range = shipEngagementRange(ship);
+  let arc = 360;
+  for (const w of ship.weapons) {
+    if (w.def.antiSmall || (w.ammo !== undefined && w.ammo <= 0) || w.def.range < range - 1e-9) continue;
+    arc = Math.min(arc, w.def.arc);
+  }
+  return arc;
+}
+
 function combatFacing(ship: ShipState, target: ShipState, station: Vec3): Vec3 {
   if (ship.faction !== 'imperium' && ship.faction !== 'chaos') {
     // Out of gun range, turn towards a distant navigation station and use the
@@ -678,8 +701,30 @@ function combatFacing(ship: ShipState, target: ShipState, station: Vec3): Vec3 {
     const speed2 = lengthSq(ship.vel);
     const stoppingDistance = speed2 / Math.max(.001, 2 * ship.acceleration * (.25 + .75 * ship.subsystems.engines));
     const settling = Math.max(.2, ship.lengthKm * 1.5, stoppingDistance * 1.5);
-    if (distance(ship.pos, target.pos) > shipEngagementRange(ship) && distance(ship.pos, station) > settling) return station;
-    return target.pos;
+    const toStation = sub(station, ship.pos);
+    const stationDistance = Math.sqrt(lengthSq(toStation));
+    if (stationDistance <= settling) return target.pos;
+    if (distance(ship.pos, target.pos) > shipEngagementRange(ship)) return station;
+    // In range, the fire sector wins: a capital that yaws its bow onto a
+    // contact abeam can only crab toward its station inside its lateral
+    // envelope, at a fifth of its speed, so the bow turns as far onto the leg
+    // as the principal mount's sector allows while the target stays inside
+    // it. A beam with a 70° sector advances at half speed with its target at
+    // the sector's edge; a 12° spinal gun gains little and keeps tracking.
+    // Turning onto every long leg and firing nothing instead was measured to
+    // cost dreadnoughts half their in-range time out of arc.
+    const arc = principalArc(ship);
+    if (arc < SECTOR_FACING_MIN_ARC_DEG) return target.pos;
+    const travel = scale(toStation, 1 / stationDistance);
+    const toTarget = normalize(sub(target.pos, ship.pos));
+    const sector = Math.max(0, arc / 2 - SECTOR_MARGIN_DEG) * Math.PI / 180;
+    const cosOff = Math.max(-1, Math.min(1, dot(travel, toTarget)));
+    if (cosOff >= Math.cos(sector)) return station;
+    const across = sub(travel, scale(toTarget, cosOff));
+    const acrossLength = Math.sqrt(lengthSq(across));
+    if (acrossLength < 1e-6) return target.pos;
+    const direction = add(scale(toTarget, Math.cos(sector)), scale(across, Math.sin(sector) / acrossLength));
+    return add(ship.pos, scale(direction, Math.max(1, distance(ship.pos, target.pos))));
   }
   let portRange = 0, starboardRange = 0;
   for (const weapon of ship.weapons) {
@@ -852,20 +897,15 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   ship.closeUpKm = closeUp;
   let position = add(slotPos, scale(bearing, lineAdvance + closeUp));
 
-  // A flank can still correct an unusable firing solution, within a bounded
-  // trim. In-range ships keep their station instead of all seeking precisely
-  // the same preferred radius. This is not a new pursuit/retargeting controller.
-  const toTarget = sub(target.pos, position);
-  const stationDistance = Math.sqrt(lengthSq(toTarget));
-  const trimLimit = range * 0.15;
-  if (stationDistance > range * 0.97) {
-    position = add(position, scale(normalize(toTarget), Math.min(trimLimit, stationDistance - range * 0.94)));
-  }
-  // A range repair must not undo the fleet's anti-chase leash when an enemy
-  // abandons the fight. Explicit intercept/attack commands retain intent.
+  // A hull whose station still leaves its own target out of reach closes on
+  // it to gun range; in-range ships keep their station instead of all seeking
+  // precisely the same preferred radius. A range repair must not undo the
+  // fleet's anti-chase leash when an enemy abandons the fight: toward a
+  // fleeing target the trim is bounded. Explicit intercept/attack commands
+  // retain intent.
   const fleeing = target.withdrawing || ctx.fleets.get(target.fleetId)?.orders.order === 'retreat';
   const commandedPursuit = !!ship.forcedTargetId || fleet.orders.order === 'intercept' || fleet.orders.order === 'attack_target';
-  if (!fleeing || commandedPursuit) position = reachableStation(position, target.pos, range);
+  position = reachableStation(position, target.pos, range, fleeing && !commandedPursuit ? range * 0.15 : Infinity);
   ship.firingOffset = sub(position, slotPos);
   if (noRetreat) {
     // A station behind the enemy line must not turn into a reverse thrust

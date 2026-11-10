@@ -18,10 +18,14 @@ export function localReachTarget(ship: ShipState, preferred: ShipState | undefin
  * Supply a reachable station rather than capping closure at 15% of gun range.
  * Already useful stations remain untouched. This only changes the waypoint:
  * acceleration, class speed, clearance, firing arc and weapon range still apply.
+ * `limit` bounds how far the station may move toward the target (km): the
+ * anti-chase trim toward a fleeing contact passes a fraction of gun range.
  */
-export function reachableStation(station: Vec3, target: Vec3, range: number): Vec3 {
+export function reachableStation(station: Vec3, target: Vec3, range: number, limit = Infinity): Vec3 {
   const delta = sub(station, target);
   const dist = distance(station, target);
   const reach = range * .94;
-  return dist > reach ? add(target, scale(normalize(delta), reach)) : station;
+  if (dist <= reach) return station;
+  const step = Math.min(limit, dist - reach);
+  return add(target, scale(normalize(delta), dist - step));
 }

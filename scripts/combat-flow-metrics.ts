@@ -74,7 +74,13 @@ const config = scenarioId
     theatreLayout: custom!.theatre ?? 'legacy_plane', sideA: custom!.a, sideB: custom!.b,
   });
 const sim = new BattleSimulation(config);
-if (harmless) for (const ship of sim.ships) for (const w of ship.weapons) w.def = { ...w.def, damage: 0 };
+/** Fighters a carrier launches later are created with catalogue weapons, so the disarming sweep is repeated after every step. */
+let disarmed = 0;
+function disarm(): void {
+  if (!harmless) return;
+  for (; disarmed < sim.ships.length; disarmed++) for (const w of sim.ships[disarmed].weapons) w.def = { ...w.def, damage: 0 };
+}
+disarm();
 
 const yawDeg = (h: { x: number; z: number }): number => Math.atan2(h.x, h.z) * 180 / Math.PI;
 const wrap = (d: number): number => ((d + 540) % 360) - 180;
@@ -148,6 +154,7 @@ const sampleEvery = Math.round(1 / SIM_DT);
 const wallStart = performance.now();
 for (let i = 0; i < ticks && !sim.finished; i++) {
   sim.step();
+  disarm();
   const t = sim.time;
   const dt = SIM_DT;
   const sample = (i + 1) % sampleEvery === 0;
