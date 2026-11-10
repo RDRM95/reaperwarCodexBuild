@@ -21,6 +21,9 @@ export const FORMATION_LABELS: Record<FormationType, string> = {
   dispersed: 'Dispersed formation',
 };
 
+/** Order-of-battle echelon a battlegroup belongs to (deployment geometry only). */
+export type EchelonName = 'main' | 'vanguard' | 'flank_left' | 'flank_right' | 'screen' | 'reserve' | 'salient';
+
 export type OrderType =
   | 'attack'
   | 'attack_target'
@@ -201,6 +204,12 @@ export interface ShipState {
   firingTargetId?: string;
   /** Formation slot offset in fleet-local space (km). */
   slot: Vec3;
+  /** Seeded deployment yaw trim (radians, positive to starboard) rotating the idle facing basis. */
+  headingTrim?: number;
+  /** Battlegroup index within the fleet's deployment geometry. */
+  battlegroup?: number;
+  /** Order-of-battle echelon of the battlegroup at deployment. */
+  echelon?: EchelonName;
   withdrawing: boolean;
   /** Left the battlespace (retreated). Still alive, no longer participates. */
   escaped: boolean;

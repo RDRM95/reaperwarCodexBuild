@@ -22,10 +22,10 @@ import type { FactionId } from '@/data/types';
 import { WEAPONS, getWeapon } from '@/data/weapons';
 import { applyRulesToShip, applyRulesToWeapon, cloneRules, type EffectiveWeapon, type RuleSet } from '@/timelines/rules';
 import { assertLoreCompatible } from '@/timelines/lore';
-import { fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
+import { fleetDecision, fleetEngagementRange, movementGoal, shipDecision, type AiContext } from './ai';
 import { hardcoreReaperBeamDamage } from './reaperHardcore';
 import { applyDamage, applyProjectileDamage, hitProbability } from './damage';
-import { assignSlots } from './formations';
+import { FLEET_LAYOUT_VERSION_KEY, composeFleetLayout, fleetSlotSeed, parseFleetLayoutVersion } from './formations';
 import { summarise } from './results';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
@@ -58,15 +58,6 @@ import type {
 } from './types';
 
 export const SIM_DT = 0.05;
-
-/** Stable per-fleet layout identity. Do not consume combat RNG or hash user
- * account data: only the battle seed and authored anonymous fleet ID. */
-function fleetSlotSeed(seed: number, fleetId: string): number {
-  let h = (seed | 0) ^ 0x811c9dc5;
-  for (let i = 0; i < fleetId.length; i++)
-    h = Math.imul(h ^ fleetId.charCodeAt(i), 16777619);
-  return h | 0;
-}
 
 const DEFAULT_ORDERS: FleetOrders = {
   order: 'attack',
@@ -166,19 +157,14 @@ export class BattleSimulation implements AiContext {
       }
     }
     fleet.startPoints = created.reduce((a, s) => a + s.pointValue, 0);
-    // Slots.
-    const slots = assignSlots(
-      created.map((s) => ({ id: s.id, role: s.role, lengthKm: s.lengthKm })),
-      fleet.orders.formation,
-      fleetSlotSeed(this.config.seed, fleet.spec.id),
-    );
+    // Slots, per-hull heading trims and battlegroup tags.
+    this.applyLayout(fleet, created);
     for (const s of created) {
-      s.slot = slots.get(s.id) ?? v3();
       const world = this.slotWorld(fleet, s.slot);
       s.pos = world;
       s.prevPos = clone(world);
-      s.heading = clone(fleet.heading);
-      s.prevHeading = clone(fleet.heading);
+      s.heading = clone(this.idleFacing(fleet, s));
+      s.prevHeading = clone(s.heading);
       this.ships.push(s);
       this.shipById.set(s.id, s);
       this.emit({
@@ -192,6 +178,34 @@ export class BattleSimulation implements AiContext {
       });
     }
     if (this.time > 0) this.emit({ t: this.time, type: 'reinforcement_arrival', fleetId: spec.id, side: spec.side });
+  }
+
+  /** Deployment geometry for the fleet's members: the composer sees the real
+   * battle-line range (so committed depth stays within reach), the faction's
+   * doctrine and the layout generator version the configuration was saved with. */
+  private applyLayout(fleet: FleetState, members: ShipState[]): void {
+    const layout = composeFleetLayout(
+      members.map((s) => ({ id: s.id, role: s.role, lengthKm: s.lengthKm })),
+      fleet.orders.formation,
+      fleetSlotSeed(this.config.seed, fleet.spec.id),
+      {
+        engagementRangeKm: fleetEngagementRange(members),
+        faction: fleet.spec.faction,
+        layoutVersion: parseFleetLayoutVersion(this.config.worldState?.[FLEET_LAYOUT_VERSION_KEY]),
+      },
+    );
+    for (const s of members) {
+      s.slot = layout.slots.get(s.id) ?? s.slot ?? v3();
+      s.headingTrim = layout.headingTrims.get(s.id) ?? 0;
+      s.battlegroup = layout.battlegroups.get(s.id);
+      s.echelon = layout.echelons.get(s.id);
+    }
+  }
+
+  /** Fleet heading rotated by the hull's seeded trim: the facing an idle hull
+   * holds in formation, so a line is not a parade of exactly parallel hulls. */
+  private idleFacing(fleet: FleetState, ship: ShipState): Vec3 {
+    return ship.headingTrim ? rotateY(fleet.heading, ship.headingTrim) : fleet.heading;
   }
 
   private slotWorld(fleet: FleetState, slot: Vec3): Vec3 {
@@ -482,12 +496,7 @@ export class BattleSimulation implements AiContext {
 
   private reassignSlots(fleet: FleetState): void {
     const mine = this.ships.filter((s) => s.fleetId === fleet.spec.id && s.alive && !s.escaped);
-    const slots = assignSlots(
-      mine.map((s) => ({ id: s.id, role: s.role, lengthKm: s.lengthKm })),
-      fleet.orders.formation,
-      fleetSlotSeed(this.config.seed, fleet.spec.id),
-    );
-    for (const s of mine) s.slot = slots.get(s.id) ?? s.slot;
+    this.applyLayout(fleet, mine);
   }
 
   // ------------------------------------------------------------------- loop
@@ -567,7 +576,7 @@ export class BattleSimulation implements AiContext {
     let faceDir: Vec3 | undefined;
     if (goal.face) faceDir = sub(goal.face, ship.pos);
     else if (speed > maxSpeed * 0.15) faceDir = ship.vel;
-    else if (ship.role !== 'fighter') faceDir = fleet.heading;
+    else if (ship.role !== 'fighter') faceDir = this.idleFacing(fleet, ship);
     if (faceDir && lengthSq(faceDir) > 1e-8) {
       const target = normalize(faceDir);
       const cur = ship.heading;

@@ -24,8 +24,12 @@ describe('fleet formations', () => {
       const extent = (axis: 'x' | 'y' | 'z') => Math.max(...positions.map(p => p[axis])) - Math.min(...positions.map(p => p[axis]));
       // A hundred two-kilometre hulls should span a broad front or a deliberate
       // column, rather than being packed into the old 40 x 40 x 40 km box.
+      // The composer's Reaper front is seven wings with staggered waves and a
+      // second altitude layer standing over the gaps between the columns, so
+      // the hundred capitals span up to 154 units (85 km) measured, rather than
+      // the 116 of the unstaggered lattice that the old bound of 120 encoded.
       expect(extent('y')).toBeLessThan(8);
-      expect(extent('x')).toBeLessThan(formation === 'dispersed' ? 170 : 120);
+      expect(extent('x')).toBeLessThan(formation === 'dispersed' ? 170 : 165);
       expect(extent('z')).toBeLessThan(formation === 'capital_column' ? 150 : formation === 'dispersed' ? 100 : 60);
       let minimumDistance = Infinity;
       let largestNearest = 0;

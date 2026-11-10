@@ -50,7 +50,20 @@ describe('zoomed-out organic fleet silhouette', () => {
     const reapers: SlotShip[] = Array.from({ length: 100 }, (_, i) => ({
       id: 'reaper-' + i, role: 'reaper_capital', lengthKm: 2,
     }));
-    expect(assignSlots(reapers, 'line_abreast', 13)).toEqual(assignSlots(reapers, 'line_abreast', 82));
+    // Reaper identity is exact spacing, not seed independence: every wave keeps
+    // the capital pitch (2 km hulls at 3.4 km, nearest-neighbour CV below 0.03,
+    // measured 0.00-0.01) while the order of battle (horns, vanguard, wave
+    // widths) is seeded, so two seeds give two fronts of the same discipline.
+    // The old equality pinned the one constant-pitch lattice for every seed.
+    for (const seed of [13, 82]) {
+      const points = [...assignSlots(reapers, 'line_abreast', seed).values()];
+      const nearest = points.map((p, i) => Math.min(...points.filter((_, j) => j !== i).map(q => Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z))));
+      const mean = nearest.reduce((a, b) => a + b, 0) / nearest.length;
+      const cv = Math.sqrt(nearest.reduce((sum, d) => sum + (d - mean) ** 2, 0) / nearest.length) / mean;
+      expect(Math.min(...nearest)).toBeGreaterThanOrEqual(3.3);
+      expect(cv).toBeLessThan(0.03);
+    }
+    expect(assignSlots(reapers, 'line_abreast', 13)).not.toEqual(assignSlots(reapers, 'line_abreast', 82));
     const small = allFrigates(7);
     expect(assignSlots(small, 'strike_wedge', 11)).toEqual(assignSlots(small, 'strike_wedge', 63));
   });
