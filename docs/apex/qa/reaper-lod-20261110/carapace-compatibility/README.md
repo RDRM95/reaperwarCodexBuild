@@ -9,3 +9,7 @@ Checks: TypeScript plus 18 existing carapace/model/template regression tests pas
 To reproduce, check out the pinned geometry head in a separate worktree, overlay `lod.ts`, `shipLod.ts`, `instancedFleet.ts`, `battleView.ts`, `reaperMotion.ts` and `scripts/reaper-lod-review.mjs` from this feature, install the normal dependencies, serve that worktree with Vite, then run the documented capture script against its local URL. Do not copy its geometry into the LOD feature or replace either repository wholesale.
 
 This proves compatibility with that head, not independent source-reference likeness approval or permission to bypass PR #29's own CI/review. These are original procedural models from the public owner branch. Target-GPU 4K acceptance remains open.
+
+## Subsequent upstream merge
+
+The geometry author subsequently merged PR #29 into the actual integration base as `2270474`. This LOD feature then reconciled that base with a normal merge. The compatibility checkout and the resulting feature have byte-identical entire `src` trees; the captures therefore represent the combined renderer. The owner branch remains unmodified. The combined tree passed all 370 unit tests and 39 production browser tests.

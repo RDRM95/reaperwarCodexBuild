@@ -24,7 +24,7 @@ test('Reaper reduced LOD keeps armour and eyes while nested lighting and stand-i
         view.rig.camera.position.set(ship.pos.x * 10, ship.pos.y * 10, ship.pos.z * 10 + length * (level === 'full' ? 3 : 80));
         view.rig.camera.lookAt(ship.pos.x * 10, ship.pos.y * 10, ship.pos.z * 10);
         view.update(0, 1); view.render();
-        const groups: Record<string, any[]> = { plates: [], eye: [], 'reaper-arm-seam': [], 'reaper-static-arms': [], 'reaper-static-seams': [] };
+        const groups: Record<string, any[]> = { carapace: [], plates: [], eye: [], 'reaper-arm-seam': [], 'reaper-static-arms': [], 'reaper-static-seams': [] };
         visual.built.group.traverse((part: any) => { if (groups[part.name]) groups[part.name].push({ visible: part.visible, vertices: part.geometry?.attributes.position.count ?? 0 }); });
         stages.push({ requested: level, observed: visual.lod, groups, glError: view.renderer.getContext().getError() });
       }
@@ -42,14 +42,18 @@ test('Reaper reduced LOD keeps armour and eyes while nested lighting and stand-i
       expect(stage.glError).toBe(0);
       expect(stage.groups.plates.length).toBeGreaterThan(0);
       expect(stage.groups.eye.length).toBeGreaterThan(0);
-      expect(stage.groups.plates.every((part: any) => part.visible)).toBe(true);
+      expect(stage.groups.carapace.length).toBeGreaterThan(0);
+      expect(stage.groups.carapace.every((part: any) => part.visible)).toBe(true);
+      expect(stage.groups.plates.every((part: any) => part.visible === (stage.requested === 'full'))).toBe(true);
       expect(stage.groups.eye.every((part: any) => part.visible)).toBe(true);
       expect(stage.groups['reaper-static-seams'].every((part: any) => !part.visible)).toBe(true);
       expect(stage.groups['reaper-static-arms'].every((part: any) => part.visible === (stage.requested === 'reduced'))).toBe(true);
       expect(stage.groups['reaper-arm-seam'].every((part: any) => part.visible === (stage.requested === 'full'))).toBe(true);
     }
-    expect(record.batch.some((part: any) => part.name.endsWith('-plates'))).toBe(true);
+    expect(record.batch.some((part: any) => part.name.endsWith('-plates'))).toBe(false);
     expect(record.batch.some((part: any) => part.name.endsWith('-eye'))).toBe(true);
     expect(record.batch.some((part: any) => /seam/.test(part.name))).toBe(false);
+    const expectedVertices: Record<string, number> = { reaper_capital: 25151, harbinger: 24671, reaper_destroyer: 18143 };
+    expect(record.batch.reduce((sum: number, part: any) => sum + part.vertices, 0)).toBe(expectedVertices[record.classId]);
   }
 });

@@ -1,5 +1,7 @@
 # Reaper structural LOD correction — 10 November 2026
 
+Current integration note: upstream PR #29 has now merged as `2270474`. This feature reconciles those layered graphite hulls and keeps their dedicated carapace/optics while reducing decorative overlays. The original legacy-hull comparison below remains a historical control; the current hull contact sheets and measured totals are in `carapace-compatibility/`. The combined tree passes 370 unit tests and 39 production browser tests.
+
 The reduced fleet representation removed Reaper carapace plates and both central optic meshes because the global detail-name list classified `plates` and `eye` as decorative. Hero LOD only visited direct children, leaving articulated arm seams illuminated at range; switching to static limbs also re-enabled their seam layer. These are rendering defects independent of the unpublished carapace/material overhaul.
 
 ## Correction and ownership

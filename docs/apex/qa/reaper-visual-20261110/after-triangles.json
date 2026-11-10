@@ -1,0 +1,23 @@
+{
+ "reaper_capital": {
+  "hero": 12432,
+  "static": 11844,
+  "meshes": 61,
+  "materials": 7,
+  "lengthUnits": 20
+ },
+ "harbinger": {
+  "hero": 13352,
+  "static": 12764,
+  "meshes": 61,
+  "materials": 7,
+  "lengthUnits": 24
+ },
+ "reaper_destroyer": {
+  "hero": 10056,
+  "static": 9468,
+  "meshes": 47,
+  "materials": 7,
+  "lengthUnits": 1.6
+ }
+}

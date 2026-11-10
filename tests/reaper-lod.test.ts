@@ -9,6 +9,9 @@ import { instantiateShip } from '@/rendering/ships';
 import type { ShipState } from '@/simulation/types';
 
 const CLASS_IDS = ['reaper_capital', 'harbinger', 'reaper_destroyer', 'reaper_ascendant'] as const;
+// Independently measured at PR #29 geometry ee3cc80; complete structural layers
+// and both optics, excluding decorative overlays and running lights.
+const REDUCED_VERTICES = { reaper_capital: 25151, harbinger: 24671, reaper_destroyer: 18143, reaper_ascendant: 25607 };
 const objectsNamed = (root: THREE.Object3D, name: string): THREE.Object3D[] => {
   const matches: THREE.Object3D[] = [];
   root.traverse(object => { if (object.name === name) matches.push(object); });
@@ -32,13 +35,15 @@ describe('Reaper structural identity survives reduced LOD', () => {
       fleet.add(ship, .5, 'reduced');
       fleet.end();
       const parts = fleet.group.children as THREE.InstancedMesh[];
-      const armour = parts.find(part => part.name === `instanced-${classId}-plates`);
       const apertures = parts.filter(part => part.name === `instanced-${classId}-eye`);
-      expect(armour, 'the layered carapace remains a structural batch').toBeDefined();
-      expect(apertures.length, 'the lens is retained separately from running lights').toBeGreaterThan(0);
-      expect(armour!.count).toBe(1);
-      expect(armour!.visible).toBe(true);
+      expect(apertures.length, 'both optics survive separately from running lights').toBe(2);
       expect(apertures.every(part => part.count === 1 && part.visible)).toBe(true);
+      const shownVertices = parts.filter(part => part.visible && part.count > 0)
+        .reduce((count, part) => count + part.geometry.attributes.position.count, 0);
+      expect(shownVertices, 'complete carapace and limbs survive material merging').toBe(REDUCED_VERTICES[classId]);
+      const overlays = parts.filter(part => part.name === `instanced-${classId}-plates`);
+      expect(overlays.length).toBeGreaterThan(0);
+      expect(overlays.every(part => part.count === 0 && !part.visible)).toBe(true);
       const seams = parts.filter(part => part.name.endsWith('-reaper-arm-seam'));
       expect(seams.length).toBeGreaterThan(0);
       expect(seams.every(part => part.count === 0 && !part.visible)).toBe(true);
@@ -80,17 +85,21 @@ describe('nested hero details and independent mechanical visibility', () => {
     const details = captureLodDetails(built.group, role);
     const rig = captureReaperRig(built.group, 'hero-lod');
     const seams = objectsNamed(built.group, 'reaper-arm-seam');
-    const armour = objectsNamed(built.group, 'plates');
+    const armour = objectsNamed(built.group, 'carapace');
+    const overlays = objectsNamed(built.group, 'plates');
     const aperture = objectsNamed(built.group, 'eye');
     const size = new THREE.Box3().setFromObject(built.group).getSize(new THREE.Vector3());
     const muzzle = built.muzzle!.clone(), engines = built.engineNodes.map(point => point.clone());
     expect(seams.length).toBeGreaterThan(0);
+    expect(armour.length).toBeGreaterThan(0);
+    expect(overlays.length).toBeGreaterThan(0);
     expect(seams.every(part => part.parent !== built.group)).toBe(true);
 
     applyShipLod(built.group, details, 'reduced');
     selectReaperRigDetail(rig, true, 'reduced');
     expect(seams.every(part => !part.visible)).toBe(true);
     expect(armour.every(part => part.visible)).toBe(true);
+    expect(overlays.every(part => !part.visible)).toBe(true);
     expect(aperture.every(part => part.visible)).toBe(true);
     expect(rig.staticMeshes.every(part => !part.visible)).toBe(true);
 
@@ -102,6 +111,7 @@ describe('nested hero details and independent mechanical visibility', () => {
     applyShipLod(built.group, details, 'full');
     selectReaperRigDetail(rig, false, 'full');
     expect(seams.every(part => part.visible)).toBe(true);
+    expect(overlays.every(part => part.visible)).toBe(true);
     expect(objectsNamed(built.group, 'reaper-static-seams').every(part => part.visible)).toBe(true);
 
     applyShipLod(built.group, details, 'point');
