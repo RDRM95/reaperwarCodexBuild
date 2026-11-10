@@ -54,15 +54,22 @@ export function centroid(ships: ShipState[]): Vec3 | undefined {
 /** Principal battery, in simulation units. Turrets/PD never set a capital's
  * standoff, and spent torpedoes never keep their carrier outside gun range. */
 export function shipEngagementRange(ship: ShipState): number {
-  const usable = ship.weapons.filter(w => w.ammo === undefined || w.ammo > 0);
-  const available = usable.filter(w => !w.def.antiSmall);
-  const spinal = available.filter(w => w.def.arc < 90 && w.def.kind !== 'disruptor_torpedo' && w.def.kind !== 'missile');
-  if (ship.role === 'fighter' || ship.role === 'frigate') {
-    const torpedo = available.find(w => w.def.kind === 'disruptor_torpedo');
-    if (torpedo) return torpedo.def.range;
+  // One pass, no temporary arrays: this is asked for every hull every tick. The battery is the spinal mounts if
+  // any have ammunition, else any anti-ship mount, else anything usable; the answer is its longest range.
+  const light = ship.role === 'fighter' || ship.role === 'frigate';
+  let usable = 2 * S, available = 2 * S, spinal = 2 * S;
+  let anyAvailable = false, anySpinal = false;
+  for (const w of ship.weapons) {
+    if (!(w.ammo === undefined || w.ammo > 0)) continue;
+    usable = Math.max(usable, w.def.range);
+    if (w.def.antiSmall) continue;
+    // A light hull's first loaded torpedo mount sets its range outright.
+    if (light && w.def.kind === 'disruptor_torpedo') return w.def.range;
+    anyAvailable = true;
+    available = Math.max(available, w.def.range);
+    if (w.def.arc < 90 && w.def.kind !== 'disruptor_torpedo' && w.def.kind !== 'missile') { anySpinal = true; spinal = Math.max(spinal, w.def.range); }
   }
-  const battery = spinal.length ? spinal : available.length ? available : usable;
-  return battery.reduce((range, w) => Math.max(range, w.def.range), 2 * S);
+  return anySpinal ? spinal : anyAvailable ? available : usable;
 }
 
 export function engagementBand(ship: ShipState): { min: number; preferred: number; max: number } {
@@ -152,10 +159,15 @@ export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const locked = currentValid && ctx.time < (ship.targetLockUntil ?? 0);
   let best = currentValid ? current : undefined;
   let bestScore = best ? scoreTarget(ctx, ship, fleet, best, range) : -Infinity;
+  // Loop invariants, hoisted: neither depends on the candidate.
+  const unarmedAgainstFighters = ship.role === 'fighter' && !ship.weapons.some(w => w.def.antiSmall);
+  const currentOutOfReach = currentValid && distance(ship.pos, current.pos) > range * 1.4;
   for (const e of ctx.enemiesOf(ship.side)) {
-    if (!validEnemy(ship, e) || distance(ship.pos, e.pos) > sensor * 1.5) continue;
-    if (ship.role === 'fighter' && e.role === 'fighter' && !ship.weapons.some(w => w.def.antiSmall)) continue;
-    const reachableReplacement = currentValid && distance(ship.pos, current.pos) > range * 1.4 && distance(ship.pos, e.pos) < range;
+    if (!validEnemy(ship, e)) continue;
+    const separation = distance(ship.pos, e.pos);
+    if (separation > sensor * 1.5) continue;
+    if (unarmedAgainstFighters && e.role === 'fighter') continue;
+    const reachableReplacement = currentOutOfReach && separation < range;
     if (locked && !reachableReplacement) continue;
     const candidate = scoreTarget(ctx, ship, fleet, e, range);
     const threshold = currentValid && best?.id === current.id && !reachableReplacement ? bestScore * 1.25 : bestScore;
