@@ -39,6 +39,11 @@ export function renderSettings(app: App): HTMLElement {
           p.graphics.showEngineGlow = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();
         } }, [el('option', { value: 'on', selected: p.graphics.showEngineGlow }, 'On'), el('option', { value: 'off', selected: !p.graphics.showEngineGlow }, 'Off')])]),
+        el('label', { class: 'field' }, ['Bloom', el('select', { 'data-action': 'bloom', onchange: (e: Event) => {
+          const value = (e.target as HTMLSelectElement).value;
+          p.graphics.bloom = value === 'auto' ? undefined : value === 'on';
+          void app.savePrefs();
+        } }, [el('option', { value: 'auto', selected: p.graphics.bloom === undefined }, 'Auto: on with high quality'), el('option', { value: 'on', selected: p.graphics.bloom === true }, 'On: light sources glow softly'), el('option', { value: 'off', selected: p.graphics.bloom === false }, 'Off')])]),
         el('label', { class: 'field' }, ['Level of detail', el('select', { onchange: (e: Event) => {
           p.graphics.lod = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SCENE_COLOUR_GLSL, sceneDefines } from './sceneColour';
 import type { Environment } from '@/simulation/types';
 import { Rng } from '@/core/rng';
 
@@ -179,6 +180,7 @@ void main(){
   gl_Position = projectionMatrix * mv;
 }`;
 const ATMOSPHERE_FRAG = `
+${SCENE_COLOUR_GLSL}
 uniform vec3 color;
 uniform float strength;
 varying vec3 vNormal;
@@ -192,14 +194,15 @@ void main(){
   // No wide veil over the planet: scattering stays confined to its sunlit limb.
   float density = limb * (0.025 + 0.46 * day + 0.055 * forward) * strength;
   vec3 scattering = color * vec3(0.72, 0.86, 1.12) * (0.75 + 0.25 * forward);
-  gl_FragColor = vec4(scattering, clamp(density, 0.0, 0.75));
+  gl_FragColor = additiveOut(scattering, clamp(density, 0.0, 0.75));
 }`;
 
-export function makeAtmosphere(radius: number, color: number, sunDirection = new THREE.Vector3(0.55, 0.35, -0.75), strength = 1): THREE.Mesh {
+export function makeAtmosphere(radius: number, color: number, sunDirection = new THREE.Vector3(0.55, 0.35, -0.75), strength = 1, hdr = false): THREE.Mesh {
   const mat = new THREE.ShaderMaterial({
     uniforms: { color: { value: new THREE.Color(color) }, sunDirection: { value: sunDirection.clone().normalize() }, strength: { value: strength } },
     vertexShader: ATMOSPHERE_VERT,
     fragmentShader: ATMOSPHERE_FRAG,
+    defines: sceneDefines(hdr),
     transparent: true,
     side: THREE.BackSide,
     blending: THREE.AdditiveBlending,
@@ -210,7 +213,7 @@ export function makeAtmosphere(radius: number, color: number, sunDirection = new
   return m;
 }
 
-export function makeStarfield(count = 6000, radius = 180_000): THREE.Points {
+export function makeStarfield(count = 6000, radius = 180_000, hdr = false): THREE.Points {
   const rng = new Rng('stars');
   const pos = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
@@ -243,9 +246,10 @@ export function makeStarfield(count = 6000, radius = 180_000): THREE.Points {
     vertexShader: `
       attribute float size; attribute vec3 color; varying vec3 vColor; uniform float pixelRatio;
       void main(){ vColor = color; vec4 mv = modelViewMatrix * vec4(position,1.0); gl_PointSize = size * pixelRatio; gl_Position = projectionMatrix * mv; }`,
-    fragmentShader: `
+    fragmentShader: `${SCENE_COLOUR_GLSL}
       varying vec3 vColor;
-      void main(){ vec2 c = gl_PointCoord - 0.5; float d = length(c); float a = smoothstep(0.5, 0.1, d); gl_FragColor = vec4(vColor, a); }`,
+      void main(){ vec2 c = gl_PointCoord - 0.5; float d = length(c); float a = smoothstep(0.5, 0.1, d); gl_FragColor = blendedOut(vColor, a); }`,
+    defines: sceneDefines(hdr),
     transparent: true,
     depthWrite: false,
   });
@@ -408,10 +412,11 @@ export interface EnvironmentBuild {
  * scale, placed so it fills the lower sky from a low-orbit battle) — this is
  * a visual choice, not a simulation value.
  */
-export function buildEnvironment(env: Environment): EnvironmentBuild {
+/** `hdr`: the scene is drawn into the HDR target (bloom on), so hand-written shaders convert their colours. */
+export function buildEnvironment(env: Environment, hdr = false): EnvironmentBuild {
   const group = new THREE.Group();
   const sky: THREE.Object3D[] = [];
-  const stars = makeStarfield();
+  const stars = makeStarfield(undefined, undefined, hdr);
   const band = makeGalaxyBand();
   sky.push(stars, band);
   group.add(stars, band);
@@ -430,7 +435,7 @@ export function buildEnvironment(env: Environment): EnvironmentBuild {
     p.rotation.set(0, 1.2, 1.1);
     p.name = 'planet';
     group.add(p);
-    const atm = makeAtmosphere(radius, style.atmosphere, sunDirection);
+    const atm = makeAtmosphere(radius, style.atmosphere, sunDirection, 1, hdr);
     atm.position.copy(position);
     group.add(atm);
     planet = p;
