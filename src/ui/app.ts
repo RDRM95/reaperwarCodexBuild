@@ -1,4 +1,5 @@
 import { audio, type SoundId } from '@/audio/engine';
+import { deathSounds } from '@/rendering/deathSequence';
 import { installShipReferenceInspector } from '@/references/ShipReferenceInspector';
 import { DEFAULT_PREFERENCES, storage, type Preferences } from '@/core/storage';
 import { BattleView } from '@/rendering/battleView';
@@ -99,6 +100,10 @@ export class BattleController {
     this.isReplay = isReplay;
     this.sim = new BattleSimulation(config);
     this.view = new BattleView(canvas, this.sim, app.prefs.graphics);
+    this.view.onBreakup = (role, position) => {
+      const cue = deathSounds(role);
+      if (cue.atBreakup) audio.play(cue.atBreakup, position.distanceTo(this.view.rig.camera.position) / 10, cue.intensity);
+    };
     this.overlay = new TacticalOverlay(overlayCanvas);
     this.overlay.visible = app.prefs.showOverlay;
     this.overlay.detail = app.prefs.overlayDetail;
@@ -353,8 +358,9 @@ export class BattleController {
       }
       case 'ship_destroyed': {
         const d = dist(e.pos);
-        const big = e.role === 'dreadnought' || e.role === 'carrier' || e.role === 'reaper_capital';
-        audio.play(big || e.role === 'cruiser' || e.role === 'reaper_destroyer' ? 'explosion_large' : 'explosion_small', d, big ? 1 : 0.6);
+        // A staged death (a Reaper) is heard dying now; its explosion follows at the breakup (see onBreakup).
+        const cue = deathSounds(e.role);
+        audio.play(cue.atKill, d, cue.intensity);
         break;
       }
       case 'reinforcement_arrival':
