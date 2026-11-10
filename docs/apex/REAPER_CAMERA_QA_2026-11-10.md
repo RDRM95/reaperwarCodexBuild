@@ -24,6 +24,9 @@ A probe ran `CameraRig` to rest on a 20-unit (2 km) hull heading +z and projecte
 Rendered in the app (cloud Chromium with SwiftShader), a capital over Earth with an Alliance line ahead:
 `qa/reaper-camera-20261110/before-after-reaper-follow-cinematic.jpg` (before left, after right).
 
+A free-camera close-up from under the hood with the limbs in the combat stance, about 1.1 km from the hull:
+`qa/reaper-camera-20261110/close-under-the-hood-combat-stance.jpg`.
+
 `tests/camera-presence.test.ts` pins the Reaper view's framing for several headings, the follow share and the
 unchanged small-hull distances, and the closer, lower solo orbit.
 
