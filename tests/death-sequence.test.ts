@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '@/core/rng';
 import { breakupVelocity } from '@/rendering/breakup';
-import { LIGHTS_FAIL, deathDuration, deathLight, deathList, deathPlan } from '@/rendering/deathSequence';
+import { LIGHTS_FAIL, deathDuration, deathLight, deathList, deathPlan, deathSounds, isStagedDeath } from '@/rendering/deathSequence';
 
 describe('how a destroyed hull dies on screen', () => {
   it('a Reaper dies slowly; other classes keep their timing', () => {
@@ -90,5 +90,24 @@ describe('how a destroyed hull dies on screen', () => {
     const core = breakupVelocity(new THREE.Vector3(), size, rng);
     expect(Number.isFinite(core.length())).toBe(true);
     expect(core.length()).toBeLessThan(size * 0.15);
+  });
+
+  it('a staged death is heard dying at the kill and exploding at the breakup', () => {
+    // Before: the explosion was heard at the kill for every class, 5.2 s before a capital Reaper actually broke up.
+    for (const role of ['reaper_capital', 'reaper_destroyer']) {
+      expect(isStagedDeath(role)).toBe(true);
+      expect(deathPlan(role, 'x').staged).toBe(true);
+      expect(deathSounds(role).atKill).toBe('reaper_death');
+      expect(deathSounds(role).atBreakup).toBe('explosion_large');
+    }
+    expect(deathSounds('reaper_capital').intensity).toBe(1);
+    expect(deathSounds('reaper_destroyer').intensity).toBe(0.6);
+    // Other classes sound exactly as they did: one explosion, at the kill.
+    expect(deathSounds('dreadnought')).toEqual({ atKill: 'explosion_large', intensity: 1 });
+    expect(deathSounds('carrier')).toEqual({ atKill: 'explosion_large', intensity: 1 });
+    expect(deathSounds('cruiser')).toEqual({ atKill: 'explosion_large', intensity: 0.6 });
+    expect(deathSounds('frigate')).toEqual({ atKill: 'explosion_small', intensity: 0.6 });
+    expect(deathSounds('fighter')).toEqual({ atKill: 'explosion_small', intensity: 0.6 });
+    for (const role of ['dreadnought', 'carrier', 'cruiser', 'frigate']) expect(isStagedDeath(role)).toBe(false);
   });
 });

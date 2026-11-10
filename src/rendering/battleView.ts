@@ -18,7 +18,7 @@ import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
 import { collectBreakupPieces } from './breakup';
-import { deathLight, deathList, deathPlan, type DeathPlan } from './deathSequence';
+import { deathLight, deathList, deathPlan, isStagedDeath, type DeathPlan } from './deathSequence';
 import { DAMAGE_ONSET, REAPER_ARMOUR_MESHES, REAPER_SEAM_MESHES, reaperDamageGlow, type ReaperDamageGlow } from './damageGlow';
 import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
 import { bloomFor, createBloomPipeline, type BloomPipeline } from './bloom';
@@ -111,6 +111,8 @@ export class BattleView {
   private readonly farColourCache = new Map<string, readonly [number, number, number]>();
   /** Draw calls of the last rendered frame. */
   drawCalls = 0;
+  /** Called when a staged death reaches its breakup (render units), so the explosion is heard when it is seen. */
+  onBreakup?: (role: string, position: THREE.Vector3) => void;
   /** Post-processing chain when bloom is on; the scene renders straight to the canvas otherwise. */
   private bloom?: BloomPipeline;
   lodCounts = { full: 0, reduced: 0, point: 0 };
@@ -575,6 +577,7 @@ export class BattleView {
     }
     const vel = new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM * 0.5);
     this.effects.explosion(pos, v.built.lengthUnits, ship.faction === 'reaper', pieces, vel);
+    if (v.dying?.plan.staged) this.onBreakup?.(ship.role, pos);
     for (const gl of v.glows) gl.visible = false;
     this.scene.remove(v.built.group);
     v.removed = true;
@@ -662,9 +665,12 @@ export class BattleView {
           // destroyed; only its close-up debris pieces require a hero mesh.
           if (!v) {
             const ship = this.sim.getShip(e.shipId);
-            if (ship) this.effects.explosion(
-              new THREE.Vector3(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM),
-              getShipTemplate(ship.classId).lengthUnits, ship.faction === 'reaper');
+            if (ship) {
+              const at = new THREE.Vector3(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM);
+              this.effects.explosion(at, getShipTemplate(ship.classId).lengthUnits, ship.faction === 'reaper');
+              // No hero mesh, so no staged death is shown: the breakup is now.
+              if (isStagedDeath(ship.role)) this.onBreakup?.(ship.role, at);
+            }
           }
           if (v && this.rig.mode === 'cinematic' && this.cine.age >= 5 && (e.role === 'dreadnought' || e.role === 'reaper_capital' || e.role === 'carrier')) {
             // Cinematic director jumps to capital ship deaths.
