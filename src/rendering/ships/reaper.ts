@@ -64,7 +64,7 @@ function reaperMaterials(): ReaperMaterials {
     hullDark: vertexTinted(p.hullDark),
     shell: vertexTinted(p.accent),
     // Thin pale-blue seams and the warm iris are the two Reaper-only slots.
-    seam: new THREE.MeshStandardMaterial({ color: 0x7fb4ff, emissive: 0x7fb4ff, emissiveIntensity: 1.2, roughness: 0.45, metalness: 0.1 }),
+    seam: new THREE.MeshStandardMaterial({ color: 0x7fb4ff, emissive: 0x7fb4ff, emissiveIntensity: 0.9, roughness: 0.45, metalness: 0.1 }),
     iris: new THREE.MeshStandardMaterial({ color: 0xffb060, emissive: 0xffb060, emissiveIntensity: 4.5, roughness: 0.3, metalness: 0 }),
   };
   return sharedMaterials;
@@ -287,13 +287,14 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     sec(-0.370, 0.19, 0.48, 0.24, { nTop: 1.5, nBot: 2.1 }),
     sec(-0.270, 0.33, 0.68, 0.40, { nTop: 1.6, nBot: 2.2 }),
     sec(-0.170, 0.50, 0.84, 0.58, { nTop: 1.8, nBot: 2.3 }),
-    sec(-0.080, 0.70, 0.95, 0.76, { nTop: 2.1, nBot: 2.4 }),
-    sec(-0.010, 0.90, 1.00, 0.90, { nTop: 2.4, nBot: 2.5 }),
-    sec(0.070, 1.00, 0.98, 0.96, { nTop: 2.6, nBot: 2.6 }),
-    sec(0.150, 0.95, 0.90, 0.93, { nTop: 2.6, nBot: 2.6 }),
-    sec(0.210, 0.78, 0.70, 0.84, { nTop: 2.4, nBot: 2.5 }),
-    sec(0.255, 0.42, 0.36, 0.55, { nTop: 2.2, nBot: 2.3 }),
-    sec(0.272, 0.06, 0.06, 0.10, { nTop: 2.0, nBot: 2.0 }),
+    sec(-0.080, 0.70, 1.00, 0.76, { nTop: 2.1, nBot: 2.4 }),
+    sec(-0.010, 0.90, 1.12, 0.90, { nTop: 2.5, nBot: 2.5 }),
+    sec(0.070, 1.00, 1.08, 0.96, { nTop: 2.8, nBot: 2.7 }),
+    sec(0.150, 0.96, 0.96, 0.93, { nTop: 2.8, nBot: 2.7 }),
+    sec(0.215, 0.84, 0.76, 0.84, { nTop: 2.7, nBot: 2.6 }),
+    sec(0.252, 0.62, 0.50, 0.66, { nTop: 2.8, nBot: 2.8 }),
+    sec(0.268, 0.30, 0.22, 0.34, { nTop: 3.0, nBot: 3.0 }),
+    sec(0.272, 0.05, 0.04, 0.06, { nTop: 3.0, nBot: 3.0 }),
   ].map(s => ({ ...s, z: zf(s.z), w: s.w * R, hTop: s.hTop * R, hBot: s.hBot * R }));
   // Ventral cavity: the hood underside between the limb roots is recessed.
   const recess = (z: number, th: number): number => {
@@ -335,12 +336,12 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   }
   // Dorsal ridge: a raised keel along the spine, embedded into the blade's top edge.
   const ridgePts: THREE.Vector3[] = [];
-  for (let i = 0; i <= 12; i++) {
-    const z = zf(-0.46) + (0.44 * L) * i / 12;
+  for (let i = 0; i <= 16; i++) {
+    const z = zf(-0.46) + (0.46 * L + 0.2 * L) * i / 16;
     const s = sectionAt(S, z);
-    ridgePts.push(new THREE.Vector3(0, s.cy + s.hTop * 0.94, z));
+    ridgePts.push(new THREE.Vector3(0, s.cy + s.hTop * 0.95, z));
   }
-  carapace.push(tinted(keel(ridgePts, t => R * (0.035 + 0.075 * t), t => R * (0.07 + 0.17 * t)), 1.05));
+  carapace.push(tinted(keel(ridgePts, t => R * (0.035 + 0.085 * Math.min(1, t * 1.4)), t => R * (0.07 + 0.2 * Math.min(1, t * 1.4)) * (1 - 0.55 * smooth(0.75, 1, t))), 1.05));
   if (opts.spines) {
     // Harbinger / Ascendant: more pronounced ridges — five angular dorsal fins.
     for (let i = 0; i < 5; i++) {
@@ -368,25 +369,29 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // --- Hood: stepped overlapping shells, largest and proudest aft, each split at
   // a different angle on each side so the two flanks are not mirror copies.
   const hoodShells = [
-    { z0: -0.055, z1: 0.055, arc: 2.55, outer: 1.10, k: 1.04 },
-    { z0: 0.035, z1: 0.125, arc: 2.45, outer: 1.065, k: 0.97 },
-    { z0: 0.105, z1: 0.185, arc: 2.30, outer: 1.035, k: 1.02 },
-    { z0: 0.165, z1: 0.238, arc: 1.75, outer: 1.0, k: 0.95 },
+    { z0: -0.06, z1: 0.05, arc: 2.6, outer: 1.10, k: 1.04 },
+    { z0: 0.03, z1: 0.125, arc: 2.5, outer: 1.065, k: 0.97 },
+    { z0: 0.105, z1: 0.19, arc: 2.35, outer: 1.035, k: 1.02 },
+    { z0: 0.17, z1: 0.236, arc: 1.9, outer: 1.015, k: 0.95 },
+    { z0: 0.226, z1: 0.269, arc: 2.1, outer: 1.045, k: 1.0 },
   ];
   const hoodThick = R * 0.05;
   hoodShells.forEach((h, idx) => {
-    const b1 = 0.55 + 0.6 * rnd(20 + idx, 1), b2 = 0.55 + 0.6 * rnd(20 + idx, 2);
-    const gap = 0.022;
-    const pieces: [number, number][] = [[-h.arc, -b2 - gap], [-b2 + gap, b1 - gap], [b1 + gap, h.arc]];
-    for (const [t0, t1] of pieces) {
-      const nt = Math.max(2, Math.round((t1 - t0) / 0.2));
-      carapace.push(tinted(shell(S, h.z0 * L, h.z1 * L, t0, t1, 2, nt, h.outer, hoodThick), h.k));
-    }
+    // Panel seams at different angles on each flank; every panel is one planar
+    // facet row with its own standoff so the hood steps like stacked armour.
+    const b1 = 0.5 + 0.7 * rnd(20 + idx, 1), b2 = 0.5 + 0.7 * rnd(20 + idx, 2);
+    const gap = 0.06;
+    const pieces: [number, number][] = [[-h.arc, -b2 - gap], [-b2 + gap, -gap], [gap, b1 - gap], [b1 + gap, h.arc]];
+    pieces.forEach(([t0, t1], piece) => {
+      const nt = Math.max(1, Math.round((t1 - t0) / 0.52));
+      const outer = h.outer + 0.03 * (rnd(30 + idx, piece) - 0.5);
+      carapace.push(tinted(shell(S, h.z0 * L, h.z1 * L, t0, t1, 1, nt, outer, hoodThick), h.k + 0.03 * (rnd(35 + idx, piece) - 0.5)));
+    });
     // A thin pale seam along each exposed forward lip.
     const lipZ = h.z1 * L - hoodThick * 0.4;
     const pts: THREE.Vector3[] = [];
     for (let j = 0; j <= 10; j++) pts.push(sectionPoint(sectionAt(S, lipZ), -h.arc * 0.72 + (h.arc * 1.44) * j / 10, h.outer + 0.004, new THREE.Vector3()));
-    seams.push(taperedTube(new THREE.CatmullRomCurve3(pts), () => R * 0.012, 10, 4));
+    seams.push(taperedTube(new THREE.CatmullRomCurve3(pts), () => R * 0.009, 10, 4));
   });
 
   // --- Ventral cavity furniture: ring ribs, longitudinal rails and round mechanical ports.
@@ -444,10 +449,10 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // Static merged stand-ins keep distant/bulk Reapers at two limb draw calls.
   const armLen = L * opts.armLengthFactor;
   const stations = destroyer
-    ? [{ th: 2.05, z: -0.01, spread: 1.95, drop: 0.08, root: 0.56 }, { th: 2.62, z: 0.10, spread: 1.55, drop: 0.30, root: 0.50 }]
-    : [{ th: 1.98, z: -0.005, spread: harbinger ? 1.6 : 1.35, drop: 0.0, root: 0.42 },
-       { th: 2.38, z: 0.07, spread: harbinger ? 1.4 : 1.15, drop: 0.10, root: 0.40 },
-       { th: 2.70, z: 0.135, spread: harbinger ? 1.05 : 0.85, drop: 0.30, root: 0.38 }];
+    ? [{ th: 2.05, z: 0.02, spread: 2.3, drop: 0.1, root: 0.62 }, { th: 2.62, z: 0.12, spread: 1.8, drop: 0.35, root: 0.56 }]
+    : [{ th: 1.98, z: 0.03, spread: harbinger ? 1.95 : 1.7, drop: 0.0, root: 0.52 },
+       { th: 2.38, z: 0.09, spread: harbinger ? 1.7 : 1.45, drop: 0.12, root: 0.5 },
+       { th: 2.70, z: 0.145, spread: harbinger ? 1.3 : 1.1, drop: 0.32, root: 0.48 }];
   const staticArms: THREE.BufferGeometry[] = [];
   const staticSeams: THREE.BufferGeometry[] = [];
   const bake = (g: THREE.BufferGeometry, offset: THREE.Vector3): THREE.BufferGeometry => g.clone().translate(offset.x, offset.y, offset.z);
@@ -465,11 +470,12 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     const forwardPair = Math.floor(i / 2) === stations.length - 1;
     // Upper 0.42 + lower 0.46 + claw 0.125 of the reach lie along +z.
     const reach = forwardPair ? (fwdZ - root.z) / 1.005 : armLen * (1 + 0.04 * (rnd(40 + i) - 0.5));
-    const upperEnd = outward.clone().multiplyScalar(R * st.spread).add(new THREE.Vector3(0, -R * 0.08, reach * 0.42));
-    const lowerEnd = outward.clone().multiplyScalar(-R * 0.18).add(new THREE.Vector3(0, -R * st.drop, reach * 0.46));
+    const upperEnd = outward.clone().multiplyScalar(R * st.spread).add(new THREE.Vector3(0, -R * 0.1, reach * 0.42));
+    // The lower limb angles back inboard so each knee reads as a mechanical bend.
+    const lowerEnd = outward.clone().multiplyScalar(-R * st.spread * 0.38).add(new THREE.Vector3(0, -R * st.drop, reach * 0.46));
     const rootR = R * st.root;
-    const upperR = (t: number) => rootR * (1 - 0.56 * t);
-    const lowerR = (t: number) => rootR * 0.46 * (1 - 0.62 * t);
+    const upperR = (t: number) => rootR * (1 - 0.46 * t);
+    const lowerR = (t: number) => rootR * 0.52 * (1 - 0.56 * t);
 
     const pivot = new THREE.Group();
     pivot.name = 'reaper-shoulder';
@@ -480,14 +486,14 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     // Upper limb: faceted tapered sleeve wrapped in overlapping plate rings.
     const upperCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0, 0, 0),
-      outward.clone().multiplyScalar(R * st.spread * 0.6).add(new THREE.Vector3(0, R * 0.02, reach * 0.16)),
+      outward.clone().multiplyScalar(R * st.spread * 0.62).add(new THREE.Vector3(0, R * 0.02, reach * 0.15)),
       upperEnd,
     ]);
     const upper = new Sweep(upperCurve, 0.85);
     const upperParts: THREE.BufferGeometry[] = [tinted(upper.sleeve(0, 1, 7, radial, upperR), 0.95)];
     for (let k = 0; k < 4; k++) {
       const tc = 0.13 + k * 0.215 + (rnd(50 + i, k) - 0.5) * 0.03;
-      upperParts.push(tinted(upper.ring(tc - 0.075, tc + 0.075, radial, upperR, t => 1.15 - 0.08 * (t - tc + 0.075) / 0.15), 1.03 + 0.03 * (k % 2)));
+      upperParts.push(tinted(upper.ring(tc - 0.08, tc + 0.08, radial, upperR, t => 1.22 - 0.1 * (t - tc + 0.08) / 0.16), 1.03 + 0.03 * (k % 2)));
     }
     const upperGeom = mergeTinted(upperParts);
     const upperMesh = new THREE.Mesh(upperGeom, m.shell);
@@ -495,7 +501,7 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     pivot.add(upperMesh);
     staticArms.push(bake(upperGeom, root));
     // Shoulder bearing: a heavy cylindrical hip block half-buried in the hood.
-    const bearing = tinted(cylinderAlong(outward.clone().multiplyScalar(rootR * 0.25), joint, rootR * 0.78, rootR * 1.5, radial), 0.94);
+    const bearing = tinted(cylinderAlong(outward.clone().multiplyScalar(rootR * 0.3), joint, rootR * 0.82, rootR * 1.7, radial), 0.94);
     const bearingMesh = new THREE.Mesh(bearing, m.shell);
     bearingMesh.name = 'reaper-joint';
     pivot.add(bearingMesh);
@@ -521,14 +527,14 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     // Lower limb sleeve and rings.
     const lowerCurve = new THREE.CatmullRomCurve3([
       new THREE.Vector3(0, 0, 0),
-      lowerEnd.clone().multiplyScalar(0.5).addScaledVector(outward, R * 0.06),
+      lowerEnd.clone().multiplyScalar(0.5).addScaledVector(outward, R * 0.1),
       lowerEnd,
     ]);
     const lower = new Sweep(lowerCurve, 0.85);
     const lowerParts: THREE.BufferGeometry[] = [tinted(lower.sleeve(0, 1, 6, radial, lowerR), 0.95)];
     for (let k = 0; k < 3; k++) {
       const tc = 0.18 + k * 0.26 + (rnd(60 + i, k) - 0.5) * 0.03;
-      lowerParts.push(tinted(lower.ring(tc - 0.07, tc + 0.07, radial, lowerR, t => 1.16 - 0.08 * (t - tc + 0.07) / 0.14), 1.04 + 0.02 * (k % 2)));
+      lowerParts.push(tinted(lower.ring(tc - 0.075, tc + 0.075, radial, lowerR, t => 1.24 - 0.1 * (t - tc + 0.075) / 0.15), 1.04 + 0.02 * (k % 2)));
     }
     const lowerGeom = mergeTinted(lowerParts);
     const lowerMesh = new THREE.Mesh(lowerGeom, m.shell);
@@ -536,8 +542,8 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     elbow.add(lowerMesh);
     staticArms.push(bake(lowerGeom, elbowWorld));
     // Mechanical knuckle: a cylinder across the joint axis with two piston rods bridging the bend.
-    const knuckleR = upperR(1) * 1.05;
-    const knuckleParts = [tinted(cylinderAlong(new THREE.Vector3(), joint, knuckleR, knuckleR * 2.3, radial), 0.94)];
+    const knuckleR = upperR(1) * 1.12;
+    const knuckleParts = [tinted(cylinderAlong(new THREE.Vector3(), joint, knuckleR, knuckleR * 2.6, radial), 0.94)];
     const lowerDir = lowerEnd.clone().normalize();
     const upperDir = upperEnd.clone().normalize();
     for (const sgn of [-1, 1]) {
@@ -585,8 +591,8 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // --- Weapon aperture: the single dominant emitter in a dark faceted cowl, lower-forward.
   const eyeZ = L * 0.2;
   const eyeY = -A * 0.85;
-  const cowl = tinted(zCylinder(A * 0.30, A * 0.37, A * 0.28, 8), 0.95);
-  cowl.translate(0, eyeY, eyeZ - A * 0.03);
+  const cowl = tinted(zCylinder(A * 0.36, A * 0.44, A * 0.36, 8), 0.95);
+  cowl.translate(0, eyeY, eyeZ + A * 0.01);
   dark.push(cowl);
   const lensGeom = new THREE.SphereGeometry(A * 0.16, 14, 10);
   lensGeom.scale(1, 1, 0.6);
@@ -619,7 +625,7 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // locomotor limbs. The head moves in very small increments, like heavy actuators.
   for (let i = 0; i < 5; i++) {
     const a = -Math.PI * 0.88 + (Math.PI * 0.76 * i / 4);
-    const r = A * 0.5;
+    const r = A * 0.56;
     const jointGroup = new THREE.Group();
     jointGroup.name = 'reaper-mandible';
     jointGroup.userData = { reaperRig: 'mandible', index: i, side: Math.cos(a) >= 0 ? 1 : -1, destroyer };

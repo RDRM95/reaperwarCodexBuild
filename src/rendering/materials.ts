@@ -49,8 +49,8 @@ export const PALETTES: Record<string, FactionPalette> = {
     // plate sheen, crimson running lights and an orange-red aperture. No brown.
     hull: std(0x0e1016, { metalness: 0.85, roughness: 0.32, emissive: 0x02030a, emissiveIntensity: 1 }),
     hullDark: std(0x07080c, { metalness: 0.8, roughness: 0.44, emissive: 0x010204, emissiveIntensity: 1 }),
-    accent: std(0x1a2230, { metalness: 0.84, roughness: 0.34, envMapIntensity: 1.6 }),
-    engine: new THREE.MeshStandardMaterial({ color: 0xff5a1f, emissive: 0xff5a1f, emissiveIntensity: 4.5, roughness: 0.3, metalness: 0 }),
+    accent: std(0x1a2230, { metalness: 0.84, roughness: 0.38, envMapIntensity: 1.6 }),
+    engine: new THREE.MeshStandardMaterial({ color: 0xff5a1f, emissive: 0xff5a1f, emissiveIntensity: 2.8, roughness: 0.3, metalness: 0 }),
     windows: new THREE.MeshStandardMaterial({ color: 0xd01030, emissive: 0xd01030, emissiveIntensity: 2.5 }),
     glow: new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }),
   },
