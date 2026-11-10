@@ -1,0 +1,75 @@
+{
+  "glError": "0",
+  "drawCalls": "123",
+  "rows": [
+    {
+      "classId": "reaper_capital",
+      "values": [
+        "1. Sovereign-class Reaper capital ship",
+        "2,000",
+        "2,000",
+        "724.8",
+        "460.4",
+        "CANON CONFIRMED"
+      ]
+    },
+    {
+      "classId": "alliance_dreadnought",
+      "values": [
+        "2. Kilimanjaro-class dreadnought",
+        "888",
+        "878.2",
+        "258.6",
+        "135.5",
+        "CANON INFERRED"
+      ]
+    },
+    {
+      "classId": "alliance_cruiser",
+      "values": [
+        "3. Alliance cruiser",
+        "520",
+        "514.3",
+        "145.6",
+        "79.4",
+        "SIMULATION ESTIMATE"
+      ]
+    },
+    {
+      "classId": "alliance_frigate",
+      "values": [
+        "4. Alliance frigate",
+        "170",
+        "161.2",
+        "173.2",
+        "40",
+        "CANON INFERRED"
+      ]
+    },
+    {
+      "classId": "reaper_destroyer",
+      "values": [
+        "5. Reaper destroyer",
+        "160",
+        "160",
+        "143",
+        "88.3",
+        "CANON CONFIRMED"
+      ]
+    },
+    {
+      "classId": "alliance_fighter",
+      "values": [
+        "6. F-61 Trident fighter",
+        "18",
+        "18",
+        "18.5",
+        "3.9",
+        "SIMULATION ESTIMATE"
+      ]
+    }
+  ],
+  "errors": [],
+  "browser": "154.0.8037.57",
+  "renderer": "ANGLE SwiftShader (cloud software rendering)"
+}
