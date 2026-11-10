@@ -57,7 +57,8 @@ export function compareBattles(configA: BattleConfig, configB: BattleConfig): Co
     { key: 'accuracy', label: 'Hit rate', a: `${fmt((100 * sa.hits) / Math.max(1, sa.shotsFired))}%`, b: `${fmt((100 * sb.hits) / Math.max(1, sb.shotsFired))}%` },
     { key: 'effectiveness', label: 'Tactical effectiveness (damage per point lost)', a: fmt(sa.tacticalEffectiveness, 1), b: fmt(sb.tacticalEffectiveness, 1), delta: sb.tacticalEffectiveness - sa.tacticalEffectiveness },
     { key: 'objective', label: 'Objective completed', a: ra.objectiveCompleted ? 'YES' : 'NO', b: rb.objectiveCompleted ? 'YES' : 'NO' },
-    { key: 'survival', label: 'Fleet survival', a: `${fmt(sa.survivalPercent)}%`, b: `${fmt(sb.survivalPercent)}%`, delta: sb.survivalPercent - sa.survivalPercent },
+    { key: 'hull_survival', label: 'Ships surviving (hull count)', a: `${sa.survivors} / ${sa.deployed}`, b: `${sb.survivors} / ${sb.deployed}`, delta: sb.survivors - sa.survivors },
+    { key: 'survival', label: 'Combat value retained (points)', a: `${fmt(sa.survivalPercent)}%`, b: `${fmt(sb.survivalPercent)}%`, delta: sb.survivalPercent - sa.survivalPercent },
   ];
 
   return { a: { rules: configA.rules, result: ra, config: configA }, b: { rules: configB.rules, result: rb, config: configB }, metrics, explanation: explainDifferences(configA.rules, configB.rules, ra, rb) };

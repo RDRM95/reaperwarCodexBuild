@@ -16,12 +16,15 @@ export function renderResults(app: App): HTMLElement {
       el('div', { class: 'kv' }, [
         el('span', {}, 'Ships deployed'), el('span', { class: 'v' }, String(s.deployed)),
         el('span', {}, 'Ships destroyed'), el('span', { class: 'v' }, String(s.destroyed)),
+        el('span', { title: 'Surviving non-fighter hulls divided by deployed non-fighter hulls. Escaped ships survive.' }, 'Ships surviving (hull count)'),
+        el('span', { class: 'v', 'data-stat': 'hull-survival' }, `${s.survivors} / ${s.deployed} (${fmtNum(s.deployed > 0 ? 100 * s.survivors / s.deployed : 0)}%)`),
         el('span', {}, 'Capital ships lost'), el('span', { class: 'v' }, `${s.capitalLost} / ${s.capitalDeployed}`),
         el('span', {}, 'Damage inflicted'), el('span', { class: 'v' }, fmtNum(s.damageDealt)),
         el('span', {}, 'Hull damage received'), el('span', { class: 'v' }, fmtNum(s.damageTaken)),
         el('span', {}, 'Rounds / bursts fired'), el('span', { class: 'v' }, fmtNum(s.shotsFired)),
         el('span', {}, 'Hit rate'), el('span', { class: 'v' }, `${fmtNum((100 * s.hits) / Math.max(1, s.shotsFired))}%`),
-        el('span', {}, 'Fleet survival'), el('span', { class: 'v' }, `${fmtNum(s.survivalPercent)}%`),
+        el('span', { title: 'Surviving non-fighter combat points divided by deployed combat points. Losing capital ships can leave this much lower than the surviving hull count.' }, 'Combat value retained'),
+        el('span', { class: 'v', 'data-stat': 'combat-value-retained' }, `${fmtNum(s.survivalPercent)}%`),
         el('span', {}, 'Tactical effectiveness'), el('span', { class: 'v' }, fmtNum(s.tacticalEffectiveness, 1)),
       ]),
       el('table', { style: { marginTop: '10px' } }, [
