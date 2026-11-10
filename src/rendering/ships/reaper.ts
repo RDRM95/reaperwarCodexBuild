@@ -591,17 +591,17 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // --- Weapon aperture: the single dominant emitter in a dark faceted cowl, lower-forward.
   const eyeZ = L * 0.2;
   const eyeY = -A * 0.85;
-  const cowl = tinted(zCylinder(A * 0.36, A * 0.44, A * 0.36, 8), 0.95);
-  cowl.translate(0, eyeY, eyeZ + A * 0.01);
+  const cowl = tinted(zCylinder(A * 0.30, A * 0.38, A * 0.32, 8), 0.95);
+  cowl.translate(0, eyeY, eyeZ - A * 0.01);
   dark.push(cowl);
-  const lensGeom = new THREE.SphereGeometry(A * 0.16, 14, 10);
-  lensGeom.scale(1, 1, 0.6);
+  const lensGeom = new THREE.SphereGeometry(A * 0.2, 14, 10);
+  lensGeom.scale(1, 1, 0.55);
   const eye = new THREE.Mesh(lensGeom, p.engine);
   eye.position.set(0, eyeY, eyeZ);
   eye.name = 'eye';
   group.add(eye);
   // Iris: a bright warm ring just inside the cowl so the eye reads at distance.
-  const iris = new THREE.Mesh(new THREE.TorusGeometry(A * 0.2, A * 0.03, 6, 20), m.iris);
+  const iris = new THREE.Mesh(new THREE.TorusGeometry(A * 0.23, A * 0.03, 6, 20), m.iris);
   iris.position.set(0, eyeY, eyeZ + A * 0.1);
   iris.name = 'eye';
   group.add(iris);

@@ -104,6 +104,9 @@ try {
     await shoot(`${label}-${short}-quarter-470`, { classId, distance: 470, ...quarter });
   }
   await shoot(`${label}-capital-close-150`, { classId: 'reaper_capital', distance: 150, pitch: 0.12, yaw: 2.6 });
+  await shoot(`${label}-capital-close-150-aft-quarter`, { classId: 'reaper_capital', distance: 150, pitch: 0.3, yaw: 0.75 });
+  await shoot(`${label}-harbinger-close-200`, { classId: 'harbinger', distance: 200, pitch: 0.15, yaw: 2.4 });
+  await shoot(`${label}-destroyer-close-200`, { classId: 'reaper_destroyer', distance: 200, pitch: 0.15, yaw: 2.4 });
   await shoot(`${label}-capital-distant-1500`, { classId: 'reaper_capital', distance: 1500, pitch: 0.25, yaw: 2.0 });
   await shoot(`${label}-capital-frigate-scale`, { classId: 'reaper_capital', distance: 470, pitch: 0.22, yaw: 1.9, frigate: true });
 
