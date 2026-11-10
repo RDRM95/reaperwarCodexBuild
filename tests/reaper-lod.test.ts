@@ -55,11 +55,26 @@ describe('Reaper structural identity survives reduced LOD', () => {
     expect(isLodDetail('lights', 'reaper_capital')).toBe(true);
     expect(isLodDetail('plates', 'reaper_capital')).toBe(false);
     expect(isLodDetail('eye', 'reaper_destroyer')).toBe(false);
+    expect(isLodDetail('plates', 'reaper_capital', true)).toBe(true);
+    expect(isLodDetail('carapace', 'reaper_capital', true)).toBe(false);
     expect(isLodDetail('reaper-joint', 'reaper_capital')).toBe(false);
   });
 });
 
 describe('nested hero details and independent mechanical visibility', () => {
+  it('reduces decorative overlays when a model supplies a dedicated structural carapace', () => {
+    const root = new THREE.Group(), model = new THREE.Group(); root.add(model);
+    const carapace = new THREE.Object3D(); carapace.name = 'carapace'; model.add(carapace);
+    const plates = new THREE.Object3D(); plates.name = 'plates'; model.add(plates);
+    const eye = new THREE.Object3D(); eye.name = 'eye'; model.add(eye);
+    const details = captureLodDetails(root, 'reaper_capital');
+    applyShipLod(root, details, 'reduced');
+    expect(carapace.visible).toBe(true);
+    expect(eye.visible).toBe(true);
+    expect(plates.visible).toBe(false);
+    applyShipLod(root, details, 'full');
+    expect(plates.visible).toBe(true);
+  });
   it.each(CLASS_IDS)('%s reduces and restores nested details without moving mounts or resizing the hull', classId => {
     const built = instantiateShip(classId), role = getShipClass(classId).role;
     const details = captureLodDetails(built.group, role);

@@ -34,3 +34,7 @@ Validation before the final full-browser gate: 353 existing unit tests across 56
 This pass fixes LOD consistency; it does not complete the Reaper carapace, material, articulation or 43-class reference programme. Six-view screenshots are review evidence, not manual approval against private Mass Effect source references. Issues #16 and #19 remain open. The renderer is Chromium ANGLE/Vulkan SwiftShader on this cloud host; target-machine 4K/RTX 5090 performance and listening acceptance remain unverified.
 
 Next: reconcile the geometry owner's original carapace/limb/palette slice when it is published; rerun these captures against that actual head, then address class-specific motion/presence without changing combat outcomes.
+
+## New carapace compatibility
+
+See [PR #29 compatibility evidence](carapace-compatibility/README.md) for the dedicated-carapace layout, its additional regression and the isolated real-model/six-view checks. The stable feature does not import or overwrite that geometry branch.

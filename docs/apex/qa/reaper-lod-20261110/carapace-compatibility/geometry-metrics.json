@@ -1,0 +1,47 @@
+{
+  "geometryHead": "ee3cc8022e10d8609587ae03755a4c9c161ef1ec",
+  "base": "f8e9681937ca7c1e063265550cc4ee59aeb0ddf8",
+  "scope": "Local compatibility probe only. Geometry owner branch remains unmodified. No merge or source-reference approval.",
+  "rows": [
+    {
+      "classId": "reaper_capital",
+      "lengthUnits": 20,
+      "reducedVertices": 25151,
+      "reducedSharedParts": 5,
+      "carapaceRetained": true,
+      "bothEyesRetained": true,
+      "decorativePlatesReduced": true,
+      "nestedArmSeamsReduced": true
+    },
+    {
+      "classId": "harbinger",
+      "lengthUnits": 24,
+      "reducedVertices": 24671,
+      "reducedSharedParts": 5,
+      "carapaceRetained": true,
+      "bothEyesRetained": true,
+      "decorativePlatesReduced": true,
+      "nestedArmSeamsReduced": true
+    },
+    {
+      "classId": "reaper_destroyer",
+      "lengthUnits": 1.6,
+      "reducedVertices": 18143,
+      "reducedSharedParts": 5,
+      "carapaceRetained": true,
+      "bothEyesRetained": true,
+      "decorativePlatesReduced": true,
+      "nestedArmSeamsReduced": true
+    },
+    {
+      "classId": "reaper_ascendant",
+      "lengthUnits": 300,
+      "reducedVertices": 25607,
+      "reducedSharedParts": 6,
+      "carapaceRetained": true,
+      "bothEyesRetained": true,
+      "decorativePlatesReduced": true,
+      "nestedArmSeamsReduced": true
+    }
+  ]
+}
