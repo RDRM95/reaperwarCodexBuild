@@ -9,9 +9,9 @@ import { instantiateShip } from '@/rendering/ships';
 import type { ShipState } from '@/simulation/types';
 
 const CLASS_IDS = ['reaper_capital', 'harbinger', 'reaper_destroyer', 'reaper_ascendant'] as const;
-// Independently measured at PR #29 geometry ee3cc80; complete structural layers
+// Measured after curved armour PR #34 (496ebe5): additional shell subdivisions; complete structural layers
 // and both optics, excluding decorative overlays and running lights.
-const REDUCED_VERTICES = { reaper_capital: 25151, harbinger: 24671, reaper_destroyer: 18143, reaper_ascendant: 25607 };
+const REDUCED_VERTICES = { reaper_capital: 29327, harbinger: 28631, reaper_destroyer: 21047, reaper_ascendant: 29831 };
 const objectsNamed = (root: THREE.Object3D, name: string): THREE.Object3D[] => {
   const matches: THREE.Object3D[] = [];
   root.traverse(object => { if (object.name === name) matches.push(object); });

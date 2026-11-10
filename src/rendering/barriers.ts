@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SCENE_COLOUR_GLSL, sceneDefines } from './sceneColour';
 import { merge } from './geometry';
 import { getShipTemplate, type BuiltShip } from './ships';
 
@@ -22,13 +23,14 @@ export function buildBarrierGeometry(built: BuiltShip): THREE.BufferGeometry {
   return geometry;
 }
 
-function shieldMaterial(): THREE.ShaderMaterial {
+function shieldMaterial(hdr: boolean): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { colour: { value: new THREE.Color(0x79bbff) }, opacity: { value: 0 }, impact: { value: new THREE.Vector3() }, age: { value: 0 }, extent: { value: 1 }, collapse: { value: 0 } },
     vertexShader: `varying vec3 vP; varying vec3 vN; varying vec3 vV;
       void main(){ vP=position; vN=normalize(normalMatrix*normal);
         vec4 mv=modelViewMatrix*vec4(position,1.0); vV=-mv.xyz; gl_Position=projectionMatrix*mv; }`,
-    fragmentShader: `uniform vec3 colour; uniform float opacity; uniform vec3 impact;
+    fragmentShader: `${SCENE_COLOUR_GLSL}
+      uniform vec3 colour; uniform float opacity; uniform vec3 impact;
       uniform float age; uniform float extent; uniform float collapse;
       varying vec3 vP; varying vec3 vN; varying vec3 vV;
       void main(){
@@ -38,8 +40,9 @@ function shieldMaterial(): THREE.ShaderMaterial {
         vec2 q=abs(mod(vP.xz/max(extent,0.01)*28.0,vec2(1.0,1.732))-vec2(0.5,0.866));
         float hex=smoothstep(0.38,0.47,max(dot(q,vec2(0.866,0.5)),q.y));
         float alpha=opacity*(0.12+rim*0.65+wave*(0.35+hex*0.45)+collapse*0.25);
-        gl_FragColor=vec4(mix(colour,vec3(0.85,0.95,1.0),wave*0.65+collapse*0.25),min(0.8,alpha));
+        gl_FragColor=additiveOut(mix(colour,vec3(0.85,0.95,1.0),wave*0.65+collapse*0.25),min(0.8,alpha));
       }`,
+    defines: sceneDefines(hdr),
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide,
   });
 }
@@ -55,6 +58,8 @@ interface Shell {
 /** One shell per affected ship, at most forty active shells, cached geometry
  * per hull class. Only actual damage/collapse events make shields visible. */
 export class HullBarriers {
+  /** Set before the first shell is made: the scene is drawn into the HDR target (bloom on). */
+  hdr = false;
   readonly group = new THREE.Group();
   private cache = new Map<string, THREE.BufferGeometry>();
   private active = new Map<string, Shell>();
@@ -70,7 +75,7 @@ export class HullBarriers {
     if (!geometry) { geometry = buildBarrierGeometry(getShipTemplate(classId)); this.cache.set(classId, geometry); }
     source.updateWorldMatrix(true, false);
     if (!shell) {
-      const mesh = this.pool.pop() ?? new THREE.Mesh(geometry, shieldMaterial());
+      const mesh = this.pool.pop() ?? new THREE.Mesh(geometry, shieldMaterial(this.hdr));
       mesh.geometry = geometry; mesh.matrixAutoUpdate = false; mesh.visible = true;
       mesh.frustumCulled = false;
       this.group.add(mesh);

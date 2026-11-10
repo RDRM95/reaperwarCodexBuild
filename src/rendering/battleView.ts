@@ -18,6 +18,11 @@ import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
+import { collectBreakupPieces } from './breakup';
+import { DAMAGE_ONSET, REAPER_ARMOUR_MESHES, REAPER_SEAM_MESHES, reaperDamageGlow, type ReaperDamageGlow } from './damageGlow';
+import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
+import { bloomFor, createBloomPipeline, type BloomPipeline } from './bloom';
+import { TONE_EXPOSURE } from './sceneColour';
 
 /**
  * Binds a BattleSimulation to a Three.js scene. The simulation owns all
@@ -35,16 +40,23 @@ export interface ShipVisual {
   tinted: boolean;
   /** Cached unique hull materials: no whole-ship traversal each frame. */
   tintedMats?: THREE.MeshStandardMaterial[];
+  /** Reaper damage response: unique seam and armour materials (cloned with the tint). */
+  seamMats?: THREE.MeshStandardMaterial[];
+  emberMats?: THREE.MeshStandardMaterial[];
   /** Current level of detail. */
   lod: LodLevel;
   reaperRig?: ReaperRig;
   lodDetails: LodDetail[];
+  /** Eased glow of the weapon emitter, 0 to 1 (render state). */
+  emitterCharge?: number;
 }
 
 export interface GraphicsSettings {
   quality: 'low' | 'medium' | 'high';
   showEngineGlow: boolean;
   pixelRatioCap: number;
+  /** Restrained HDR bloom on light sources. Unset: on with the high preset. */
+  bloom?: boolean;
   /** Distance-based level of detail (default on). */
   lod?: boolean;
 }
@@ -83,6 +95,9 @@ export class BattleView {
   private readonly glowTex: THREE.Texture;
   private sunLight: THREE.DirectionalLight;
   private fillLight: THREE.DirectionalLight;
+  private readonly damageGlow: ReaperDamageGlow = { seam: new THREE.Color(), seamIntensity: 0, ember: 0 };
+  /** Local weapon light for the nearest charging or firing Reaper emitters. */
+  readonly emitterLights = new EmitterLightPool();
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
   private readonly tmpQ = new THREE.Quaternion();
@@ -97,16 +112,20 @@ export class BattleView {
   private readonly farColourCache = new Map<string, readonly [number, number, number]>();
   /** Draw calls of the last rendered frame. */
   drawCalls = 0;
+  /** Post-processing chain when bloom is on; the scene renders straight to the canvas otherwise. */
+  private bloom?: BloomPipeline;
   lodCounts = { full: 0, reduced: 0, point: 0 };
 
   constructor(canvas: HTMLCanvasElement, sim: BattleSimulation, settings: GraphicsSettings) {
     this.settings = settings;
     this.instances.configure(settings.quality);
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'low', powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+    const bloom = bloomFor(settings);
+    // With bloom the scene is antialiased in its own target, so the canvas does not need a multisampled buffer too.
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'low' && !bloom, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.pixelRatioCap));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = TONE_EXPOSURE;
     this.rig = new CameraRig(canvas.clientWidth / Math.max(1, canvas.clientHeight));
     // Image-based lighting so metallic hull plating reads as metal rather than
     // black: a neutral PMREM environment at low intensity.
@@ -134,7 +153,7 @@ export class BattleView {
     // Camera-relative fill so hulls stay readable when viewed against the sun.
     this.fillLight = new THREE.DirectionalLight(0xb8c8e8, 0.9);
     this.scene.add(this.fillLight, this.fillLight.target);
-    this.scene.add(this.effects.group, this.instances.group);
+    this.scene.add(this.effects.group, this.instances.group, this.emitterLights.group);
     const farGeom = new THREE.BufferGeometry();
     farGeom.setAttribute('position', new THREE.BufferAttribute(this.farPositions, 3));
     farGeom.setAttribute('color', new THREE.BufferAttribute(this.farColours, 3));
@@ -143,6 +162,10 @@ export class BattleView {
     this.farPoints.frustumCulled = false;
     this.farPoints.name = 'far-points';
     this.scene.add(this.farPoints);
+    if (bloom) {
+      this.bloom = createBloomPipeline(this.renderer, this.scene, this.rig.camera, bloom);
+      this.effects.setHdrScene(bloom.beamBoost);
+    }
     this.bind(sim);
   }
 
@@ -155,7 +178,7 @@ export class BattleView {
     this.effects.clear();
     this.nextBeamShieldAt.clear();
     if (this.env) { this.scene.remove(this.env.group); disposeEnvironment(this.env); }
-    this.env = buildEnvironment(sim.config.environment);
+    this.env = buildEnvironment(sim.config.environment, this.bloom !== undefined);
     this.scene.add(this.env.group);
     this.sunLight.position.copy(this.env.sunDirection).multiplyScalar(10_000);
     this.sunLight.target.position.set(0, 0, 0);
@@ -256,6 +279,16 @@ export class BattleView {
 
   // ------------------------------------------------------------- per frame
 
+  /** Whether a ship's target is alive and within 1.1 × the reach of its main battery (read-only on the simulation). */
+  private reaperEngaged(ship: ShipState): boolean {
+    const target = ship.targetId ? this.sim.getShip(ship.targetId) : undefined;
+    if (!target?.alive || target.escaped) return false;
+    let reach = 0;
+    for (const w of ship.weapons) if (!w.def.antiSmall && w.def.range > reach) reach = w.def.range;
+    const tx = target.pos.x - ship.pos.x, ty = target.pos.y - ship.pos.y, tz = target.pos.z - ship.pos.z;
+    return tx * tx + ty * ty + tz * tz <= reach * reach * 1.21;
+  }
+
   /** Apply a level of detail to a visual: toggles detail meshes, glow sprites and the far-point fallback. */
   private applyLod(v: ShipVisual, level: LodLevel): void {
     if (v.lod === level) return;
@@ -275,6 +308,7 @@ export class BattleView {
     let nearVisuals = 0;
     this.lodCounts = { full: 0, reduced: 0, point: 0 };
     if (useInstancing) this.instances.begin(sim.ships);
+    this.emitterLights.begin();
     this.ensureFarCapacity(sim.ships.length);
     this.rig.camera.updateMatrixWorld();
     this.frustumMatrix.multiplyMatrices(this.rig.camera.projectionMatrix, this.rig.camera.matrixWorldInverse);
@@ -347,15 +381,35 @@ export class BattleView {
         selectReaperRigDetail(v.reaperRig, detailed, level);
         if (detailed) {
           articulatedHeroes++;
-          animateReaperRig(v.reaperRig, ship, sim.time, dt);
+          // Combat stance once the target is within reach of the main battery (render-side reading of the
+          // simulation; nothing is written back).
+          animateReaperRig(v.reaperRig, ship, sim.time, dt, this.reaperEngaged(ship));
         }
+      }
+      if (v.reaperRig && v.built.muzzle) {
+        // Weapon light: full while the main beam fires, partial when a shot at a target is imminent.
+        let firing = false, imminent = false;
+        for (const w of ship.weapons) {
+          if (w.def.antiSmall || (w.def.kind !== 'reaper_beam' && w.def.kind !== 'thanix')) continue;
+          if (w.beamRemaining > 0) firing = true;
+          else if (ship.targetId && w.cooldown < 1.5) imminent = true;
+        }
+        const charge = easeEmitterCharge(v.emitterCharge ?? 0, emitterTarget(firing, imminent && this.reaperEngaged(ship)), dt);
+        v.emitterCharge = charge;
+        if (charge > 0.02) this.emitterLights.offer({ id: ship.id, charge, distanceSq: distanceSquared, size: lengthUnits, color: v.built.glowColor,
+          position: this.tmpA.copy(v.built.muzzle).applyQuaternion(v.built.group.quaternion).add(v.built.group.position).clone() });
       }
       const speedFrac = Math.min(1, Math.hypot(ship.vel.x, ship.vel.y, ship.vel.z) / Math.max(.01, ship.maxSpeed));
       if (level === 'full') for (const gl of v.glows)
         (gl.material as THREE.SpriteMaterial).opacity = .35 + .6 * speedFrac * ship.subsystems.engines;
       const hullFrac = ship.hull / ship.maxHull;
-      if (hullFrac < .6 && !v.tinted) this.tintDamage(v);
-      if (v.tintedMats) {
+      if (hullFrac < DAMAGE_ONSET && !v.tinted) this.tintDamage(v);
+      if (v.seamMats && v.emberMats && v.reaperRig) {
+        // Reapers: the seams run hot and flicker; the armour keeps its graphite with a faint ember.
+        const glow = reaperDamageGlow(hullFrac, sim.time, v.reaperRig.phase, this.damageGlow);
+        for (const mat of v.seamMats) { mat.color.copy(glow.seam); mat.emissive.copy(glow.seam); mat.emissiveIntensity = glow.seamIntensity; }
+        for (const mat of v.emberMats) { mat.emissive.setRGB(glow.ember, glow.ember * 0.12, 0); mat.emissiveIntensity = 1; }
+      } else if (v.tintedMats) {
         const t = 1 - hullFrac;
         const red = .25 * t * (.6 + .4 * Math.sin(sim.time * 7 + ship.id.length));
         for (const mat of v.tintedMats) {
@@ -365,6 +419,7 @@ export class BattleView {
       }
     }
     if (useInstancing) this.instances.end();
+    this.emitterLights.end();
     const farGeom = this.farPoints.geometry;
     farGeom.setDrawRange(0, far);
     (farGeom.attributes.position as THREE.BufferAttribute).needsUpdate = true;
@@ -419,6 +474,28 @@ export class BattleView {
   }
 
   private tintDamage(v: ShipVisual): void {
+    if (v.reaperRig) {
+      // One clone per distinct shared material, so this ship's seams and armour can change without touching the fleet's.
+      const clones = new Map<THREE.Material, THREE.MeshStandardMaterial>();
+      const seamMats: THREE.MeshStandardMaterial[] = [], emberMats: THREE.MeshStandardMaterial[] = [];
+      v.built.group.traverse((o) => {
+        const mesh = o as THREE.Mesh;
+        if (!mesh.isMesh || Array.isArray(mesh.material)) return;
+        const seam = REAPER_SEAM_MESHES.has(mesh.name);
+        if (!seam && !REAPER_ARMOUR_MESHES.has(mesh.name)) return;
+        let clone = clones.get(mesh.material);
+        if (!clone) {
+          clone = (mesh.material as THREE.MeshStandardMaterial).clone();
+          clones.set(mesh.material, clone);
+          (seam ? seamMats : emberMats).push(clone);
+        }
+        mesh.material = clone;
+      });
+      v.seamMats = seamMats;
+      v.emberMats = emberMats;
+      v.tinted = true;
+      return;
+    }
     const tintedMats: THREE.MeshStandardMaterial[] = [];
     v.built.group.traverse((o) => {
       const mesh = o as THREE.Mesh;
@@ -457,18 +534,13 @@ export class BattleView {
   private finishDeath(v: ShipVisual): void {
     const ship = v.ship;
     const pos = v.built.group.position.clone();
-    const pieces: THREE.Object3D[] = [];
-    // Break the model apart: each merged part becomes a debris chunk.
+    let pieces: THREE.Object3D[] = [];
+    // Break the model apart: each merged part, and each limb of a Reaper, becomes a debris chunk.
     if (ship.role !== 'fighter') {
-      for (const child of [...v.built.group.children]) {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh;
-          const original = mesh.material as THREE.Material;
-          mesh.material = original.clone();
-          if (v.tinted && mesh.name === 'hull') original.dispose();
-          pieces.push(mesh);
-        }
-      }
+      pieces = collectBreakupPieces(v.built.group);
+      // The pieces carry their own clones (taken from the damaged look), so the per-ship damage materials are done.
+      for (const mat of [...(v.tintedMats ?? []), ...(v.seamMats ?? []), ...(v.emberMats ?? [])]) mat.dispose();
+      v.tintedMats = v.seamMats = v.emberMats = undefined;
     }
     const vel = new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM * 0.5);
     this.effects.explosion(pos, v.built.lengthUnits, ship.faction === 'reaper', pieces, vel);
@@ -743,15 +815,22 @@ export class BattleView {
 
   resize(width: number, height: number): void {
     this.renderer.setSize(width, height, false);
+    this.bloom?.setSize(width, height);
     this.rig.resize(width / Math.max(1, height));
   }
 
   render(): void {
+    if (this.bloom) {
+      this.bloom.render();
+      this.drawCalls = this.bloom.sceneDrawCalls();
+      return;
+    }
     this.renderer.render(this.scene, this.rig.camera);
     this.drawCalls = this.renderer.info.render.calls;
   }
 
   dispose(): void {
+    this.bloom?.dispose();
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();
@@ -759,6 +838,8 @@ export class BattleView {
     this.scene.environment?.dispose();
     for (const v of this.visuals.values()) {
       for (const glow of v.glows) glow.material.dispose();
+      for (const mat of v.seamMats ?? []) mat.dispose();
+      for (const mat of v.emberMats ?? []) mat.dispose();
       if (v.tinted && !v.removed) v.built.group.traverse(object => {
         const mesh = object as THREE.Mesh;
         if (mesh.isMesh && mesh.name === 'hull') (mesh.material as THREE.Material).dispose();

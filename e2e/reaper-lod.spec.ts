@@ -53,7 +53,7 @@ test('Reaper reduced LOD keeps armour and eyes while nested lighting and stand-i
     expect(record.batch.some((part: any) => part.name.endsWith('-plates'))).toBe(false);
     expect(record.batch.some((part: any) => part.name.endsWith('-eye'))).toBe(true);
     expect(record.batch.some((part: any) => /seam/.test(part.name))).toBe(false);
-    const expectedVertices: Record<string, number> = { reaper_capital: 25151, harbinger: 24671, reaper_destroyer: 18143 };
+    const expectedVertices: Record<string, number> = { reaper_capital: 29327, harbinger: 28631, reaper_destroyer: 21047 };
     expect(record.batch.reduce((sum: number, part: any) => sum + part.vertices, 0)).toBe(expectedVertices[record.classId]);
   }
 });
