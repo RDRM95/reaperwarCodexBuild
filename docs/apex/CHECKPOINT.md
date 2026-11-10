@@ -2,11 +2,11 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 10 Nov 2026, 15:30 UTC — Reaper visual overhaul
+## State on 10 Nov 2026, 16:10 UTC — Reaper visual overhaul
 
 Read this section first. Everything below it is older.
 
-**Merged today (Codex build, base `codex/apex-combat-overhaul`):**
+**Merged today (Codex build, base `codex/apex-combat-overhaul`, head `655824d`):**
 
 | PR | What | Evidence |
 |---|---|---|
@@ -16,13 +16,17 @@ Read this section first. Everything below it is older.
 | #31 (`6dcd03f`) | Camera presence: over-the-carapace Reaper view; follow share of a Reaper 25 % → 45 % of the frame's width, solo cinematic 16 % → 27 %; small hulls unchanged | `docs/apex/REAPER_CAMERA_QA_2026-11-10.md` |
 | #32 (`e5c9b41`) | Local weapon light: a fixed pool of two point lights for charging and firing emitters | `docs/apex/REAPER_EMITTER_LIGHT_QA_2026-11-10.md` |
 | #34 (`496ebe5`) | Curved armour shading (creased normals) on bands, hood shells and limb sleeves; triangle budgets nearly used up | `docs/apex/REAPER_CURVED_ARMOUR_QA_2026-11-10.md` |
+| #35 (`505dcde`) | Damage response: below 60 % hull the seams run from pale blue to hot red-orange and flicker per ship; armour emissive capped so the plates stay graphite | `docs/apex/REAPER_DAMAGE_GLOW_QA_2026-11-10.md` |
+| #36 (`655824d`) | Breakup: a destroyed Reaper no longer vanishes; limbs, mandibles, hood shells and carapace become debris (0 → 23 pieces on a capital), hot seams carry into the wreck | `docs/apex/REAPER_BREAKUP_QA_2026-11-10.md`, `scripts/reaper-death-qa.mjs` |
 
-**Merged today (sandbox, base `main`):** #32 (`bfb66b5`, port of Codex #28), #33 (`7ba24bd`, port of #29), #34 (`40f7e32`, port of #30). Pages deployed after each.
+The Pages deploy workflow succeeded on `655824d`. The deployed site itself was not fetched from this environment (the network policy blocks it).
+
+**Merged today (sandbox, base `main`):** #32 (`bfb66b5`, port of Codex #28), #33 (`7ba24bd`, port of #29), #34 (`40f7e32`, port of #30), #35 (`3eb06dc`, port of #31, #32 and #34), #36 (`7b47874`, port of #35 and #36, with `damageGlow.ts` and `breakup.ts` byte-identical). The sandbox now carries every merged Reaper visual change. Pages deployed after each (workflow status; the site was not fetched from this environment).
 
 **Open at the time of writing — check their state before doing anything else:**
 
-- Codex #35 `feat/reaper-damage-glow-20261110`: Reaper damage response (seams run hot and flicker below 60 % hull, armour stays graphite). Gate green locally on top of #32; merge when its checks pass. Then port to the sandbox: copy `src/rendering/damageGlow.ts` and apply the `tintDamage` and per-frame hunks of `BattleView` by hand (the sandbox's `battleView.ts` differs), with a node test like `tests/emitter-lights.test.mjs`.
-- Sandbox #35 `feat/reaper-camera-presence-20261110`: combined port of Codex #31, #32 and #34; `cameras.ts`, `emitterLights.ts` and `ships/reaper.ts` are byte-identical with the Codex build. Merge when its checks pass.
+- Codex branch `feat/restrained-bloom-20261110` (see its pull request if one is open; otherwise the branch is pushed and complete up to its gate): restrained HDR bloom on light sources. The scene renders to a half-float 4× MSAA target, `UnrealBloomPass` at strength 0.1, radius 0.15, threshold 1.3, tone mapping once at the end; on with the high preset, with a Bloom control in Settings; beam cores get HDR brightness in the beam's hue (`src/rendering/bloom.ts`). The three hand-written shaders (atmosphere, starfield, barrier shells) write display-referred colours, so `src/rendering/sceneColour.ts` converts them to scene values when the HDR target is active (sRGB decode, then the exact inverse of Three's ACES fit); Earth's limb measures (8,30,105) without bloom and (9,30,104) with it. Evidence and limits: `docs/apex/REAPER_BLOOM_QA_2026-11-10.md`, `scripts/bloom-qa.mjs`. Not measured on a hardware GPU. Port to the sandbox afterwards: the sandbox already has an optional bloom on its Ultra preset without the shader conversion, so check its atmosphere and barrier shells with that preset first.
+- Sandbox `e2e/gunnery-pose.spec.ts:41` (destroyed gunner station) runs a duel at 8× until the gunner's ship dies. It takes 20.1 s locally before today's Reaper ports and 21.5 s after them; CI's software renderer takes about a second per frame, so it sat at the edge of the default 60 s and timed out inside its closing screenshot on #32, #35 and #36, with every assertion already passed. Sandbox #36 marked it `test.slow()` and then passed; no assertion changed. The durable fix is cheaper hero Reapers at the low preset (the level-of-detail work below).
 
 **Concurrent work by the other assistant — do not duplicate:** `fix/reaper-structural-lod-20261110` (no pull request when this was written): level-of-detail policy for Reapers (`shipLod.ts`, `applyShipLod`, `selectReaperRigDetail(level)`), covering the defect that hero Reapers never reduce detail. It was branched before #29 and edits `battleView.ts` near the `animateReaperRig` call and the signature of `selectReaperRigDetail`; merging it after today's work is a small mechanical merge. Their open PRs #26 (draft, reach) and #27 (Oculus damage) are untouched.
 
@@ -30,13 +34,13 @@ Read this section first. Everything below it is older.
 
 **What still falls short, in order of visible gain:**
 
-1. Reaper death: the hull vanishes whole, because the debris code only takes a visual's direct children and the Reaper's meshes sit under one model root. A staged breakup (limbs, hood, blade) is the next visible step.
-2. No bloom or exposure pass in the Codex build (the sandbox has an optional bloom preset); the emitter, seams and beams would benefit from a restrained one.
+1. Bloom is on the branch above until it merges; additive sprites (explosions, engine glows, impact flashes) were not retuned for linear-light blending, and exposure is unchanged at 1.05.
+2. Reaper death is a breakup now, but with no directional blast from the killing hit, no secondary explosions along the limbs and no fracture of the carapace itself.
 3. Two-subject cinematic shots frame by the distance between ships; a Reaper fighting a target 20 km away is small in them. The tactical default distance is unchanged.
 4. No normal maps or micro-detail; silhouettes of the eight-sided limb sleeves are still eight-sided up close; further geometry needs a level-of-detail split first (see the other assistant's branch).
 5. The emitter itself is hidden under the hood from most angles; its light shows, the lens does not.
 6. Hull rotation, acceleration and inertia are the simulation's (P1 work package A, below); the render side adds no hull motion.
-7. Static stand-in limbs and instanced Reapers show the neutral pose and no damage glow.
+7. Static stand-in limbs and instanced Reapers show the neutral pose and no damage glow, and instanced Reapers die without hull pieces.
 8. Issue #16's P0 checklist (Sovereign-class, Harbinger, destroyer) is not ticked: that needs the owner's manual silhouette judgement against private references.
 
 **P1 combat-flow branches (not merged, no pull requests):** `feat/combat-reach-targeting-mass-20261109` (work package A: has PR #26 merged in, RC1+RC5 at `57bf531`, then a work-in-progress commit `0f01204` with the interrupted agent's unfinished RC2 edits and `tests/feasible-targeting.test.ts`) and `feat/fleet-composer-silhouette-20261109` (work package B: composer, headings, altitude bands and staging to `8725e8f`, then work-in-progress `6d30592`). Both are pushed; the work-in-progress commits typecheck but their tests were not run. The agents stopped when the session was interrupted. Do not interfere with #26.
