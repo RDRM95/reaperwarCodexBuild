@@ -196,8 +196,17 @@ export interface ShipState {
   targetLockUntil?: number;
   /** Hysteretic range controller state, independent from facing. */
   engagementMode?: 'approach' | 'hold' | 'reposition';
-  /** Stable trim from assigned formation station after entering the range band. */
+  /** Commanded station relative to the assigned formation slot (km): the role
+   * line's advance, this hull's depth close-up and its own range trim.
+   * Undefined while the hull simply keeps its slot. Fleet catch-up compares
+   * hulls with this station, so a hull standing ahead of its slot on purpose
+   * is never mistaken for one that cannot keep up. */
   firingOffset?: Vec3;
+  /** Reach-aware depth close-up (km) along the bearing to the enemy line, for
+   * a rank whose slot cannot reach it. Ratchets up while the fleet is on
+   * station and is only ever bounded by the role line's own station: a hull
+   * never falls back toward a deep slot on its own. */
+  closeUpKm?: number;
   firingTargetId?: string;
   /** Formation slot offset in fleet-local space (km). */
   slot: Vec3;
@@ -272,7 +281,41 @@ export interface FleetState {
   /** Shared tactical observations; movement does not rescan all enemies per ship. */
   enemyCentre?: Vec3;
   engagementRange?: number;
-  engagementMode?: 'approach' | 'hold';
+  /** Movement objective: the value-weighted centre of the capital cluster
+   * (or, failing that, the formation centre) of the nearest enemy formation in
+   * the shared sensor picture. Fleet translation and the hold band are
+   * measured against it, never against the individual fire focus, which
+   * changes far more often. */
+  objective?: Vec3;
+  /** Where the objective cluster's leading quarter stands on the axis between
+   * the two cores (km): the enemy battle line that role lines measure to. */
+  objectiveFront?: Vec3;
+  /** Unit vector from this fleet's core centre to the objective cluster's centre: the axis role lines advance along. */
+  objectiveBearing?: Vec3;
+  objectiveFleetId?: string;
+  /** Value-weighted mean velocity of the objective cluster (km/s). */
+  objectiveVelocity?: Vec3;
+  /** Its component toward this fleet's line (km/s, positive = closing). */
+  objectiveClosing?: number;
+  /** Line-to-line distance between this fleet's core and the objective cluster
+   * (both measured at their leading quarters, km), as last evaluated. Both
+   * sides of an engagement compute the same number. */
+  objectiveDistance?: number;
+  /** Anchor pace fraction imposed by hulls lagging behind their commanded stations, as last evaluated. */
+  catchup?: number;
+  /** How far each role line currently stands ahead of its slots along the
+   * bearing to the enemy line (km). Grows to the line's preferred range at
+   * once, shrinks only as fast as the anchor brings the slots up behind it. */
+  lineAdvance?: Partial<Record<ShipRole, number>>;
+  /** approach: closing on the objective; hold: battle line inside its band
+   * (the anchor still creeps toward the preferred distance); retire: organics
+   * giving ground at a deliberate pace to an enemy line pressing inside the
+   * core's minimum range. */
+  engagementMode?: 'approach' | 'hold' | 'retire';
+  /** Ground given in the current retire episode (km) and whether the episode's
+   * allowance (the lower half of the hold band) has been spent. */
+  retiredKm?: number;
+  retireSpent?: boolean;
   decisionTimer: number;
   arrived: boolean;
   startPoints: number;

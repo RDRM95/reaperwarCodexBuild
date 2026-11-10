@@ -1,11 +1,12 @@
 import { hardcoreReaperTargetFactor } from './reaperHardcore';
 import type { Rng } from '@/core/rng';
-import { add, clampLength, distance, dot, lengthSq, normalize, scale, sub, v3, type Vec3 } from '@/core/vec3';
+import { add, clampLength, distance, distanceSq, dot, lengthSq, normalize, scale, sub, v3, type Vec3 } from '@/core/vec3';
 import { FACTIONS, type FactionDoctrine } from '@/data/factions';
+import type { ShipRole } from '@/data/types';
 import type { RuleSet } from '@/timelines/rules';
 import { slotToWorld } from './formations';
 import { BATTLESPACE_SCALE as S } from './constants';
-import type { FleetState, ShipState, TargetPriority } from './types';
+import type { FleetState, ShipState, Side, TargetPriority } from './types';
 
 /** Fleet orders own translation; ship controllers trim their firing station and
  * track their target independently. No controller injects time-driven orbits. */
@@ -36,8 +37,9 @@ const validEnemy = (ship: ShipState, target: ShipState | undefined): target is S
   !!target && target.alive && !target.escaped && target.side !== ship.side;
 const attackOrder = (fleet: FleetState): boolean =>
   ['attack', 'attack_target', 'advance', 'intercept'].includes(fleet.orders.order);
+const isScreen = (role: ShipRole): boolean => role === 'frigate' || role === 'reaper_destroyer';
 
-export function centroid(ships: ShipState[]): Vec3 | undefined {
+export function centroid(ships: readonly ShipState[]): Vec3 | undefined {
   if (ships.length === 0) return undefined;
   const c = v3();
   let w = 0;
@@ -78,11 +80,11 @@ export function engagementBand(ship: ShipState): { min: number; preferred: numbe
   }
 }
 
-function formationCore(ships: ShipState[]): ShipState[] {
+export function formationCore(ships: readonly ShipState[]): ShipState[] {
   const capitals = ships.filter(s => s.role === 'dreadnought' || s.role === 'reaper_capital');
   if (capitals.length) return capitals;
   const cruisers = ships.filter(s => s.role === 'cruiser' || s.role === 'reaper_destroyer');
-  return cruisers.length ? cruisers : ships;
+  return cruisers.length ? cruisers : [...ships];
 }
 
 /** Value-weighted principal range of the battle line, rather than the longest
@@ -97,6 +99,153 @@ export function fleetEngagementRange(fleetShips: ShipState[]): number {
     weight += w;
   }
   return weight ? total / weight : 20 * S;
+}
+
+/** Hold band of a battle line: the core roles' preferred and minimum range
+ * fractions applied to the value-weighted principal range. The anchor closes
+ * until the line distance is `preferred`, creeps while it is between
+ * `preferred` and `resume`, approaches again beyond `resume`, and an organic
+ * line gives ground to an enemy pressing inside `min`. */
+export function fleetHoldBand(core: readonly ShipState[], range: number): { min: number; preferred: number; resume: number } {
+  let minFactor = 0;
+  let preferredFactor = 0;
+  for (const s of core) {
+    const band = engagementBand(s);
+    const r = shipEngagementRange(s);
+    minFactor += band.min / r;
+    preferredFactor += band.preferred / r;
+  }
+  const n = Math.max(1, core.length);
+  return { min: range * minFactor / n, preferred: range * preferredFactor / n, resume: range * (preferredFactor / n + 0.07) };
+}
+
+/** One enemy formation in the shared sensor picture. Fleets steer by these,
+ * which move with the enemy's battle line, instead of by the fire focus that
+ * changes with every kill and lock. */
+export interface EnemyGroup {
+  fleetId: string;
+  /** Live combatants of the formation (fighters excluded). */
+  ships: ShipState[];
+  /** Its capital cluster (cruisers when it has no capitals): the battle line. */
+  core: ShipState[];
+  /** Value-weighted centre of the core. */
+  coreCentre: Vec3;
+  /** Value-weighted centre of every combatant. */
+  centre: Vec3;
+  /** Value-weighted mean velocity of the core (km/s). */
+  velocity: Vec3;
+}
+
+/** Mean projection of the leading quarter of `hulls` onto `toward`, relative to `origin`. */
+export function leadingDepth(hulls: readonly ShipState[], origin: Vec3, toward: Vec3): number {
+  if (!hulls.length) return 0;
+  const depths = hulls.map(s => dot(sub(s.pos, origin), toward)).sort((a, b) => b - a);
+  const leading = depths.slice(0, Math.ceil(hulls.length / 4));
+  return leading.reduce((a, b) => a + b, 0) / leading.length;
+}
+
+export function enemyGroups(enemies: readonly ShipState[]): EnemyGroup[] {
+  const byFleet = new Map<string, ShipState[]>();
+  for (const e of enemies) {
+    if (!isCombatant(e)) continue;
+    let group = byFleet.get(e.fleetId);
+    if (!group) { group = []; byFleet.set(e.fleetId, group); }
+    group.push(e);
+  }
+  const groups: EnemyGroup[] = [];
+  for (const [fleetId, ships] of byFleet) {
+    const core = formationCore(ships);
+    const velocity = v3();
+    let weight = 0;
+    for (const s of core) {
+      const w = Math.max(1, s.pointValue);
+      velocity.x += s.vel.x * w;
+      velocity.y += s.vel.y * w;
+      velocity.z += s.vel.z * w;
+      weight += w;
+    }
+    groups.push({ fleetId, ships, core, coreCentre: centroid(core)!, centre: centroid(ships)!, velocity: scale(velocity, 1 / weight) });
+  }
+  return groups;
+}
+
+/** Enemy formations are grouped once per simulation tick per side and shared
+ * by every fleet decision of that tick: O(ships) per tick, not per fleet. */
+interface SideGroups { time: number; bySide: Map<Side, EnemyGroup[]> }
+const groupCache = new WeakMap<AiContext, SideGroups>();
+function enemyGroupsFor(ctx: AiContext, side: Side): EnemyGroup[] {
+  let cached = groupCache.get(ctx);
+  if (!cached || cached.time !== ctx.time) {
+    cached = { time: ctx.time, bySide: new Map() };
+    groupCache.set(ctx, cached);
+  }
+  let groups = cached.bySide.get(side);
+  if (!groups) {
+    groups = enemyGroups(ctx.enemiesOf(side));
+    cached.bySide.set(side, groups);
+  }
+  return groups;
+}
+
+function nearestGroup(groups: readonly EnemyGroup[], from: Vec3): EnemyGroup | undefined {
+  let best: EnemyGroup | undefined;
+  let bestDistance = Infinity;
+  for (const group of groups) {
+    const d = distanceSq(group.coreCentre, from);
+    if (d < bestDistance) { bestDistance = d; best = group; }
+  }
+  return best;
+}
+
+/** Where two battle lines stand relative to each other. */
+export interface LineGeometry {
+  /** Distance between the two cores' leading quarters along the inter-centre axis (km, never negative). */
+  distance: number;
+  /** Unit vector from the own core centre toward the enemy core centre. */
+  bearing: Vec3;
+  /** Points on that axis where each core's leading quarter stands. */
+  ownFront: Vec3;
+  enemyFront: Vec3;
+  enemyCentre: Vec3;
+  /** Enemy core velocity (km/s) and its component toward the own line (positive = closing). */
+  velocity: Vec3;
+  closing: number;
+}
+
+/** Line-to-line range between two capital clusters, measured from actual hull
+ * positions on both sides. Both fleets evaluating each other obtain the same
+ * number, so neither can read the other as closer than it reads itself: the
+ * asymmetric slot-versus-hull measurement produced a permanent slow chase in
+ * which one line gave ground while the other followed. */
+export function lineGeometry(own: readonly ShipState[], enemy: readonly ShipState[]): LineGeometry | undefined {
+  const ownCentre = centroid(own);
+  const enemyCentre = centroid(enemy);
+  if (!ownCentre || !enemyCentre) return undefined;
+  const delta = sub(enemyCentre, ownCentre);
+  const span = Math.sqrt(lengthSq(delta));
+  if (span < 1e-6) return { distance: 0, bearing: v3(0, 0, 1), ownFront: ownCentre, enemyFront: enemyCentre, enemyCentre, velocity: v3(), closing: 0 };
+  const bearing = scale(delta, 1 / span);
+  const ownDepth = Math.max(0, leadingDepth(own, ownCentre, bearing));
+  const enemyDepth = Math.max(0, leadingDepth(enemy, enemyCentre, scale(bearing, -1)));
+  const velocity = v3();
+  let weight = 0;
+  for (const s of enemy) {
+    const w = Math.max(1, s.pointValue);
+    velocity.x += s.vel.x * w;
+    velocity.y += s.vel.y * w;
+    velocity.z += s.vel.z * w;
+    weight += w;
+  }
+  const mean = scale(velocity, 1 / Math.max(1, weight));
+  return {
+    distance: Math.max(0, span - ownDepth - enemyDepth),
+    bearing,
+    ownFront: add(ownCentre, scale(bearing, ownDepth)),
+    enemyFront: sub(enemyCentre, scale(bearing, enemyDepth)),
+    enemyCentre,
+    velocity: mean,
+    closing: -dot(mean, bearing),
+  };
 }
 
 export function priorityMultiplier(priority: TargetPriority, target: ShipState): number {
@@ -178,8 +327,21 @@ function approachLane(fleet: FleetState): number {
   return lane;
 }
 
+/** Bearing offset beyond which a holding line slowly re-aligns its basis.
+ * SIMULATION_ESTIMATE: wider than any principal gun arc, so a line whose
+ * guns still bear stays frozen, while a flanked line brings its slots round. */
+export const HOLD_ROTATION_THRESHOLD = 30 * Math.PI / 180;
+/** Enemy line closing speed, as a fraction of the own line's slowest hull,
+ * that counts as pressing the line (retire starts) and as having stopped
+ * (retire ends). SIMULATION_ESTIMATE: a hull settling onto a station after
+ * its fleet stops moves slower than this, so settling never reads as a push. */
+const PRESSING_CLOSING_FRACTION = 0.1;
+const RELIEVED_CLOSING_FRACTION = 0.05;
+
 /** Stable fleet fire control and formation translation. Tactical observations
- * are shared; individual movement never rebuilds a global enemy centroid. */
+ * are shared; individual movement never rebuilds a global enemy centroid. The
+ * fire focus (which ship the line concentrates on) is separate from the
+ * movement objective (where the enemy battle line is). */
 export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): void {
   const mine = ctx.ships.filter(s => s.fleetId === fleet.spec.id && isCombatant(s) && !s.withdrawing);
   if (!mine.length) return;
@@ -190,10 +352,19 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   fleet.decisionTimer -= dt;
   const currentFocus = fleet.focusTargetId ? ctx.getShip(fleet.focusTargetId) : undefined;
   const commanded = fleet.orders.targetId ? ctx.getShip(fleet.orders.targetId) : undefined;
-  if (fleet.decisionTimer <= 0 || !validEnemy(representative, currentFocus)) {
+  const groups = enemyGroupsFor(ctx, fleet.spec.side);
+  const references = roleReferences(ctx, fleet);
+  const myCentre = centroid(core) ?? fleet.anchor;
+  let objectiveGroup = fleet.objectiveFleetId ? groups.find(g => g.fleetId === fleet.objectiveFleetId) : undefined;
+  if (fleet.decisionTimer <= 0 || !validEnemy(representative, currentFocus) || !objectiveGroup) {
     fleet.decisionTimer = doctrine.decisionInterval;
     fleet.enemyCentre = centroid(enemies.filter(isCombatant));
     fleet.engagementRange = fleetEngagementRange(mine);
+    // The movement objective is the nearest enemy formation's capital cluster,
+    // which a fleet can read from its sensor picture and which does not jump
+    // with every focus change.
+    objectiveGroup = nearestGroup(groups, myCentre);
+    fleet.objectiveFleetId = objectiveGroup?.fleetId;
     if (fleet.orders.order === 'attack_target' && validEnemy(representative, commanded)) {
       fleet.focusTargetId = commanded.id;
     } else {
@@ -211,46 +382,94 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
       fleet.focusTargetId = best?.id;
     }
   }
-  const focus = fleet.focusTargetId ? ctx.getShip(fleet.focusTargetId) : undefined;
-  const enemyPosition = validEnemy(representative, focus) ? focus.pos : fleet.enemyCentre;
-  const myCentre = centroid(core) ?? fleet.anchor;
   const range = fleet.engagementRange ?? fleetEngagementRange(mine);
-  const preferredFactor = core.reduce((sum, s) => sum + engagementBand(s).preferred / shipEngagementRange(s), 0) / core.length;
   // Protect the dreadnought gun line even under Advance/Intercept. Those orders
   // close the formation, not the physical hulls into torpedo range.
-  const desiredRange = range * preferredFactor;
+  const band = fleetHoldBand(core, range);
   const slowest = Math.min(...core.map(s => s.maxSpeed * (0.25 + 0.75 * s.subsystems.engines)));
-  let desired: Vec3 | undefined;
   const o = fleet.orders;
   const noRetreat = fleet.spec.faction === 'reaper';
   const withdrawing = !noRetreat && (o.order === 'withdraw' || o.order === 'retreat');
-  if (attackOrder(fleet) || (noRetreat && (o.order === 'withdraw' || o.order === 'retreat'))) {
-    const enemy = o.order === 'intercept' && validEnemy(representative, commanded) ? commanded.pos : enemyPosition;
-    if (enemy) {
-      const delta = sub(enemy, fleet.anchor);
-      const dist = Math.sqrt(lengthSq(delta));
-      const resumeRange = desiredRange + range * 0.07;
+  const engaging = attackOrder(fleet) || (noRetreat && (o.order === 'withdraw' || o.order === 'retreat'));
+  // A commanded target is both focus and objective; otherwise the line steers
+  // by the nearest enemy formation's capital cluster. The geometry is live
+  // every tick: the hulls of both cores, never a slot picture of one side.
+  const commandedObjective = (o.order === 'attack_target' || o.order === 'intercept') && validEnemy(representative, commanded) ? commanded : undefined;
+  const geometry = commandedObjective ? lineGeometry(core, [commandedObjective])
+    : objectiveGroup ? lineGeometry(core, objectiveGroup.core)
+    : fleet.enemyCentre ? lineGeometry(core, enemies.filter(isCombatant)) : undefined;
+  fleet.objective = geometry?.enemyCentre;
+  fleet.objectiveFront = geometry?.enemyFront;
+  fleet.objectiveBearing = geometry?.bearing;
+  fleet.objectiveVelocity = geometry?.velocity;
+  fleet.objectiveDistance = geometry?.distance;
+  fleet.objectiveClosing = geometry?.closing;
+
+  let desired: Vec3 | undefined;
+  let bearing: Vec3 | undefined;
+  let pace = 0.85;
+  if (engaging) {
+    if (geometry) {
+      bearing = geometry.bearing;
+      // Hulls trail their moving slots. When the anchor stops they settle
+      // forward by that lag, so closure is judged on the settled distance;
+      // otherwise every arrival overshoots the preferred range by the lag and
+      // can push an enemy line into giving ground it did not have to give.
+      const dist = geometry.distance;
+      const settled = Math.max(0, dist - coreLag(core, fleet, bearing));
+      // Hulls that stepped ahead of their slots to reach a target are not an
+      // enemy that pressed closer: ground is given on the disciplined line.
+      const pressed = dist + coreTrim(core, fleet, bearing);
       // A Reaper fleet can win by establishing a firing line. Once contact
       // has happened, do not send the whole capital group after one damaged
       // fleeing vessel across empty space. Fast screens can intercept nearby.
-      const fleeing = !!focus && (focus.withdrawing ||
-        ctx.fleets.get(focus.fleetId)?.orders.order === 'retreat');
+      const objectiveFleet = commandedObjective ? ctx.fleets.get(commandedObjective.fleetId) : fleet.objectiveFleetId ? ctx.fleets.get(fleet.objectiveFleetId) : undefined;
+      const fleeing = objectiveFleet?.orders.order === 'retreat' || (!!commandedObjective && commandedObjective.withdrawing);
       const stopLongChase = !!ctx.rules.special.reaperHardcore && noRetreat &&
-        fleet.engagementMode === 'hold' && fleeing && dist > range * 1.7;
-      if (!stopLongChase && fleet.engagementMode !== 'approach' && dist > resumeRange)
-        fleet.engagementMode = 'approach';
-      if (fleet.engagementMode === 'approach' && dist <= desiredRange) fleet.engagementMode = 'hold';
-      if (fleet.engagementMode === 'approach') {
+        fleet.engagementMode !== undefined && fleet.engagementMode !== 'approach' && fleeing && dist > range * 1.7;
+      if (!stopLongChase && fleet.engagementMode !== 'approach' && settled > band.resume) fleet.engagementMode = 'approach';
+      if ((fleet.engagementMode === 'approach' || fleet.engagementMode === undefined) && settled <= (band.preferred + band.resume) * 0.5) fleet.engagementMode = 'hold';
+      if (!noRetreat) {
+        // Hold is a band, not a one-way ratchet: an organic line gives ground
+        // at a deliberate pace to an enemy pressing inside its minimum range,
+        // and stops as soon as the enemy stops. Only the anchor opens the
+        // range; hulls never back astern of their stations on their own. One
+        // episode yields at most the lower half of the band: a faster enemy
+        // that wants a shorter range would otherwise be followed backwards
+        // across the whole battlespace, so after that the line stands and
+        // fights until the enemy has actually backed off.
+        if (pressed >= band.min) fleet.retireSpent = false;
+        if (fleet.engagementMode !== 'retire' && fleet.engagementMode !== 'approach' && !fleet.retireSpent &&
+          pressed < band.min && geometry.closing > slowest * PRESSING_CLOSING_FRACTION) {
+          fleet.engagementMode = 'retire';
+          fleet.retiredKm = 0;
+        } else if (fleet.engagementMode === 'retire') {
+          const exhausted = (fleet.retiredKm ?? 0) >= band.preferred - band.min;
+          if (exhausted) fleet.retireSpent = true;
+          if (exhausted || pressed >= (band.min + band.preferred) * 0.5 || geometry.closing < slowest * RELIEVED_CLOSING_FRACTION) fleet.engagementMode = 'hold';
+        }
+      }
+      if (fleet.engagementMode === 'retire') {
+        desired = sub(fleet.anchor, scale(bearing, Math.max(band.preferred - pressed, S)));
+        pace = 0.5;
+      } else if (!stopLongChase && settled > band.preferred) {
+        // Closure is proportional inside the hold band and at approach pace
+        // beyond it, so a line arrives on station without the stop-and-go of a
+        // threshold controller, and follows a receding enemy smoothly.
+        const remaining = settled - band.preferred;
+        const throttle = Math.min(1, remaining / Math.max(1e-6, band.resume - band.preferred));
+        const receding = geometry.closing < -slowest * 0.5;
+        // Use available thrust to intercept a receding enemy. A permanent 85%
+        // formation throttle can otherwise match a slower fleeing capital just
+        // outside beam range for an entire battle.
+        pace = receding ? 1 : 0.85 * throttle;
         // Canon-style fleet closure: the whole line follows a gentle, stable
         // lateral approach lane, rather than converging on one central point.
         // The bend vanishes as the formation reaches its firing station.
-        const forward = normalize(delta);
-        const right = normalize(v3(forward.z, 0, -forward.x));
+        const right = normalize(v3(bearing.z, 0, -bearing.x));
         const lane = approachLane(fleet);
-        const remaining = Math.max(0, dist - desiredRange);
         const bend = ctx.rules.special.reaperHardcore ? Math.min(1, remaining / Math.max(1, 2 * range)) : 0;
-        desired = add(add(fleet.anchor, scale(forward, remaining)),
-          scale(right, lane * range * 0.12 * bend));
+        desired = add(add(fleet.anchor, scale(bearing, remaining)), scale(right, lane * range * 0.12 * bend));
       }
     }
   } else if (o.order === 'defend_position') {
@@ -258,42 +477,120 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   } else if (withdrawing) {
     const away = fleet.enemyCentre ? normalize(sub(myCentre, fleet.enemyCentre)) : scale(fleet.heading, -1);
     desired = add(fleet.anchor, scale(away, 60 * S));
+    pace = 1;
   } else if (o.order === 'escort' && commanded?.alive && !commanded.escaped) {
     desired = add(commanded.pos, scale(commanded.heading, -4 * S));
   }
 
+  let anchorAdvance = 0;
   if (desired) {
     const delta = sub(desired, fleet.anchor);
     const dist = Math.sqrt(lengthSq(delta));
+    const along = dist > 1e-6 ? scale(delta, 1 / dist) : fleet.heading;
     // A formation may lead its slowest capital, but cannot tow its station
-    // away faster than the physical ships can catch up.
-    let lag = 0;
-    for (const s of core) lag += Math.max(0, dot(sub(slotToWorld(fleet.anchor, fleet.heading, s.slot), s.pos), fleet.heading));
-    lag /= core.length;
-    const catchup = withdrawing ? 1 : Math.max(0, 1 - lag / Math.max(4 * S, desiredRange * 0.3));
-    // Use available thrust to intercept a receding enemy. A permanent 85%
-    // formation throttle can otherwise match a slower fleeing capital just
-    // outside beam range for an entire battle.
-    const receding = validEnemy(representative, focus) && dot(focus.vel, normalize(sub(focus.pos, fleet.anchor))) > slowest * 0.5;
-    const pace = receding && attackOrder(fleet) ? 1 : 0.85;
+    // away faster than the physical ships can catch up. Only a hull behind
+    // both its slot and its commanded station is lagging: a line standing
+    // ahead of its slots is not lag.
+    const lag = coreLag(core, fleet, along);
+    const catchup = withdrawing ? 1 : Math.max(0, 1 - lag / Math.max(4 * S, band.preferred * 0.3));
+    fleet.catchup = catchup;
     const step = Math.min(dist, slowest * pace * catchup * dt);
     if (dist > 1e-6) fleet.anchor = add(fleet.anchor, scale(delta, step / dist));
+    if (bearing) anchorAdvance = dot(along, bearing) * step;
+    if (fleet.engagementMode === 'retire') fleet.retiredKm = (fleet.retiredKm ?? 0) + step;
+  } else {
+    fleet.catchup = 1;
   }
 
-  // Once the line is on station, freeze its basis. Individual hulls still
-  // track targets; rotating a world-space line every tick causes orbital pursuit.
-  const canTurn = withdrawing || fleet.engagementMode === 'approach' || o.order === 'escort';
-  const faceDir = withdrawing && desired ? sub(desired, fleet.anchor) : enemyPosition ? sub(enemyPosition, fleet.anchor) : undefined;
-  if (canTurn && faceDir && faceDir.x * faceDir.x + faceDir.z * faceDir.z > 1e-6) {
+  // Role lines extend ahead of their slots along the fleet's bearing to the
+  // enemy line, each to its own preferred range, bounded by a formation leash.
+  // Depth is measured along that one axis, so a flank group's lateral offset
+  // never reads as range to close. The core line is positioned by the anchor
+  // itself. A line follows a receding enemy at once, and while the enemy
+  // closes it holds its ground: the extension shrinks only as fast as the
+  // anchor brings the slots up behind it, so a station never moves backward
+  // in world space, except with a retiring anchor.
+  if (engaging && geometry) {
+    const advance: Partial<Record<ShipRole, number>> = fleet.lineAdvance ?? {};
+    const onStation = fleet.engagementMode !== undefined && fleet.engagementMode !== 'approach';
+    for (const [role, slot] of references) {
+      const member = mine.find(s => s.role === role);
+      if (!member || role === 'fighter') continue;
+      const previous = advance[role] ?? 0;
+      let next = previous;
+      if (fleet.engagementMode !== 'retire') {
+        const memberRange = shipEngagementRange(member);
+        const leash = lineLeash(ctx, member, memberRange, range);
+        const screen = isScreen(role);
+        const reference = slotToWorld(fleet.anchor, fleet.heading, slot);
+        const gap = dot(sub(geometry.enemyFront, reference), geometry.bearing);
+        const wanted = role === representative.role || (!screen && !onStation) ? 0
+          : Math.min(leash, Math.max(0, gap - engagementBand(member).preferred));
+        next = Math.min(leash, Math.max(wanted, previous - Math.max(0, anchorAdvance)));
+      }
+      advance[role] = next;
+    }
+    fleet.lineAdvance = advance;
+  } else {
+    fleet.lineAdvance = undefined;
+  }
+
+  // Once the line is on station, its basis is frozen unless the enemy has
+  // drifted well off its bow: rotating a world-space line every tick causes
+  // orbital pursuit, but a line that never turns leaves its flanks silent.
+  const faceDir = withdrawing && desired ? sub(desired, fleet.anchor) : bearing ?? (fleet.objective ? sub(fleet.objective, myCentre) : undefined);
+  if (faceDir && faceDir.x * faceDir.x + faceDir.z * faceDir.z > 1e-6) {
     const target = normalize(v3(faceDir.x, 0, faceDir.z));
     const cur = fleet.heading;
     const angle = Math.atan2(cur.x * target.z - cur.z * target.x, cur.x * target.x + cur.z * target.z);
-    const radius = Math.max(1, ...core.map(s => Math.sqrt(lengthSq(s.slot))));
-    const rate = Math.min(0.12, ...core.map(s => s.turnRate * 0.5), slowest * 0.5 / radius);
-    const a = Math.sign(angle) * Math.min(Math.abs(angle), rate * dt);
-    const c = Math.cos(a), s = Math.sin(a);
-    fleet.heading = normalize(v3(cur.x * c - cur.z * s, 0, cur.x * s + cur.z * c));
+    const canTurn = withdrawing || fleet.engagementMode === 'approach' || o.order === 'escort' ||
+      ((fleet.engagementMode === 'hold' || fleet.engagementMode === 'retire') && Math.abs(angle) > HOLD_ROTATION_THRESHOLD);
+    if (canTurn) {
+      const radius = Math.max(1, ...core.map(s => Math.sqrt(lengthSq(s.slot))));
+      const rate = Math.min(0.12, ...core.map(s => s.turnRate * 0.5), slowest * 0.5 / radius);
+      const a = Math.sign(angle) * Math.min(Math.abs(angle), rate * dt);
+      const c = Math.cos(a), sn = Math.sin(a);
+      fleet.heading = normalize(v3(cur.x * c - cur.z * sn, 0, cur.x * sn + cur.z * c));
+    }
   }
+}
+
+/** Mean distance the core's hulls trail their slots (or their commanded
+ * stations, whichever they are closer to) along `axis`, never negative. */
+function coreLag(core: readonly ShipState[], fleet: FleetState, axis: Vec3): number {
+  let lag = 0;
+  for (const s of core) {
+    const slot = slotToWorld(fleet.anchor, fleet.heading, s.slot);
+    const slotLag = dot(sub(slot, s.pos), axis);
+    const stationLag = s.firingOffset ? dot(sub(add(slot, s.firingOffset), s.pos), axis) : slotLag;
+    lag += Math.max(0, Math.min(slotLag, stationLag));
+  }
+  return lag / Math.max(1, core.length);
+}
+
+/** How far the core's leading quarter of hulls stands ahead of the leading
+ * quarter of its slots along `axis`, never negative: deliberate reach trims
+ * and close-ups, as opposed to the formation itself. */
+function coreTrim(core: readonly ShipState[], fleet: FleetState, axis: Vec3): number {
+  if (!core.length) return 0;
+  const hulls = core.map(s => dot(s.pos, axis)).sort((a, b) => b - a);
+  const slots = core.map(s => dot(slotToWorld(fleet.anchor, fleet.heading, s.slot), axis)).sort((a, b) => b - a);
+  const quarter = Math.ceil(core.length / 4);
+  let ahead = 0;
+  for (let i = 0; i < quarter; i++) ahead += hulls[i] - slots[i];
+  return Math.max(0, ahead / quarter);
+}
+
+/** How far a role line may stand ahead of its slots. Heavy units advance as a
+ * battle line under their fleet anchor: they do not independently charge a
+ * target and lose their mutual firing screen. Screens keep their own reach. */
+function lineLeash(ctx: AiContext, ship: ShipState, range: number, fleetRange: number): number {
+  const normalLeash = isScreen(ship.role) ? Math.max(range, fleetRange * 1.1) : range * 0.55;
+  const lineFraction = ship.role === 'carrier' ? 0.12 :
+    ship.role === 'dreadnought' ? 0.24 :
+    ship.role === 'reaper_capital' ? 0.35 :
+    ship.role === 'cruiser' ? 0.42 : 1;
+  return ctx.rules.special.reaperHardcore ? Math.min(normalLeash, range * lineFraction) : normalLeash;
 }
 
 export function shipDecision(ctx: AiContext, ship: ShipState, fleet: FleetState): void {
@@ -311,35 +608,43 @@ export function shipDecision(ctx: AiContext, ship: ShipState, fleet: FleetState)
 interface RoleStations {
   formation: FleetState['orders']['formation'];
   shipCount: number;
-  referenceByShip: Map<string, Vec3>;
+  byRole: Map<ShipRole, Vec3>;
 }
 
 const roleStations = new WeakMap<FleetState, RoleStations>();
 
-/** Formation references are deployment geometry, not the live centroid. Dead
- * members keep their station in this calculation so casualties do not pull the
- * survivors sideways. Rebuild only for assignment changes or new deployments. */
-function roleReference(ctx: AiContext, ship: ShipState, fleet: FleetState): Vec3 {
+/** Formation references are deployment geometry, not the live centroid: the
+ * mean slot of each role's leading quarter, so a role line's range is held by
+ * its front rank and rear ranks close up to their own reach instead of the
+ * whole line's mean being pushed into the enemy. Dead members keep their
+ * station in this calculation so casualties do not pull the survivors
+ * sideways. Rebuild only for assignment changes or new deployments. */
+function roleReferences(ctx: AiContext, fleet: FleetState): Map<ShipRole, Vec3> {
   let cached = roleStations.get(fleet);
   if (!cached || cached.formation !== fleet.orders.formation || cached.shipCount !== ctx.ships.length) {
-    const members = ctx.ships.filter(member => member.fleetId === fleet.spec.id);
-    const sums = new Map<string, { centre: Vec3; count: number }>();
-    for (const member of members) {
-      const key = member.role;
-      const value = sums.get(key) ?? { centre: v3(), count: 0 };
-      value.centre = add(value.centre, member.slot);
-      value.count++;
-      sums.set(key, value);
+    const byRole = new Map<ShipRole, ShipState[]>();
+    for (const member of ctx.ships) {
+      if (member.fleetId !== fleet.spec.id) continue;
+      let role = byRole.get(member.role);
+      if (!role) { role = []; byRole.set(member.role, role); }
+      role.push(member);
     }
-    const referenceByShip = new Map<string, Vec3>();
-    for (const member of members) {
-      const value = sums.get(member.role)!;
-      referenceByShip.set(member.id, scale(value.centre, 1 / value.count));
+    const references = new Map<ShipRole, Vec3>();
+    for (const [role, members] of byRole) {
+      const leading = [...members].sort((a, b) => b.slot.z - a.slot.z || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .slice(0, Math.ceil(members.length / 4));
+      let reference = v3();
+      for (const member of leading) reference = add(reference, member.slot);
+      references.set(role, scale(reference, 1 / leading.length));
     }
-    cached = { formation: fleet.orders.formation, shipCount: ctx.ships.length, referenceByShip };
+    cached = { formation: fleet.orders.formation, shipCount: ctx.ships.length, byRole: references };
     roleStations.set(fleet, cached);
   }
-  return cached.referenceByShip.get(ship.id) ?? ship.slot;
+  return cached.byRole;
+}
+
+export function roleReference(ctx: AiContext, ship: ShipState, fleet: FleetState): Vec3 {
+  return roleReferences(ctx, fleet).get(ship.role) ?? ship.slot;
 }
 
 interface BroadsideBearing {
@@ -428,6 +733,8 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const target = validEnemy(ship, candidate) ? candidate : undefined;
   const slotPos = slotToWorld(fleet.anchor, fleet.heading, ship.slot);
   const noRetreat = ship.faction === 'reaper';
+  // Only the two battle-line branches below command a station away from the slot.
+  ship.firingOffset = undefined;
   if (ship.role === 'fighter' && (!fleet.orders.fightersDeployed || ship.rearming) && ship.carrierId) {
     const carrier = ctx.getShip(ship.carrierId);
     if (carrier?.alive && !carrier.escaped) return { position: carrier.pos, speedFraction: 1 };
@@ -446,13 +753,16 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
     if (escort?.alive && !escort.escaped) return { position: slotToWorld(escort.pos, escort.heading, scale(ship.slot, 0.35)), speedFraction: 1, face: target?.pos };
   }
   const engaging = attackOrder(fleet) || (noRetreat && ['withdraw', 'retreat'].includes(fleet.orders.order));
-  if (!target || (!engaging && ship.role !== 'fighter')) return { position: slotPos, speedFraction: 1, face: target ? combatFacing(ship, target, slotPos) : undefined };
+  if (!target || (!engaging && ship.role !== 'fighter')) {
+    ship.closeUpKm = undefined;
+    return { position: slotPos, speedFraction: 1, face: target ? combatFacing(ship, target, slotPos) : undefined };
+  }
 
   const band = engagementBand(ship);
   const range = shipEngagementRange(ship);
   const dist = distance(ship.pos, target.pos);
   if (ship.role === 'fighter') return fighterAttackGoal(ctx, ship, target, range);
-  const screen = ship.role === 'frigate' || ship.role === 'reaper_destroyer';
+  const screen = isScreen(ship.role);
   if (screen && ctx.fleets.get(target.fleetId)?.orders.order === 'retreat') {
     // Intercept at the battle edge, then return to the fleet. A Reaper
     // destroyer does not follow a lone escaping frigate indefinitely.
@@ -480,9 +790,16 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
     return { position, speedFraction: 1, face: target.pos };
   }
   const reference = slotToWorld(fleet.anchor, fleet.heading, roleReference(ctx, ship, fleet));
-  const toReference = sub(target.pos, reference);
-  const referenceDistance = Math.sqrt(lengthSq(toReference));
-  const axialDistance = dot(toReference, fleet.heading);
+  // The role line stands ahead of its slots along the fleet's live bearing to
+  // the enemy battle line (the fleet's movement objective). Advancing along
+  // the frozen fleet heading left flank and rear lines unable to shorten
+  // range; a bearing taken from a flank group's own reference skewed the line.
+  const front = fleet.objectiveFront ?? target.pos;
+  const bearing = fleet.objectiveBearing ?? (() => {
+    const toFront = sub(front, reference);
+    const span = Math.sqrt(lengthSq(toFront));
+    return span > 1e-6 ? scale(toFront, 1 / span) : fleet.heading;
+  })();
   if (ship.firingTargetId !== target.id) {
     ship.firingTargetId = target.id;
     ship.engagementMode = dist > band.max ? 'approach' : 'hold';
@@ -494,20 +811,24 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
 
   // Translate a role's line as a whole. Radially projecting every hull onto a
   // target-centred sphere contracted broad wings and erased the depth between
-  // battlegroups. A forward translation retains the assigned lateral/vertical
+  // battlegroups. A shared translation retains the assigned lateral/vertical
   // stations, and the cached reference prevents the same contraction in depth.
-  const normalLeash = screen ? Math.max(range, (fleet.engagementRange ?? range) * 1.1) : range * 0.55;
-  // Heavy units advance as a battle line under their fleet anchor. They do
-  // not independently charge a target and lose their mutual firing screen.
-  // Cruisers can manoeuvre further; frigates and fighters retain wide freedom.
-  const lineFraction = ship.role === 'carrier' ? 0.12 :
-    ship.role === 'dreadnought' ? 0.24 :
-    ship.role === 'reaper_capital' ? 0.35 :
-    ship.role === 'cruiser' ? 0.42 : 1;
-  const leash = ctx.rules.special.reaperHardcore ? Math.min(normalLeash, range * lineFraction) : normalLeash;
-  let advance = Math.min(Math.max(0, referenceDistance - band.preferred), Math.max(0, axialDistance - band.min), leash);
-  if (!noRetreat && referenceDistance < band.min) advance = -Math.min(band.min - referenceDistance, range * 0.25);
-  let position = add(slotPos, scale(fleet.heading, advance));
+  const lineAdvance = fleet.lineAdvance?.[ship.role] ?? 0;
+  // Reach-aware depth: once the fleet is on station, a rank whose own slot
+  // stands deeper than its band reaches closes up to the back of its band,
+  // never past the line's own station. Depth is the gap to the enemy line
+  // along the fleet bearing, so a flank slot at the front's depth stays where
+  // it is. Hulls that already reach keep their assigned depth, so the
+  // formation only compresses where depth would otherwise mean silent guns,
+  // and it never falls back on its own.
+  const behind = Math.max(0, dot(sub(reference, slotPos), bearing));
+  let closeUp = Math.min(ship.closeUpKm ?? 0, behind);
+  if (fleet.engagementMode !== undefined && fleet.engagementMode !== 'approach') {
+    const gap = dot(sub(front, slotPos), bearing);
+    if (gap > band.max) closeUp = Math.min(behind, Math.max(closeUp, gap - band.max - lineAdvance));
+  }
+  ship.closeUpKm = closeUp;
+  let position = add(slotPos, scale(bearing, lineAdvance + closeUp));
 
   // A flank can still correct an unusable firing solution, within a bounded
   // trim. In-range ships keep their station instead of all seeking precisely
@@ -517,15 +838,15 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const trimLimit = range * 0.15;
   if (stationDistance > range * 0.97) {
     position = add(position, scale(normalize(toTarget), Math.min(trimLimit, stationDistance - range * 0.94)));
-  } else if (!noRetreat && stationDistance < band.min) {
-    position = add(position, scale(normalize(toTarget), -Math.min(trimLimit, band.min - stationDistance)));
   }
   ship.firingOffset = sub(position, slotPos);
   if (noRetreat) {
-    // A station behind the enemy must not turn into a reverse thrust command
-    // or a tangential orbit. Brake in place until forward pressure is needed.
-    const toEnemy = normalize(sub(target.pos, ship.pos));
-    if (dot(sub(position, ship.pos), toEnemy) < -1e-6) position = ship.pos;
+    // A station behind the enemy line must not turn into a reverse thrust
+    // command or a tangential orbit. Brake in place until forward pressure is
+    // needed. The line's bearing is the axis: a target that has slipped
+    // abeam or astern of the hull is a matter for facing and arcs, and must
+    // not freeze a capital that still has to close with the enemy line.
+    if (dot(sub(position, ship.pos), bearing) < -1e-6) position = ship.pos;
   }
   return { position, speedFraction: 1, face: combatFacing(ship, target, position) };
 }
