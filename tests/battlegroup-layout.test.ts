@@ -34,8 +34,14 @@ describe('cinematic battlegroup deployment', () => {
     const sim = deployment();
     const fleet = sim.ships.filter(s => s.side === 'A');
     const points = fleet.map(s => s.pos);
-    expect(extent(points, 'x')).toBeGreaterThan(extent(points, 'y') * 8);
-    expect(extent(points, 'y')).toBeLessThan(7);
+    // Altitude bands: the screen and the reserve of this 90-hull line stand
+    // about 10 % of its width above or below the gun line (measured 6.1 km of
+    // height against 43.7 km of width); the old 7 km / eight-to-one bounds
+    // encoded the flat sheet with centimetre-scale jitter the combat audit
+    // described (FS6).
+    expect(extent(points, 'x')).toBeGreaterThan(extent(points, 'y') * 3);
+    expect(extent(points, 'y')).toBeLessThan(14);
+    expect(extent(points, 'y')).toBeGreaterThan(extent(points, 'x') * 0.08);
     expect(extent(points, 'z')).toBeGreaterThan(5);
     expect(extent(points, 'x')).toBeLessThan(55);
     const averageZ = (role: ShipState['role']) => {
@@ -71,7 +77,9 @@ describe('cinematic battlegroup deployment', () => {
     const column = [...assignSlots(ships, 'capital_column').values()];
     expect(extent(line, 'x')).toBeGreaterThan(extent(line, 'z') * 3);
     expect(extent(column, 'z')).toBeGreaterThan(extent(column, 'x') * 5);
-    expect(extent(line, 'y')).toBeLessThan(8);
-    expect(extent(column, 'y')).toBeLessThan(8);
+    // Reaper horns and pickets stand whole layer pitches off the body (FS6):
+    // measured 11.2 km of height for the line, where 8 km encoded a flat stack.
+    expect(extent(line, 'y')).toBeLessThan(12);
+    expect(extent(column, 'y')).toBeLessThan(12);
   });
 });

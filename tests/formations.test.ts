@@ -28,7 +28,12 @@ describe('fleet formations', () => {
       // second altitude layer standing over the gaps between the columns, so
       // the hundred capitals span up to 154 units (85 km) measured, rather than
       // the 116 of the unstaggered lattice that the old bound of 120 encoded.
-      expect(extent('y')).toBeLessThan(8);
+      // In height the front's horns, pickets and vanguard stand whole layer
+      // pitches (3 km) above or below the body: measured 7.5-11.2 km against
+      // the 8 km the flat two-layer stack encoded; the front is still at least
+      // ten times wider than it is tall.
+      expect(extent('y')).toBeLessThan(12);
+      expect(extent('x')).toBeGreaterThan(extent('y') * 10);
       expect(extent('x')).toBeLessThan(formation === 'dispersed' ? 170 : 165);
       expect(extent('z')).toBeLessThan(formation === 'capital_column' ? 150 : formation === 'dispersed' ? 100 : 60);
       let minimumDistance = Infinity;

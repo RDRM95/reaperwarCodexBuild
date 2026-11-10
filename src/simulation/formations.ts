@@ -392,11 +392,25 @@ const HULL_TRIM_RAD = {
 };
 /** Seeded yaw of an echelon's own front (radians), the basis of its groups' trims. */
 const ECHELON_YAW_RAD = { organic: 14 * Math.PI / 180, reaper: 6 * Math.PI / 180 };
-/** Per-group altitude jitter and the picket screen's altitude offset, as
- * fractions of range and layer pitch: enough to break the sheet, small enough
- * that a 90-hull line stays shallow (tests/battlegroup-layout.test.ts). */
+/** Altitude bands of the echelons as fractions of the fleet's width (lateral
+ * span of the placed groups): the picket screen stands 8-12 % above or below
+ * the line, the vanguard on the other side, the two flank concentrations on
+ * opposite sides (sign by seed), the reserve 5 % above, a salient with its
+ * flank; every group then takes a seeded jitter of up to 3 % of the width.
+ * Reaper fronts use 0.4 of each fraction: a pressure front stays flatter than
+ * an organic order of battle. Each altitude is soft-limited (tanh) to
+ * ALTITUDE_REACH_FRACTION of the echelon's own reach so a station at the hold
+ * point is still within gun range: at 0.84 range horizontally and 0.6 range
+ * up the station is 1.03 range away and the per-hull trim (0.15 range toward
+ * the target) brings it to 0.94; a hard clamp would pile groups into one new
+ * stratum, the soft limit keeps their order. The screen's and vanguard's reach
+ * is that of their lightest tier (escorts), heavy echelons use the fleet's. */
+const ALTITUDE_BAND_FRACTION = { screen: [0.08, 0.04], vanguard: [0.02, 0.03], flank: [0.05, 0.04], reserve: [0.05, 0], salient: [0.03, 0.04] } as const;
+const GROUP_ALTITUDE_WIDTH_FRACTION = 0.03;
+/** Floor of the per-group altitude jitter as a fraction of range, for narrow fleets. */
 const GROUP_ALTITUDE_RANGE_FRACTION = { organic: 0.03, reaper: 0.008 };
-const SCREEN_ALTITUDE_LAYER_FRACTION = 0.3;
+const REAPER_BAND_FACTOR = 0.4;
+const ALTITUDE_REACH_FRACTION = 0.6;
 /** Fallback battle-line ranges (simulation km) when the caller gives none: the
  * catalogue's main batteries at BATTLESPACE_SCALE (DN 50, Reaper 54, cruiser
  * 36, frigate 24 nominal). */
@@ -694,9 +708,11 @@ interface PlacedGroup { x: number; y: number; z: number; yaw: number; echelon: E
  * only ever move back, so every chain of overlaps cascades outward in one
  * deterministic O(G^2) sweep on assignment and nothing is trapped between the
  * body and a neighbour. Lateral clearance between boxes is 0.7 clearance (the
- * narrowest seeded column gap), depth clearance 0.85. Main-body groups are
+ * narrowest seeded column gap), depth clearance 0.85; groups standing at least
+ * `verticalClearance` apart (one Reaper layer pitch, so a wing over another
+ * keeps the exact capital spacing) never conflict. Main-body groups are
  * separated first, front group fixed, so detached groups clear final stations. */
-function separateGroups(placed: Map<number, PlacedGroup>, widths: number[], depths: number[], clearance: number): void {
+function separateGroups(placed: Map<number, PlacedGroup>, widths: number[], depths: number[], clearance: number, verticalClearance: number): void {
   // Bounding boxes of the yawed groups (per-group yaw jitter stays within 0.05 rad).
   const box = (k: number, yaw: number): [number, number] => {
     const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw)) + 0.05;
@@ -704,7 +720,7 @@ function separateGroups(placed: Map<number, PlacedGroup>, widths: number[], dept
   };
   const entries = [...placed.entries()].sort((a, b) => a[0] - b[0]);
   const conflicts = (i: number, p: PlacedGroup, j: number, q: PlacedGroup): number | undefined => {
-    if (Math.abs(p.y - q.y) > clearance * 0.5) return undefined;
+    if (Math.abs(p.y - q.y) >= verticalClearance) return undefined;
     const [wi, di] = box(i, p.yaw), [wj, dj] = box(j, q.yaw);
     if (Math.abs(p.x - q.x) >= (wi + wj) / 2 + clearance * 0.7) return undefined;
     return (di + dj) / 2 + clearance * 0.85;
@@ -984,17 +1000,58 @@ function composeBattleGroups(ships: SlotShip[], formation: FormationType, seed: 
     p.x += reapers ? 0 : (noise(index, 1) - 0.5) * pitch * 0.18;
     p.z += (noise(index, 2) - 0.5) * stride * (reapers ? 0.08 : 0.3);
   }
-  if (reapers) separateGroups(placed, widths, depths, clearance);
+  // Altitude bands: echelons stand in seeded bands proportional to the fleet's
+  // width, soft-limited by the reach of their own guns (see ALTITUDE_BAND_FRACTION).
+  const span = 2 * Math.max(1, ...[...placed.values()].map(p => Math.abs(p.x)));
+  const bandScale = reapers ? REAPER_BAND_FACTOR : 1;
+  const screenSign = noise(99, 4) < 0.5 ? 1 : -1;
+  const flankSign = noise(99, 6) < 0.5 ? 1 : -1;
+  const bandOf = (name: EchelonName): number => {
+    const roll = (salt: number, [base, spread]: readonly [number, number]): number => base + spread * noise(99, salt);
+    switch (name) {
+      case 'screen': return screenSign * roll(7, ALTITUDE_BAND_FRACTION.screen);
+      case 'vanguard': return -screenSign * roll(8, ALTITUDE_BAND_FRACTION.vanguard);
+      case 'flank_left': return flankSign * roll(9, ALTITUDE_BAND_FRACTION.flank);
+      case 'flank_right': return -flankSign * roll(10, ALTITUDE_BAND_FRACTION.flank);
+      case 'reserve': return roll(11, ALTITUDE_BAND_FRACTION.reserve);
+      case 'salient': return flankSign * roll(12, ALTITUDE_BAND_FRACTION.salient);
+      case 'main': return 0;
+    }
+  };
+  const bands = new Map<EchelonName, number>();
+  const lightestTier = new Map<EchelonName, number>();
+  placed.forEach((p, g) => {
+    if (!bands.has(p.echelon)) bands.set(p.echelon, bandOf(p.echelon) * span * bandScale);
+    lightestTier.set(p.echelon, Math.max(lightestTier.get(p.echelon) ?? 0, ...groups[g].map(s => tier(s.role))));
+  });
+  const fleetTier = Math.min(...ships.map(s => tier(s.role)));
+  const tierRange = (t: number): number => [reapers ? FALLBACK_RANGE_KM.reaperCapital : FALLBACK_RANGE_KM.capital, FALLBACK_RANGE_KM.cruiser, FALLBACK_RANGE_KM.frigate, FALLBACK_RANGE_KM.fighter][t];
+  const reachOf = (name: EchelonName): number => {
+    const t = name === 'screen' || name === 'vanguard' ? lightestTier.get(name) ?? fleetTier : fleetTier;
+    return rangeUnits * tierRange(t) / tierRange(fleetTier);
+  };
+  const altitudeCap = new Map<EchelonName, number>();
+  for (const name of bands.keys()) altitudeCap.set(name, ALTITUDE_REACH_FRACTION * reachOf(name));
+  const jitter = Math.max(rangeUnits * GROUP_ALTITUDE_RANGE_FRACTION[kind], GROUP_ALTITUDE_WIDTH_FRACTION * span * bandScale);
+  const softLimit = (value: number, cap: number): number => cap * Math.tanh(value / cap);
+  for (const [index, p] of placed) {
+    const raw = p.y + (bands.get(p.echelon) ?? 0) + (noise(index, 3) - 0.5) * 2 * jitter;
+    // Reaper wings stand on whole layer pitches (a horn one or two layers off
+    // the body), so any two wings are level or a full pitch apart and the
+    // separation pass below never has to push a wing back for a near-level
+    // neighbour; organics take the continuous, soft-limited altitude.
+    p.y = reapers ? layerPitch * Math.round(raw / layerPitch) : softLimit(raw, altitudeCap.get(p.echelon) ?? rangeUnits);
+  }
+  // The Reaper separation pass sees the final altitudes, so wings that share a layer keep their exact pitch.
+  if (reapers) separateGroups(placed, widths, depths, clearance, layerPitch * 0.5);
 
   // Per-group altitude and yaw; per-hull station trims and heading trims.
   const slots = new Map<string, Vec3>();
-  const altitude = rangeUnits * GROUP_ALTITUDE_RANGE_FRACTION[kind];
-  const screenAltitude = layerPitch * SCREEN_ALTITUDE_LAYER_FRACTION * (noise(99, 4) < 0.5 ? 1 : -1);
   const capitalTrim = reapers ? HULL_TRIM_RAD.reaperCapital : HULL_TRIM_RAD.capital;
   const escortTrim = reapers ? HULL_TRIM_RAD.reaperDestroyer : HULL_TRIM_RAD.escort;
   layouts.forEach((layout, index) => {
     const p = placed.get(index) ?? { x: 0, y: 0, z: 0, yaw: 0, echelon: 'main' as EchelonName, committed: true };
-    const y = p.y + (noise(index, 3) - 0.5) * 2 * altitude + (p.echelon === 'screen' ? screenAltitude : 0);
+    const y = p.y;
     const groupYaw = p.yaw + (noise(index, 5) - 0.5) * 2 * (reapers ? 0.03 : 0.14);
     const cos = Math.cos(groupYaw), sin = Math.sin(groupYaw);
     const scale = reapers ? 1 : 0.9 + noise(index, 6) * 0.25;

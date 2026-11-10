@@ -59,20 +59,42 @@ export function stageThreeDimensionalTheatre(config: BattleConfig): BattleConfig
     Math.max(0, nearestHorizontal) * 0.075);
   if (!(layer > 0)) return config;
   const rank: Record<'A' | 'B', number> = { A: 0, B: 0 };
+  const mobile = (f: FleetSpec): boolean => !f.ships.some(s => s.classId.includes('platform'));
+  const levels: Record<'A' | 'B', number[]> = {
+    A: alliedAltitudeLevels(config.fleets.filter(f => f.side === 'A' && mobile(f)).length, config.seed, 0),
+    B: alliedAltitudeLevels(config.fleets.filter(f => f.side === 'B' && mobile(f)).length, config.seed, 1),
+  };
   const fleets: FleetSpec[] = config.fleets.map(f => {
-    if (f.ships.some(s => s.classId.includes('platform'))) return f;
+    if (!mobile(f)) return f;
     const i = rank[f.side]++;
     const side = f.side === 'A' ? -1 : 1;
-    // Allied wings occupy different altitudes but remain in mutually
-    // supporting range. Even/odd lanes mirror, rather than drift each tick.
+    // Allied wings occupy distinct altitudes but remain in mutually supporting
+    // range: seeded levels within the lane envelope, not mirrored even/odd
+    // echelons, so a side's wings are not a symmetric stack. Fixed at staging,
+    // never drifting each tick.
     const step = Math.min(3, nearestHorizontal * 0.018);
-    const echelon = i === 0 ? 0 : (i % 2 ? 1 : -1) * Math.ceil(i / 2) * step;
+    const echelon = levels[f.side][i] * step;
     return {
       ...f,
       position: { ...f.position, y: f.position.y + side * layer + echelon },
     };
   });
   return { ...config, fleets };
+}
+
+/** Seeded distinct altitude levels for a side's mobile fleets, in lane steps:
+ * the first (main) fleet stays on the lane, the others take the levels
+ * +1, -1, +2, -2 ... in a seeded order, each stretched by a seeded 0.75-1.25
+ * so neighbouring levels are not evenly pitched yet never coincide
+ * (1 x 1.25 < 2 x 0.75). Empty for a side with no fleets. */
+export function alliedAltitudeLevels(count: number, seed: number, salt: number): number[] {
+  const levels = Array.from({ length: Math.max(0, count - 1) }, (_, k) => (k % 2 ? -1 : 1) * Math.ceil((k + 1) / 2));
+  // Seeded Fisher-Yates over the level list.
+  for (let i = levels.length - 1; i > 0; i--) {
+    const j = Math.floor(layoutNoise(seed, i, 70 + salt) * (i + 1));
+    [levels[i], levels[j]] = [levels[j], levels[i]];
+  }
+  return [0, ...levels.map((level, k) => level * (0.75 + 0.5 * layoutNoise(seed, k, 72 + salt)))];
 }
 
 /** Toe-in of an off-axis allied fleet: 5 to 20 degrees towards the side's centre line (SIMULATION_ESTIMATE:

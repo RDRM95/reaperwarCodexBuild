@@ -114,6 +114,47 @@ describe('order-of-battle fleet composer', () => {
     }
   });
 
+  it('stands echelons in altitude bands proportional to width, within reach, with clearance', () => {
+    // Measured height / width: 200 hulls 0.11-0.16, 1000 hulls 0.11, 90 hulls
+    // 0.13-0.14; before the bands every organic deployment was 3-6 % tall.
+    for (const [ships, range] of [[fleet, DREADNOUGHT_RANGE_KM], [allianceMixed(20, 60, 120), DREADNOUGHT_RANGE_KM]] as [SlotShip[], number][]) {
+      for (const seed of [1, 2]) {
+        const layout = composeFleetLayout(ships, 'line_abreast', seed, { engagementRangeKm: range, faction: 'alliance' });
+        const m = metrics(ships, layout);
+        expect(m.extentKm.height).toBeGreaterThanOrEqual(m.extentKm.lateral * 0.1);
+        // Every band stays within the reach cap: 0.6 of the fleet range above or below the line.
+        expect(m.extentKm.height).toBeLessThanOrEqual(2 * 0.6 * range + 2.5);
+        // Group altitudes are not three or four even strata: no 0.5 km bin holds
+        // more than a fifth of the groups (measured 7-13 %) and the groups occupy
+        // at least 0.35 bins each (measured 0.45-0.93).
+        const groupAltitude = new Map<number, number>();
+        for (const s of ships) groupAltitude.set(layout.battlegroups.get(s.id)!, layout.slots.get(s.id)!.y);
+        const bins = new Map<number, number>();
+        for (const y of groupAltitude.values()) bins.set(Math.round(y * 2), (bins.get(Math.round(y * 2)) ?? 0) + 1);
+        expect(bins.size).toBeGreaterThanOrEqual(groupAltitude.size * 0.35);
+        expect(Math.max(...bins.values())).toBeLessThanOrEqual(groupAltitude.size * 0.2);
+        const positions = ships.map(s => layout.slots.get(s.id)!);
+        let worst = Infinity;
+        for (let i = 0; i < ships.length; i++) for (let j = 0; j < i; j++) {
+          const a = positions[i], b = positions[j];
+          worst = Math.min(worst, Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) - (ships[i].lengthKm + ships[j].lengthKm) * 0.55);
+        }
+        expect(worst).toBeGreaterThanOrEqual(-1e-8);
+      }
+    }
+    // A 3000-hull line is wider than its guns can reach vertically: its height is
+    // bounded by the reach cap (measured 25.5 km against 455-489 km of width).
+    const wide = allianceMixed(300, 900, 1800);
+    const m = metrics(wide, composeFleetLayout(wide, 'line_abreast', 1, options));
+    expect(m.extentKm.height).toBeGreaterThan(m.extentKm.lateral * 0.04);
+    expect(m.extentKm.height).toBeLessThanOrEqual(2 * 0.6 * DREADNOUGHT_RANGE_KM + 2.5);
+    // Reaper horns and pickets stand whole layer pitches off the body, never a
+    // fraction of one, so the exact wing pitch survives (checked below too).
+    const reapers = reaperFleet(100, 200);
+    const reaperLayout = composeFleetLayout(reapers, 'strike_wedge', 1, { engagementRangeKm: REAPER_RANGE_KM, faction: 'reaper' });
+    expect(metrics(reapers, reaperLayout).extentKm.height).toBeGreaterThan(6);
+  });
+
   it('gives at least 60 % of battlegroups a distinct pattern in large fleets', () => {
     const cases: [string, SlotShip[], number][] = [
       ['mixed 1000', fleet, DREADNOUGHT_RANGE_KM],
@@ -221,6 +262,18 @@ describe('seeded fleet staging', () => {
     expect(cfg.worldState?.[FLEET_LAYOUT_VERSION_KEY]).toBe(String(CURRENT_FLEET_LAYOUT_VERSION));
     // Different seeds toe in by different angles.
     expect(buildCustomBattle(setup(4)).fleets[2].heading).not.toEqual(cfg.fleets[2].heading);
+  });
+
+  it('places the allied fleets of a side at distinct seeded altitudes, not mirrored echelons', () => {
+    const wings = (n: number) => Array.from({ length: n }, (_, i) => ({ faction: 'turian' as const, name: `Wing ${i}`, formation: 'line_abreast' as const, counts: { turian_cruiser: 4 } }));
+    const build = (seed: number) => buildCustomBattle({ ...setup(seed), theatreLayout: 'three_dimensional', extraA: wings(5) });
+    const a = build(3).fleets.filter(f => f.side === 'A').map(f => f.position.y);
+    expect(new Set(a.map(y => y.toFixed(6))).size).toBe(a.length);
+    // Not the old symmetric +1, -1, +2, -2 stack: the offsets from the main fleet differ in magnitude.
+    const magnitudes = a.slice(1).map(y => Math.abs(y - a[0]).toFixed(6));
+    expect(new Set(magnitudes).size).toBe(magnitudes.length);
+    expect(build(3).fleets.map(f => f.position.y)).toEqual(build(3).fleets.map(f => f.position.y));
+    expect(build(4).fleets.filter(f => f.side === 'A').map(f => f.position.y)).not.toEqual(a);
   });
 
   it('keeps authored headings, single fleets and version-1 configurations untouched', () => {
