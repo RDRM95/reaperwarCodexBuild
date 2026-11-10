@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { buildAllianceCruiser, buildAllianceDreadnought, buildAllianceOmaha } from '@/rendering/ships/alliance';
+import { buildAllianceCruiser, buildAllianceDreadnought, buildAllianceFrigate, buildAllianceOmaha } from '@/rendering/ships/alliance';
 import { PALETTES } from '@/rendering/materials';
 import type { BuiltShip } from '@/rendering/ships/types';
 
@@ -90,6 +90,33 @@ describe('Alliance line hulls', () => {
     expect(halfBeam(cruiser, 0.3)).toBeGreaterThan(4 * halfBeam(dreadnought, 0.3));
     // Ahead of the prongs only the gun spine remains.
     expect(halfBeam(cruiser, 0.42)).toBeLessThan(0.03);
+  });
+
+  it('the frigate is a swept-wing dart: same length, muzzle and four engine nodes, low chisel bow', () => {
+    const ship = buildAllianceFrigate();
+    expect(ship.lengthUnits).toBe(1.7);
+    expect(ship.muzzle!.toArray().map(v => +v.toFixed(5))).toEqual([0, -0.02, 0.85]);
+    expect(ship.engineNodes.map(p => p.toArray().map(v => +v.toFixed(5)))).toEqual([[0.78, -0.06, -0.8], [-0.78, -0.06, -0.8], [0.09, 0, -0.85], [-0.09, 0, -0.85]]);
+    expect(meshes(ship).map(m => m.name).sort()).toEqual(['accent', 'engine', 'hull', 'hullDark', 'windows']);
+    expect(triangles(ship)).toBeLessThanOrEqual(900);
+    // The hull now reaches its own muzzle; the old one stopped a tenth of a length short of it.
+    const box = new THREE.Box3().setFromObject(ship.group);
+    expect(box.max.z).toBeCloseTo(0.85, 5);
+    expect(box.min.z).toBeGreaterThan(-0.87);
+    // Wings sweep back: full span aft, fuselage only forward, drawn to a point.
+    expect(halfBeam(ship, -0.3)).toBeGreaterThan(0.45);
+    expect(halfBeam(ship, 0)).toBeLessThan(0.26);
+    expect(halfBeam(ship, 0.2)).toBeLessThan(0.08);
+    expect(halfBeam(ship, 0.4)).toBeLessThan(halfBeam(ship, 0.2) * 0.6);
+    // The pale armour's upper face falls toward the bow.
+    const top = (station: number): number => {
+      const position = (ship.group.getObjectByName('hull') as THREE.Mesh<THREE.BufferGeometry>).geometry.getAttribute('position');
+      let highest = -Infinity;
+      for (let i = 0; i < position.count; i++) if (Math.abs(position.getZ(i) / ship.lengthUnits - station) < 0.02) highest = Math.max(highest, position.getY(i));
+      return highest / ship.lengthUnits;
+    };
+    expect(top(0.5)).toBeLessThan(0.01);
+    expect(top(-0.3)).toBeGreaterThan(0.05);
   });
 
   it('lit ports are many and small, and belong to the detail tier that distant ships drop', () => {
