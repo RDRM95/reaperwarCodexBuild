@@ -29,6 +29,7 @@ import { assignSlots } from './formations';
 import { summarise } from './results';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { advanceMotion } from './motion';
+import { combatYawRate } from './engagementReach';
 import { beamContactLocal, glanceMultiplier, spreadProjectileAim, worldHullContact } from './impactGeometry';
 import { SeparationField } from './separation';
 import { ProjectileBroadphase } from './projectileBroadphase';
@@ -574,9 +575,9 @@ export class BattleSimulation implements AiContext {
       const cosA = Math.max(-1, Math.min(1, dot(cur, target)));
       const angle = Math.acos(cosA);
       // Combat-mass Reapers rotate deliberately; their high-speed turn relies on
-      // mass-lightening not available while firing a capital main beam.
-      const combatMass = ship.faction === 'reaper' && ship.role === 'reaper_capital' ? 0.72 : 1;
-      const maxTurn = ship.turnRate * combatMass * (0.3 + 0.7 * ship.subsystems.engines) * dt;
+      // mass-lightening not available while firing a capital main beam. Target
+      // choice reads the same rate when it weighs the slew a contact costs.
+      const maxTurn = combatYawRate(ship) * dt;
       if (angle <= maxTurn || angle < 1e-4) ship.heading = target;
       else {
         // Rotate cur towards target around their common normal.

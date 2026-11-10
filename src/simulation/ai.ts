@@ -7,7 +7,7 @@ import type { RuleSet } from '@/timelines/rules';
 import { slotToWorld } from './formations';
 import { BATTLESPACE_SCALE as S } from './constants';
 import type { FleetState, ShipState, Side, TargetPriority } from './types';
-import { localReachTarget, reachableStation } from './engagementReach';
+import { feasibleSolution, localReachTarget, principalMount, reachableStation, recordSwitch, solutionFactor, solutionFeasibility, switchAllowed } from './engagementReach';
 
 /** Fleet orders own translation; ship controllers trim their firing station and
  * track their target independently. No controller injects time-driven orbits. */
@@ -266,20 +266,27 @@ export function scoreTarget(ctx: AiContext, shooter: ShipState, fleet: FleetStat
   const threat = Math.log2(1 + target.pointValue) / 12;
   const wounded = 1 - target.hull / target.maxHull;
   let score = 0.4 + threat * d.threatPriority * 2 + wounded * d.finishWounded + (target.barriers <= 0 ? 0.25 : 0);
-  // Reachable targets dominate remote threats, even when the latter are the
+  // Feasible solutions dominate remote threats, even when the latter are the
   // fleet focus. This keeps flank escorts firing instead of crossing the line.
+  // Feasible means this hull's principal mount is in range and bears, or can
+  // be brought to bear within one shot cycle: a fleet focus just beyond range
+  // used to outscore an in-range destroyer and silence the spinal gun, and a
+  // flanker needing a 25 s Reaper swing cost most of a beam cycle per switch.
   const relativeRange = dist / Math.max(mainRange, S);
+  const feasibility = solutionFeasibility(shooter, target, mainRange);
+  const usable = feasibleSolution(feasibility);
   const intercepting = (shooter.role === 'frigate' || shooter.role === 'reaper_destroyer' || shooter.role === 'fighter') &&
     ctx.fleets.get(target.fleetId)?.orders.order === 'retreat';
   // A screen intercepts reachable withdrawing ships while the main gun line
   // maintains its capital focus. Global focus bias otherwise keeps every fast
   // escort on a distant dreadnought until the last cruiser has almost escaped.
   if (intercepting) score = (1 + wounded * 0.2) / (1 + relativeRange * relativeRange);
-  else score *= relativeRange <= 1 ? 1.15 : 1 / (relativeRange * relativeRange);
+  else score *= relativeRange <= 1 ? (usable ? 1.15 : 1) : 1 / (relativeRange * relativeRange);
   if (target.role === 'fighter' && shooter.role !== 'fighter') score *= 0.05;
   // Interceptors prioritise hostile fighters over repeatedly chasing capitals.
   if (shooter.role === 'fighter' && target.role === 'fighter') score *= 3.2;
-  if (!intercepting && fleet.orders.focusFire && fleet.focusTargetId === target.id && relativeRange <= 1.2) score *= 1 + d.focusFire * 2;
+  if (!intercepting && fleet.orders.focusFire && fleet.focusTargetId === target.id && usable) score *= 1 + d.focusFire * 2;
+  score *= solutionFactor(feasibility);
   score *= priorityMultiplier(fleet.orders.priority, target);
   if (fleet.orders.protectCapitals && (shooter.role === 'frigate' || shooter.role === 'cruiser')) {
     const tgt = target.targetId ? ctx.getShip(target.targetId) : undefined;
@@ -310,7 +317,10 @@ export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState)
     if (e.role !== 'fighter' && dist < nearestDistance) { nearest = e; nearestDistance = dist; }
     if (dist > sensor * 1.5) continue;
     if (ship.role === 'fighter' && e.role === 'fighter' && !ship.weapons.some(w => w.def.antiSmall)) continue;
-    const reachableReplacement = currentValid && distance(ship.pos, current.pos) > range * 1.4 && distance(ship.pos, e.pos) < range;
+    // A lock never holds a hull on a target beyond its range while a contact
+    // is inside it (the old 1.4x factor kept the spinal gun silent for the
+    // whole lock while the fleet focus sat at 1.0-1.4x range).
+    const reachableReplacement = currentValid && distance(ship.pos, current.pos) > range && dist < range;
     if (locked && !reachableReplacement) continue;
     const candidate = scoreTarget(ctx, ship, fleet, e, range);
     const threshold = currentValid && best?.id === current.id && !reachableReplacement ? bestScore * 1.25 : bestScore;
@@ -322,7 +332,14 @@ export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const capitalPursuit = !screen && best && ctx.fleets.get(best.fleetId)?.orders.order === 'retreat';
   if (ship.role !== 'fighter' && fleet.orders.order !== 'attack_target' && !capitalPursuit)
     best = localReachTarget(ship, best, nearest, range);
-  if (best?.id !== ship.targetId) ship.targetLockUntil = ctx.time + 5;
+  if (best?.id !== ship.targetId) {
+    // A switch away from a target that is still a usable solution is
+    // voluntary and, for Reaper hulls, budgeted: each costs a slew.
+    const voluntary = currentValid && distance(ship.pos, current.pos) <= range;
+    if (voluntary && !switchAllowed(ship, ctx.time)) return current.id;
+    if (voluntary) recordSwitch(ship, ctx.time);
+    ship.targetLockUntil = ctx.time + 5;
+  }
   return best?.id;
 }
 
@@ -387,7 +404,7 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
       const locked = !!best && ctx.time < (fleet.focusLockUntil ?? 0);
       for (const e of enemies) {
         if (!validEnemy(representative, e) || e.role === 'fighter') continue;
-        const reachableReplacement = !!best && distance(representative.pos, best.pos) > fleet.engagementRange * 1.4 && distance(representative.pos, e.pos) < fleet.engagementRange;
+        const reachableReplacement = !!best && distance(representative.pos, best.pos) > fleet.engagementRange && distance(representative.pos, e.pos) < fleet.engagementRange;
         if (locked && !reachableReplacement) continue;
         const score = scoreTarget(ctx, representative, fleet, e, fleet.engagementRange);
         if (score > bestScore * (best ? 1.25 : 1) || !best) { best = e; bestScore = score; }
@@ -682,15 +699,7 @@ const SECTOR_MARGIN_DEG = 2;
 const SECTOR_FACING_MIN_ARC_DEG = 30;
 
 /** Arc (degrees) of the mount that sets the ship's engagement range. */
-function principalArc(ship: ShipState): number {
-  const range = shipEngagementRange(ship);
-  let arc = 360;
-  for (const w of ship.weapons) {
-    if (w.def.antiSmall || (w.ammo !== undefined && w.ammo <= 0) || w.def.range < range - 1e-9) continue;
-    arc = Math.min(arc, w.def.arc);
-  }
-  return arc;
-}
+const principalArc = (ship: ShipState): number => principalMount(ship, shipEngagementRange(ship))?.def.arc ?? 360;
 
 function combatFacing(ship: ShipState, target: ShipState, station: Vec3): Vec3 {
   if (ship.faction !== 'imperium' && ship.faction !== 'chaos') {
