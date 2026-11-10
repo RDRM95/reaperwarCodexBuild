@@ -48,3 +48,24 @@ Reproduce with `scripts/bloom-qa.mjs`.
 - Additive sprites (explosions, engine glow sprites, impact flashes) now add up in linear light before tone mapping,
   so dense stacks read a little hotter than before; their materials were not retuned.
 - Medium and low presets are unchanged unless the Bloom control is set to On.
+
+## Correction: sunlit white hulls bloomed (same day)
+
+The first version of this note said hulls stay crisp because white paint in full sun is about 0.83 and cannot reach
+the threshold. That counted only diffuse light. Measured in the HDR target with everything but hull surfaces hidden
+(deep space), the sunlit faces of the white Alliance dreadnought reach 8.8 and the frigate 10.2: specular glints on
+pale, glossy armour (metalness 0.5, roughness 0.42), about three times an engine's 3.2. A graphite Reaper never passes
+1.1, which is why the captures above, all of Reapers, did not show it. With bloom on, whole decks of Alliance ships
+glowed (`qa/reaper-bloom-20261110/hull-glare-before-after.jpg`, left column).
+
+Brightness alone cannot separate a light source from lit paint, but colour can: emitters are saturated, glints on
+paint are near neutral. The high-pass now takes a pixel's peak channel and asks more of it the more neutral the pixel
+is. A coloured pixel blooms from 1.3 as before; a neutral one only from 16, above the brightest measured glint. Hull
+paints in the palettes have chroma 0.04–0.35 (the quarian hull, 0.59, is the exception and may still glint); drive
+glows 0.47–0.99. `bloomWeight` in `src/rendering/bloom.ts` is the same rule in TypeScript, and `tests/bloom.test.ts`
+checks it against every faction's drive colour, a hot Reaper seam, a beam core and the measured hull peaks. A side
+effect in the right direction: a hot seam (red-orange, luminance about 1.0) now blooms; under the luminance rule it
+never did.
+
+Still true after this fix: those hull faces clip to white on screen with or without bloom. That is the Alliance
+material's gloss, not the bloom, and is addressed with the Alliance hull work.
