@@ -20,6 +20,8 @@ import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRi
 import { collectBreakupPieces } from './breakup';
 import { DAMAGE_ONSET, REAPER_ARMOUR_MESHES, REAPER_SEAM_MESHES, reaperDamageGlow, type ReaperDamageGlow } from './damageGlow';
 import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
+import { bloomFor, createBloomPipeline, type BloomPipeline } from './bloom';
+import { TONE_EXPOSURE } from './sceneColour';
 
 /**
  * Binds a BattleSimulation to a Three.js scene. The simulation owns all
@@ -51,6 +53,8 @@ export interface GraphicsSettings {
   quality: 'low' | 'medium' | 'high';
   showEngineGlow: boolean;
   pixelRatioCap: number;
+  /** Restrained HDR bloom on light sources. Unset: on with the high preset. */
+  bloom?: boolean;
   /** Distance-based level of detail (default on). */
   lod?: boolean;
 }
@@ -106,16 +110,20 @@ export class BattleView {
   private readonly farColourCache = new Map<string, readonly [number, number, number]>();
   /** Draw calls of the last rendered frame. */
   drawCalls = 0;
+  /** Post-processing chain when bloom is on; the scene renders straight to the canvas otherwise. */
+  private bloom?: BloomPipeline;
   lodCounts = { full: 0, reduced: 0, point: 0 };
 
   constructor(canvas: HTMLCanvasElement, sim: BattleSimulation, settings: GraphicsSettings) {
     this.settings = settings;
     this.instances.configure(settings.quality);
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'low', powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+    const bloom = bloomFor(settings);
+    // With bloom the scene is antialiased in its own target, so the canvas does not need a multisampled buffer too.
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'low' && !bloom, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.pixelRatioCap));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = TONE_EXPOSURE;
     this.rig = new CameraRig(canvas.clientWidth / Math.max(1, canvas.clientHeight));
     // Image-based lighting so metallic hull plating reads as metal rather than
     // black: a neutral PMREM environment at low intensity.
@@ -152,6 +160,10 @@ export class BattleView {
     this.farPoints.frustumCulled = false;
     this.farPoints.name = 'far-points';
     this.scene.add(this.farPoints);
+    if (bloom) {
+      this.bloom = createBloomPipeline(this.renderer, this.scene, this.rig.camera, bloom);
+      this.effects.setHdrScene(bloom.beamBoost);
+    }
     this.bind(sim);
   }
 
@@ -164,7 +176,7 @@ export class BattleView {
     this.effects.clear();
     this.nextBeamShieldAt.clear();
     if (this.env) { this.scene.remove(this.env.group); disposeEnvironment(this.env); }
-    this.env = buildEnvironment(sim.config.environment);
+    this.env = buildEnvironment(sim.config.environment, this.bloom !== undefined);
     this.scene.add(this.env.group);
     this.sunLight.position.copy(this.env.sunDirection).multiplyScalar(10_000);
     this.sunLight.target.position.set(0, 0, 0);
@@ -806,15 +818,22 @@ export class BattleView {
 
   resize(width: number, height: number): void {
     this.renderer.setSize(width, height, false);
+    this.bloom?.setSize(width, height);
     this.rig.resize(width / Math.max(1, height));
   }
 
   render(): void {
+    if (this.bloom) {
+      this.bloom.render();
+      this.drawCalls = this.bloom.sceneDrawCalls();
+      return;
+    }
     this.renderer.render(this.scene, this.rig.camera);
     this.drawCalls = this.renderer.info.render.calls;
   }
 
   dispose(): void {
+    this.bloom?.dispose();
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();
