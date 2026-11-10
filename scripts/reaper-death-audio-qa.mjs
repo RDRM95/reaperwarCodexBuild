@@ -5,7 +5,8 @@
  *
  * The battle is paused, each hull is marked destroyed and the simulation's own ship_destroyed event is delivered
  * for it (QA staging, never game behaviour); audio.play is replaced by a recorder, and the view is stepped for 8 s.
- * It needs the dev server because it imports the audio module the app itself uses. It records cues; it does not
+ * It needs a freshly started dev server, because it imports the audio module the app itself uses (a server that has
+ * hot-reloaded that module serves the app a different copy). It records cues; it does not
  * listen to anything.
  */
 import { chromium } from '@playwright/test';

@@ -97,7 +97,7 @@ describe('how a destroyed hull dies on screen', () => {
     for (const role of ['reaper_capital', 'reaper_destroyer']) {
       expect(isStagedDeath(role)).toBe(true);
       expect(deathPlan(role, 'x').staged).toBe(true);
-      expect(deathSounds(role).atKill).toBe('reaper_death');
+      expect(deathSounds(role).atKill).toBe(role === 'reaper_capital' ? 'reaper_death' : 'reaper_death_small');
       expect(deathSounds(role).atBreakup).toBe('explosion_large');
     }
     expect(deathSounds('reaper_capital').intensity).toBe(1);

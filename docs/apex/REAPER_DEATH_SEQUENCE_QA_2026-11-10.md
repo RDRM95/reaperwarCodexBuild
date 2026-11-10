@@ -55,8 +55,8 @@ when the simulation reported the kill, for every class, so after the staging abo
 exploding 5.2 s before it broke apart, and the breakup itself was silent.
 
 Fixed in the change that follows this one. `deathSounds(role)` in `src/rendering/deathSequence.ts` names what is heard
-and when: a staged death plays a new synthesized sound at the kill (`reaper_death`: the horn sagging in pitch and
-breaking up, about 5 s for a capital ship and 2.2 s for a destroyer) and the explosion at the breakup, through a
+and when: a staged death plays a new synthesized sound at the kill (`reaper_death`, 5 s, for a capital ship and
+`reaper_death_small`, 2.2 s, for a destroyer: the horn sagging in pitch and breaking up) and the explosion at the breakup, through a
 `BattleView.onBreakup` callback. A Reaper with no hero mesh (instanced) has no staged death to show, so its explosion
 is heard at the kill together with the dying sound. Other classes sound exactly as before.
 

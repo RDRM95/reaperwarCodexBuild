@@ -29,6 +29,7 @@ export type SoundId =
   | 'explosion_small'
   | 'explosion_large'
   | 'reaper_death'
+  | 'reaper_death_small'
   | 'gardian'
   | 'torpedo';
 
@@ -277,10 +278,11 @@ export class AudioEngine {
         this.noise(0.6, 'lowpass', 700, 0.6, 0.5 * att, bus);
         this.tone('sine', 90, 30, 0.6, 0.3 * att, bus);
         break;
-      case 'reaper_death': {
+      case 'reaper_death':
+      case 'reaper_death_small': {
         // A Reaper dying: its horn sags in pitch and breaks up over the seconds before the hull comes apart.
-        // Original synthesis; longer and fuller for a capital ship (intensity 1) than for a destroyer.
-        const length = 2.2 + 2.8 * Math.min(1, Math.max(0, (intensity - 0.6) / 0.4));
+        // Original synthesis; 5 s for a capital ship, 2.2 s for a destroyer (their staged deaths last 5.2 and 2.4 s).
+        const length = id === 'reaper_death' ? 5 : 2.2;
         this.tone('sawtooth', 58, 21, length, 0.5 * att, bus);
         this.tone('square', 116, 38, length * 0.9, 0.16 * att, bus);
         this.tone('triangle', 174, 52, length * 0.7, 0.1 * att, bus, 0.1);

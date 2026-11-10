@@ -39,8 +39,9 @@ const isReaper = isStagedDeath;
  * death begins. A staged death is heard in two parts: the dying hull at the kill, and the explosion at the moment it
  * actually breaks apart, `deathDuration` later.
  */
-export function deathSounds(role: string): { atKill: 'reaper_death' | 'explosion_large' | 'explosion_small'; atBreakup?: 'explosion_large'; intensity: number } {
-  if (isStagedDeath(role)) return { atKill: 'reaper_death', atBreakup: 'explosion_large', intensity: role === 'reaper_capital' ? 1 : 0.6 };
+export function deathSounds(role: string): { atKill: 'reaper_death' | 'reaper_death_small' | 'explosion_large' | 'explosion_small'; atBreakup?: 'explosion_large'; intensity: number } {
+  if (role === 'reaper_capital') return { atKill: 'reaper_death', atBreakup: 'explosion_large', intensity: 1 };
+  if (role === 'reaper_destroyer') return { atKill: 'reaper_death_small', atBreakup: 'explosion_large', intensity: 0.6 };
   const big = role === 'dreadnought' || role === 'carrier';
   return { atKill: big || role === 'cruiser' ? 'explosion_large' : 'explosion_small', intensity: big ? 1 : 0.6 };
 }
