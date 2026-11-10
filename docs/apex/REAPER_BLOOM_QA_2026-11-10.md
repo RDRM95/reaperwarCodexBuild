@@ -14,7 +14,7 @@ orange patch (`qa/reaper-bloom-20261110/bloom-off-on.jpg`, left column).
   `UnrealBloomPass` adds back the blurred highlights (strength 0.1, radius 0.15, threshold 1.3 in linear scene
   light) and tone mapping happens once in the output pass. White paint in full sun is about 0.83 and cannot reach the
   threshold; every faction's drives (2.6–3.6) and the hot Reaper seams (up to 2.6) are above it.
-- Beam cores get HDR brightness in the beam's own hue (`EffectsSystem.setHdrBeams`). In a linear-light frame a core
+- Beam cores get HDR brightness in the beam's own hue (`EffectsSystem.setHdrScene`). In a linear-light frame a core
   at 0.95 no longer burns out the way stacked tone-mapped layers did on the canvas; at 2.6 it reads hot again and its
   spill keeps the beam's colour.
 - `src/rendering/sceneColour.ts`: the three hand-written shaders (atmosphere, starfield, barrier shells) write

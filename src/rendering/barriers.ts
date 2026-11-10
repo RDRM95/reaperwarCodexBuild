@@ -23,7 +23,7 @@ export function buildBarrierGeometry(built: BuiltShip): THREE.BufferGeometry {
   return geometry;
 }
 
-function shieldMaterial(): THREE.ShaderMaterial {
+function shieldMaterial(hdr: boolean): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { colour: { value: new THREE.Color(0x79bbff) }, opacity: { value: 0 }, impact: { value: new THREE.Vector3() }, age: { value: 0 }, extent: { value: 1 }, collapse: { value: 0 } },
     vertexShader: `varying vec3 vP; varying vec3 vN; varying vec3 vV;
@@ -42,7 +42,7 @@ function shieldMaterial(): THREE.ShaderMaterial {
         float alpha=opacity*(0.12+rim*0.65+wave*(0.35+hex*0.45)+collapse*0.25);
         gl_FragColor=additiveOut(mix(colour,vec3(0.85,0.95,1.0),wave*0.65+collapse*0.25),min(0.8,alpha));
       }`,
-    defines: sceneDefines(),
+    defines: sceneDefines(hdr),
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.FrontSide,
   });
 }
@@ -58,6 +58,8 @@ interface Shell {
 /** One shell per affected ship, at most forty active shells, cached geometry
  * per hull class. Only actual damage/collapse events make shields visible. */
 export class HullBarriers {
+  /** Set before the first shell is made: the scene is drawn into the HDR target (bloom on). */
+  hdr = false;
   readonly group = new THREE.Group();
   private cache = new Map<string, THREE.BufferGeometry>();
   private active = new Map<string, Shell>();
@@ -73,7 +75,7 @@ export class HullBarriers {
     if (!geometry) { geometry = buildBarrierGeometry(getShipTemplate(classId)); this.cache.set(classId, geometry); }
     source.updateWorldMatrix(true, false);
     if (!shell) {
-      const mesh = this.pool.pop() ?? new THREE.Mesh(geometry, shieldMaterial());
+      const mesh = this.pool.pop() ?? new THREE.Mesh(geometry, shieldMaterial(this.hdr));
       mesh.geometry = geometry; mesh.matrixAutoUpdate = false; mesh.visible = true;
       mesh.frustumCulled = false;
       this.group.add(mesh);

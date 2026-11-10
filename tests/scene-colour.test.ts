@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DISPLAY_CEILING, SCENE_COLOUR_GLSL, displayToScene, sceneDefines, sceneToDisplay, setHdrScene } from '@/rendering/sceneColour';
+import { DISPLAY_CEILING, SCENE_COLOUR_GLSL, displayToScene, sceneDefines, sceneToDisplay } from '@/rendering/sceneColour';
 
 describe('display-referred shaders in the HDR scene', () => {
   it('a display colour converted to a scene value comes back the same through tone mapping and encoding', () => {
@@ -25,12 +25,9 @@ describe('display-referred shaders in the HDR scene', () => {
     for (const x of displayToScene([0, 0, 0])) expect(Math.abs(x)).toBeLessThan(1e-9);
   });
 
-  it('is off unless the view that owns the renderer turns it on', () => {
-    expect(sceneDefines()).toEqual({});
-    setHdrScene(true);
-    expect(sceneDefines()).toEqual({ HDR_SCENE: '' });
-    setHdrScene(false);
-    expect(sceneDefines()).toEqual({});
+  it('converts only for materials drawn into the HDR target', () => {
+    expect(sceneDefines(false)).toEqual({});
+    expect(sceneDefines(true)).toEqual({ HDR_SCENE: '' });
     // Without the define the helpers pass colours through untouched.
     expect(SCENE_COLOUR_GLSL).toContain('#else\nvec4 additiveOut(vec3 rgb, float alpha) { return vec4(rgb, alpha); }');
   });

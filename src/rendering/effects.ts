@@ -468,11 +468,12 @@ export class EffectsSystem {
   }
 
   /**
-   * With an HDR target (bloom on) layers blend in linear light before tone mapping, so a beam core at 0.95 no longer
+   * The scene is drawn into the HDR target (bloom on): barrier shells convert their colours, and layers blend in linear light before tone mapping, so a beam core at 0.95 no longer
    * burns out the way it does when tone-mapped layers add up on the canvas. Give the cores real HDR brightness in the
    * beam's own hue instead (linear RGB): they read hot again, and their spill of light keeps the beam's colour.
    */
-  setHdrBeams(boost: number): void {
+  setHdrScene(boost: number): void {
+    this.barriers.hdr = true;
     this.beamCoreMatReaper.color.setRGB(1.0 * boost, 0.42 * boost, 0.3 * boost);
     this.beamCoreMatThanix.color.setRGB(0.4 * boost, 0.62 * boost, 1.0 * boost);
   }

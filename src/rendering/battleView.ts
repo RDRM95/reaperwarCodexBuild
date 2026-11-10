@@ -20,7 +20,7 @@ import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRi
 import { DAMAGE_ONSET, REAPER_ARMOUR_MESHES, REAPER_SEAM_MESHES, reaperDamageGlow, type ReaperDamageGlow } from './damageGlow';
 import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
 import { bloomFor, createBloomPipeline, type BloomPipeline } from './bloom';
-import { TONE_EXPOSURE, setHdrScene } from './sceneColour';
+import { TONE_EXPOSURE } from './sceneColour';
 
 /**
  * Binds a BattleSimulation to a Three.js scene. The simulation owns all
@@ -159,11 +159,9 @@ export class BattleView {
     this.farPoints.frustumCulled = false;
     this.farPoints.name = 'far-points';
     this.scene.add(this.farPoints);
-    // Hand-written shaders made from here on hand their colours to the HDR target (or straight to the canvas).
-    setHdrScene(bloom !== null);
     if (bloom) {
       this.bloom = createBloomPipeline(this.renderer, this.scene, this.rig.camera, bloom);
-      this.effects.setHdrBeams(bloom.beamBoost);
+      this.effects.setHdrScene(bloom.beamBoost);
     }
     this.bind(sim);
   }
@@ -177,7 +175,7 @@ export class BattleView {
     this.effects.clear();
     this.nextBeamShieldAt.clear();
     if (this.env) { this.scene.remove(this.env.group); disposeEnvironment(this.env); }
-    this.env = buildEnvironment(sim.config.environment);
+    this.env = buildEnvironment(sim.config.environment, this.bloom !== undefined);
     this.scene.add(this.env.group);
     this.sunLight.position.copy(this.env.sunDirection).multiplyScalar(10_000);
     this.sunLight.target.position.set(0, 0, 0);
@@ -840,7 +838,6 @@ export class BattleView {
 
   dispose(): void {
     this.bloom?.dispose();
-    setHdrScene(false);
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();

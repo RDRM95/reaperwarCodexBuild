@@ -13,10 +13,8 @@ export const TONE_EXPOSURE = 1.05;
 /** Display values above this are held back, so a white star does not become a 9× HDR source for the bloom. */
 export const DISPLAY_CEILING = 0.92;
 
-let hdrScene = false;
-/** Set by the view that owns the renderer, before it builds materials; cleared when that view is disposed. */
-export function setHdrScene(on: boolean): void { hdrScene = on; }
-export function sceneDefines(): Record<string, string> { return hdrScene ? { HDR_SCENE: '' } : {}; }
+/** Shader defines for a material drawn into the HDR target (`hdr`) or straight to the canvas. */
+export function sceneDefines(hdr: boolean): Record<string, string> { return hdr ? { HDR_SCENE: '' } : {}; }
 
 // The curve of Three's ACESFilmicToneMapping: y = (v² + P v − Q) / (R v² + S v + T).
 const P = 0.0245786, Q = 0.000090537, R = 0.983729, S = 0.4329510, T = 0.238081;

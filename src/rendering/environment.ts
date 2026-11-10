@@ -197,12 +197,12 @@ void main(){
   gl_FragColor = additiveOut(scattering, clamp(density, 0.0, 0.75));
 }`;
 
-export function makeAtmosphere(radius: number, color: number, sunDirection = new THREE.Vector3(0.55, 0.35, -0.75), strength = 1): THREE.Mesh {
+export function makeAtmosphere(radius: number, color: number, sunDirection = new THREE.Vector3(0.55, 0.35, -0.75), strength = 1, hdr = false): THREE.Mesh {
   const mat = new THREE.ShaderMaterial({
     uniforms: { color: { value: new THREE.Color(color) }, sunDirection: { value: sunDirection.clone().normalize() }, strength: { value: strength } },
     vertexShader: ATMOSPHERE_VERT,
     fragmentShader: ATMOSPHERE_FRAG,
-    defines: sceneDefines(),
+    defines: sceneDefines(hdr),
     transparent: true,
     side: THREE.BackSide,
     blending: THREE.AdditiveBlending,
@@ -213,7 +213,7 @@ export function makeAtmosphere(radius: number, color: number, sunDirection = new
   return m;
 }
 
-export function makeStarfield(count = 6000, radius = 180_000): THREE.Points {
+export function makeStarfield(count = 6000, radius = 180_000, hdr = false): THREE.Points {
   const rng = new Rng('stars');
   const pos = new Float32Array(count * 3);
   const col = new Float32Array(count * 3);
@@ -249,7 +249,7 @@ export function makeStarfield(count = 6000, radius = 180_000): THREE.Points {
     fragmentShader: `${SCENE_COLOUR_GLSL}
       varying vec3 vColor;
       void main(){ vec2 c = gl_PointCoord - 0.5; float d = length(c); float a = smoothstep(0.5, 0.1, d); gl_FragColor = blendedOut(vColor, a); }`,
-    defines: sceneDefines(),
+    defines: sceneDefines(hdr),
     transparent: true,
     depthWrite: false,
   });
@@ -412,10 +412,11 @@ export interface EnvironmentBuild {
  * scale, placed so it fills the lower sky from a low-orbit battle) — this is
  * a visual choice, not a simulation value.
  */
-export function buildEnvironment(env: Environment): EnvironmentBuild {
+/** `hdr`: the scene is drawn into the HDR target (bloom on), so hand-written shaders convert their colours. */
+export function buildEnvironment(env: Environment, hdr = false): EnvironmentBuild {
   const group = new THREE.Group();
   const sky: THREE.Object3D[] = [];
-  const stars = makeStarfield();
+  const stars = makeStarfield(undefined, undefined, hdr);
   const band = makeGalaxyBand();
   sky.push(stars, band);
   group.add(stars, band);
@@ -434,7 +435,7 @@ export function buildEnvironment(env: Environment): EnvironmentBuild {
     p.rotation.set(0, 1.2, 1.1);
     p.name = 'planet';
     group.add(p);
-    const atm = makeAtmosphere(radius, style.atmosphere, sunDirection);
+    const atm = makeAtmosphere(radius, style.atmosphere, sunDirection, 1, hdr);
     atm.position.copy(position);
     group.add(atm);
     planet = p;
