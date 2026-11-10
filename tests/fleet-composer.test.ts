@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { rotateY, v3 } from '@/core/vec3';
-import { buildCustomBattle } from '@/scenarios';
+import { buildCustomBattle, buildScenario, type CustomBattleInput } from '@/scenarios';
 import { BattleSimulation } from '@/simulation/battle';
 import {
-  CURRENT_FLEET_LAYOUT_VERSION, assignSlots, composeFleetLayout, parseFleetLayoutVersion,
+  CURRENT_FLEET_LAYOUT_VERSION, FLEET_LAYOUT_VERSION_KEY, assignSlots, composeFleetLayout, parseFleetLayoutVersion,
   type FleetLayout, type SlotShip,
 } from '@/simulation/formations';
 import { silhouetteMetrics, type HullSample } from '../scripts/silhouette/metrics';
@@ -183,5 +183,56 @@ describe('order-of-battle fleet composer', () => {
       expect(typeof s.battlegroup).toBe('number');
       expect(s.echelon).toBeDefined();
     }
+    expect(sim.config.worldState?.[FLEET_LAYOUT_VERSION_KEY]).toBe(String(CURRENT_FLEET_LAYOUT_VERSION));
+  });
+});
+
+describe('seeded fleet staging', () => {
+  const setup = (seed: number): CustomBattleInput => ({
+    seed, rulesId: 'canon_me3', environment: 'deep_space', startingDistanceKm: 90, maxDuration: 120,
+    sideA: { faction: 'alliance' as const, name: 'Fifth Fleet', formation: 'line_abreast' as const, counts: { alliance_dreadnought: 2, alliance_cruiser: 6 } },
+    sideB: { faction: 'reaper' as const, name: 'Harvest', formation: 'strike_wedge' as const, counts: { reaper_capital: 2, reaper_destroyer: 6 } },
+    extraA: [
+      { faction: 'turian' as const, name: 'Hierarchy wing', formation: 'line_abreast' as const, counts: { turian_cruiser: 6 } },
+      { faction: 'asari' as const, name: 'Republics wing', formation: 'defensive_screen' as const, counts: { asari_cruiser: 6 } },
+    ],
+    extraB: [{ faction: 'cerberus' as const, name: 'Cerberus raiders', formation: 'strike_wedge' as const, counts: { cerberus_cruiser: 4 } }],
+  });
+
+  it('toes allied fleets in towards the centre line by a seeded 5-20 degrees and keeps the centre fleet axial', () => {
+    const cfg = buildCustomBattle(setup(3));
+    expect(buildCustomBattle(setup(3)).fleets).toEqual(cfg.fleets);
+    const yaw = (h: { x: number; z: number }, forward: number): number => degrees(Math.atan2(h.x, h.z * forward));
+    const a = cfg.fleets.filter(f => f.side === 'A');
+    expect(a[0].heading).toEqual({ x: 0, y: 0, z: 1 });
+    expect(new Set(a.map(f => `${f.heading.x.toFixed(4)},${f.heading.z.toFixed(4)}`)).size).toBe(a.length);
+    for (const f of a.slice(1)) {
+      const angle = yaw(f.heading, 1);
+      expect(Math.abs(angle)).toBeGreaterThanOrEqual(5);
+      expect(Math.abs(angle)).toBeLessThanOrEqual(20);
+      // Towards the centre line: a fleet to the right (positive x) turns left.
+      expect(Math.sign(angle)).toBe(-Math.sign(f.position.x));
+      expect(Math.hypot(f.heading.x, f.heading.z)).toBeCloseTo(1, 9);
+    }
+    const b = cfg.fleets.filter(f => f.side === 'B');
+    expect(b[0].heading).toEqual({ x: 0, y: 0, z: -1 });
+    expect(Math.abs(yaw(b[1].heading, -1))).toBeGreaterThanOrEqual(5);
+    expect(Math.sign(yaw(b[1].heading, -1))).toBe(-Math.sign(b[1].position.x));
+    expect(cfg.worldState?.[FLEET_LAYOUT_VERSION_KEY]).toBe(String(CURRENT_FLEET_LAYOUT_VERSION));
+    // Different seeds toe in by different angles.
+    expect(buildCustomBattle(setup(4)).fleets[2].heading).not.toEqual(cfg.fleets[2].heading);
+  });
+
+  it('keeps authored headings, single fleets and version-1 configurations untouched', () => {
+    const single = buildCustomBattle({ ...setup(3), extraA: undefined, extraB: undefined });
+    expect(single.fleets.map(f => f.heading)).toEqual([{ x: 0, y: 0, z: 1 }, { x: 0, y: 0, z: -1 }]);
+    const earth = buildScenario('battle_of_earth', 'canon_me3', 17);
+    const wave = earth.fleets.find(f => f.id === 'reaper-sol-2')!;
+    expect(wave.heading).toEqual({ x: 0.4, y: 0, z: -1 });
+    const legacy = buildScenario('final_battle_of_earth', 'canon_me3', 17, { [FLEET_LAYOUT_VERSION_KEY]: '1' });
+    expect(legacy.worldState?.[FLEET_LAYOUT_VERSION_KEY]).toBe('1');
+    expect(legacy.fleets.filter(f => f.side === 'A').every(f => f.heading.x === 0 || f.id === 'sword-geth' || f.id === 'sword-quarian')).toBe(true);
+    const current = buildScenario('final_battle_of_earth', 'canon_me3', 17);
+    expect(new Set(current.fleets.filter(f => f.side === 'A').map(f => f.heading.x.toFixed(4))).size).toBeGreaterThanOrEqual(3);
   });
 });
