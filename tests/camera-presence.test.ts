@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
-import { CameraRig, cinematicOrbitLengths, followLengths, type CameraSubject } from '@/rendering/cameras';
+import { CameraRig, cinematicOrbitLengths, followLengths, overShoulderWeight, type CameraSubject } from '@/rendering/cameras';
 
 /**
  * Camera framing of capital-scale hulls. Measured before: the Reaper view sat at (0, 10, −3) over a 20-unit hull
@@ -74,5 +74,57 @@ describe('camera presence for capital-scale hulls', () => {
     expect(widthShare(rig, 20)).toBeGreaterThan(0.24);
     expect(rig.camera.position.y).toBeLessThan(14);
     expect(cinematicOrbitLengths(1.7)).toBe(3.2);
+  });
+
+  // Measured before: the side-on two-shot backed off with the separation, so a 20-unit Reaper spanned 14.4 % of the
+  // frame's width with its target 120 units away, 9.7 % at 200 and 4.9 % at 400.
+  const at = (size: number, z: number, heading = V(0, 0, 1)): CameraSubject => ({ position: V(0, 0, z), velocity: V(0, 0, 0), heading, size });
+  /** Visible share of the frame's width spanned by a hull of `size` centred at z0 on the z axis. */
+  function visibleShare(rig: CameraRig, size: number, z0: number): number {
+    let lo = Infinity, hi = -Infinity;
+    for (const p of [V(0, 0, z0 - size / 2), V(0, 0, z0 + size / 2), V(size * 0.18, 0, z0 + size / 4), V(-size * 0.18, 0, z0 + size / 4)]) {
+      const q = p.clone().project(rig.camera);
+      lo = Math.min(lo, q.x); hi = Math.max(hi, q.x);
+    }
+    return (Math.min(1, hi) - Math.max(-1, lo)) / 2;
+  }
+
+  it('a Reaper and a distant target are framed over the Reaper\'s shoulder, with the target in the picture', () => {
+    for (const separation of [80, 120, 200, 400]) {
+      const rig = new CameraRig(16 / 9);
+      rig.setMode('cinematic');
+      const reaper = at(20, 0), target = at(4.5, separation, V(0, 0, -1));
+      settle(rig, { cinematic: { from: reaper, to: target, age: 0 } });
+      expect(visibleShare(rig, 20, 0), 'separation ' + separation).toBeGreaterThan(0.4);
+      expect(inFrame(rig, target.position)).toBe(true);
+      // Behind the Reaper relative to its target, and looking towards the target.
+      expect(rig.camera.position.z).toBeLessThan(-10);
+      expect(rig.camera.getWorldDirection(V(0, 0, 0)).z).toBeGreaterThan(0.85);
+    }
+  });
+
+  it('the larger ship is the foreground whichever end of the pair it is', () => {
+    const rig = new CameraRig(16 / 9);
+    rig.setMode('cinematic');
+    const cruiser = at(4.5, 0), reaper = at(20, 200, V(0, 0, -1));
+    settle(rig, { cinematic: { from: cruiser, to: reaper, age: 0 } });
+    expect(visibleShare(rig, 20, 200)).toBeGreaterThan(0.4);
+    expect(inFrame(rig, cruiser.position)).toBe(true);
+    expect(rig.camera.position.z).toBeGreaterThan(210);
+  });
+
+  it('small hulls and close pairs keep the side-on two-shot', () => {
+    expect(overShoulderWeight(1.7, 30)).toBe(0);
+    expect(overShoulderWeight(5.2, 400)).toBe(0);
+    expect(overShoulderWeight(20, 30)).toBe(0);
+    expect(overShoulderWeight(20, 70)).toBe(1);
+    for (let d = 20; d < 100; d += 2) expect(overShoulderWeight(20, d + 2)).toBeGreaterThanOrEqual(overShoulderWeight(20, d));
+    // A frigate pair 30 units apart: the camera stands off to the side at the midpoint, as before.
+    const rig = new CameraRig(16 / 9);
+    rig.setMode('cinematic');
+    settle(rig, { cinematic: { from: at(1.7, 0), to: at(1.7, 30, V(0, 0, -1)), age: 0 } });
+    expect(rig.camera.position.z).toBeCloseTo(15 - 30 * 0.12, 3);
+    expect(Math.abs(rig.camera.position.x)).toBeCloseTo(30 * 0.72, 3);
+    expect(rig.camera.position.y).toBeCloseTo(30 * 0.72 * 0.3, 3);
   });
 });
