@@ -2,9 +2,40 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 10 Nov 2026, 21:30 UTC — Reaper visual overhaul
+## State on 10 Nov 2026, 23:50 UTC — performance and Alliance hulls
 
 Read this section first. Everything below it is older.
+
+Two owner requests since the Reaper work below: a faster game at high ship counts ("playable high fps, high ship count, graphical upgrade, a local version to take advantage of my hardware"), and original Alliance hull improvements from a private pack of fleet reference frames. The frames are never committed; every image in `docs/` is a render of this project's own models.
+
+**Merged (Codex build, base `codex/apex-combat-overhaul`, head `8074895`):**
+
+| PR | What | Evidence |
+|---|---|---|
+| #43 (`695e7c7`) | Simulation tick 2.3× cheaper at scale with bit-identical results (state digests of four seeded battles unchanged): flat-array occupied-cell separation grid, per-side target neighbourhoods and an early out in `tryFire`. Mean tick, bundled, cloud CPU: 552 ships 14.0 → 5.8 ms; 1,104: 30.0 → 12.6; 2,208: 64.4 → 26.8 | `docs/apex/PERFORMANCE_SIM_TICK_2026-11-10.md`, `tests/separation-exact.test.ts`, `scripts/scale-benchmark.ts`, `scripts/frame-benchmark.mjs` |
+| #44 (`66b2c47`) | Bloom fix for a defect #37 introduced: sunlit white hull paint reached 8.8 to 10.2 in scene light and whole decks glowed. The bloom high-pass now judges by colour as well as brightness (neutral threshold 16, coloured 1.3) | `docs/apex/REAPER_BLOOM_QA_2026-11-10.md` (correction section), `tests/bloom.test.ts` |
+| #45 (`8074895`) | Alliance dreadnought (arrowhead deck to a spinal blade, citadel aft) and cruiser (forked deck) rebuilt as their own outlines; matt Alliance paint; nodes, lengths and five-mesh structure unchanged | `docs/apex/ALLIANCE_HULLS_QA_2026-11-10.md`, `tests/alliance-hulls.test.ts`, `scripts/alliance-hull-qa.mjs` |
+
+**Open at the time of writing — check their state first, merge each when its checks pass:**
+
+- Codex #46 `perf/effects-batching-20261110`: sparks and debris fragments in instanced batches. Draw calls for the same paused frames 806 → 101 (208 ships) and 1,376 → 174 (988 ships); staged close-up frames match the base build to within 7 of 921,600 pixels. `docs/apex/PERFORMANCE_EFFECT_BATCHING_2026-11-10.md`.
+- Codex #47 `feat/alliance-frigate-20261110`: the frigate as a swept-wing dart with a chisel bow (372 → 736 triangles; nodes unchanged).
+- Sandbox #40 `port/alliance-hulls-20261110`: port of #45. After #47 merges, port the frigate the same way (the sandbox's `alliance.ts` differs from the Codex file only in its Valkyrie block; its tests are `tests/*.test.mjs`).
+- Sandbox #39 (death audio) merged as `ef462d5`.
+
+**Performance: what is measured and what is left.**
+
+- Cloud container, software rendering. None of this is a measurement on the owner's RTX 5090; draw-call counts and digests are exact, milliseconds are this machine's.
+- The 20 Hz simulation tick still runs on the render thread. After #43 it is about 13 ms at 1,100 ships and 27 ms at 2,200 here, so at high refresh rates the frame that carries a tick is long. The structural fix is the simulation in a Web Worker with the view reading snapshots (stage 2 of `docs/EXTREME_SCALE_BRIEF.md`); not started, and the view and HUD read `sim.ships` directly today, so it is a large change.
+- Other main-thread costs measured in the browser: view update 1 to 2.4 ms, overlay 0.2 to 0.6 ms, HUD refresh 1.7 to 7.8 ms at 4 Hz.
+- The sandbox's simulation files differ from the Codex ones (no `weaponTargetField.ts`, older `separation.ts`), so #43 is not a mechanical port there; it needs its own digest check.
+- A local launcher already exists: `PLAY_LOCAL_GPU.cmd` / `scripts/play-local-gpu.ps1` build and serve a production preview on 127.0.0.1:5174. It passes no GPU flags; an Ultra preset for a hardware GPU is not designed yet.
+
+**Alliance hulls: what still falls short.** Flat-shaded paint with no weathering or fine panel texture; no Alliance mark; carrier and fighter untouched; other factions untouched. `compact_siege` and `compact_gunship` are restyled copies of the dreadnought and cruiser and took the new shapes. Nobody but the build agent has looked at the new hulls; the owner's judgement against the references is outstanding.
+
+**Local QA in this cloud container.** The project's `@playwright/test` does not match the installed Chromium, so the project's browser suite runs only in CI; the QA scripts take `REAPERWAR_PLAYWRIGHT=<path to a matching playwright module>`.
+
+## State on 10 Nov 2026, 21:30 UTC — Reaper visual overhaul
 
 **Merged today (Codex build, base `codex/apex-combat-overhaul`, head `fb61d91`):**
 
