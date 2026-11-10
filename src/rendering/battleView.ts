@@ -17,6 +17,7 @@ import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
+import { collectBreakupPieces } from './breakup';
 import { EmitterLightPool, easeEmitterCharge, emitterTarget } from './emitterLights';
 
 /**
@@ -492,18 +493,12 @@ export class BattleView {
   private finishDeath(v: ShipVisual): void {
     const ship = v.ship;
     const pos = v.built.group.position.clone();
-    const pieces: THREE.Object3D[] = [];
-    // Break the model apart: each merged part becomes a debris chunk.
+    let pieces: THREE.Object3D[] = [];
+    // Break the model apart: each merged part, and each limb of a Reaper, becomes a debris chunk.
     if (ship.role !== 'fighter') {
-      for (const child of [...v.built.group.children]) {
-        if ((child as THREE.Mesh).isMesh) {
-          const mesh = child as THREE.Mesh;
-          const original = mesh.material as THREE.Material;
-          mesh.material = original.clone();
-          if (v.tinted && mesh.name === 'hull') original.dispose();
-          pieces.push(mesh);
-        }
-      }
+      // The damage tint's per-ship hull material is replaced by the pieces' own clones.
+      if (v.tinted) for (const mat of v.tintedMats ?? []) mat.dispose();
+      pieces = collectBreakupPieces(v.built.group);
     }
     const vel = new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM * 0.5);
     this.effects.explosion(pos, v.built.lengthUnits, ship.faction === 'reaper', pieces, vel);
