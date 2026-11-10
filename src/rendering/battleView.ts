@@ -8,14 +8,14 @@ import type { BattleEvent, ShipState } from '@/simulation/types';
 import { getFaction } from '@/data/factions';
 import { CameraRig, type CameraSubject, type CinematicFrame } from './cameras';
 import { EffectsSystem } from './effects';
-import { buildEnvironment, type EnvironmentBuild } from './environment';
+import { buildEnvironment, disposeEnvironment, type EnvironmentBuild } from './environment';
 import { KM } from './geometry';
 import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
 import { InstancedFleet } from './instancedFleet';
 import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
-import { primaryGunneryMount,isMainGunShot } from './gunnery';
+import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
 
 /**
@@ -152,7 +152,7 @@ export class BattleView {
     this.instances.dispose();
     this.effects.clear();
     this.nextBeamShieldAt.clear();
-    if (this.env) this.scene.remove(this.env.group);
+    if (this.env) { this.scene.remove(this.env.group); disposeEnvironment(this.env); }
     this.env = buildEnvironment(sim.config.environment);
     this.scene.add(this.env.group);
     this.sunLight.position.copy(this.env.sunDirection).multiplyScalar(10_000);
@@ -400,7 +400,7 @@ export class BattleView {
               this.nextBeamShieldAt.set(t.id, sim.time + 0.25);
             }
           }
-          const intensity = w.def.id === 'oculus_beam' ? 0.19 :
+          const intensity = w.def.id === 'oculus_beam' ? 0.055 :
             kind === 'reaper_beam' ? (ship.role === 'reaper_capital' ? 1.3 : 0.7) : 0.9;
           beams.push({ start, end, kind, intensity });
         }
@@ -629,7 +629,7 @@ export class BattleView {
       }
       subject = this.subjectFor(ship);
     }
-    let gunnery: { position: THREE.Vector3; aim: THREE.Vector3 } | undefined;
+    let gunnery: { position: THREE.Vector3; aim: THREE.Vector3; signalLost?: boolean } | undefined;
     if (this.rig.mode === 'gunnery') {
       const id = this.gunneryLockedShipId ?? this.followId;
       const ship = id ? sim.getShip(id) : undefined;
@@ -638,28 +638,15 @@ export class BattleView {
         // optical orientation until the user explicitly chooses another POV.
         const station = this.rig.camera.position.clone();
         const aim = station.clone().add(new THREE.Vector3(0,0,-1000).applyQuaternion(this.rig.camera.quaternion));
-        gunnery = { position: station, aim };
+        gunnery = { position: station, aim, signalLost: true };
       }
       if (ship && ship.alive && !ship.escaped && !this.gunnerySignalLost) {
         // First-person optics always remain on the selected MAIN emitter.
         const weapon = primaryGunneryMount(ship);
         if (weapon) {
-          // The weapon offset and selected target come from the current sim tick.
-          const pos = weaponWorldOffset(ship, weapon);
-          const interpolation = Math.max(0, Math.min(1, this.alpha));
-          const fwd = new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z).normalize();
-          const station = new THREE.Vector3(
-            (pos.x + (ship.prevPos.x - ship.pos.x) * (1 - interpolation)) * KM,
-            (pos.y + (ship.prevPos.y - ship.pos.y) * (1 - interpolation)) * KM,
-            (pos.z + (ship.prevPos.z - ship.pos.z) * (1 - interpolation)) * KM
-          ).addScaledVector(fwd, Math.max(0.18, ship.radiusKm * KM * 0.2));
-          // Fixed forward-axis sight: the main-gun camera must NEVER swivel
-          // after a target lock or switch. Target positions are independently
-          // projected into the transparent HUD as real telemetry markers.
-          const aim = station.clone().addScaledVector(fwd, 2000);
-          // Optical alignment is observational; the combat solver still
-          // determines if the actual mount can fire or hit the target.
-          gunnery = { position: station, aim };
+          // The fixed barrel shares the hull's interpolated 3D pose. Target
+          // changes affect HUD telemetry only, never the optical direction.
+          gunnery = gunneryFrame(ship, weapon, this.alpha, this.visuals.get(ship.id)?.built);
         }
       }
     }
@@ -771,6 +758,8 @@ export class BattleView {
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();
+    disposeEnvironment(this.env);
+    this.scene.environment?.dispose();
     for (const v of this.visuals.values()) {
       for (const glow of v.glows) glow.material.dispose();
       if (v.tinted && !v.removed) v.built.group.traverse(object => {
