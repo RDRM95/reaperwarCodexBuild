@@ -2,11 +2,11 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 10 Nov 2026, 16:35 UTC — Reaper visual overhaul
+## State on 10 Nov 2026, 20:40 UTC — Reaper visual overhaul
 
 Read this section first. Everything below it is older.
 
-**Merged today (Codex build, base `codex/apex-combat-overhaul`, head `8aa07f3`):**
+**Merged today (Codex build, base `codex/apex-combat-overhaul`, head `ed39556`):**
 
 | PR | What | Evidence |
 |---|---|---|
@@ -19,14 +19,17 @@ Read this section first. Everything below it is older.
 | #35 (`505dcde`) | Damage response: below 60 % hull the seams run from pale blue to hot red-orange and flicker per ship; armour emissive capped so the plates stay graphite | `docs/apex/REAPER_DAMAGE_GLOW_QA_2026-11-10.md` |
 | #36 (`655824d`) | Breakup: a destroyed Reaper no longer vanishes; limbs, mandibles, hood shells and carapace become debris (0 → 23 pieces on a capital), hot seams carry into the wreck | `docs/apex/REAPER_BREAKUP_QA_2026-11-10.md`, `scripts/reaper-death-qa.mjs` |
 | #37 (`8aa07f3`) | Restrained HDR bloom on light sources (high preset, or the Bloom control in Settings): half-float 4× MSAA scene target, `UnrealBloomPass` at strength 0.1, radius 0.15, threshold 1.3, tone mapping once at the end; beam cores HDR in the beam's hue; the atmosphere, starfield and barrier-shell shaders convert their display-referred colours in that path, so Earth's limb measures (8,30,105) without bloom and (9,30,104) with it | `docs/apex/REAPER_BLOOM_QA_2026-11-10.md`, `scripts/bloom-qa.mjs` |
+| #38 (`5891d15`) | Cinematic two-shot: a capital-scale hull whose partner is 3.5 hull lengths away or more is framed over its shoulder, looking down the line of fire (a Reaper's share of the frame's width with its target 120 units away 14.4 % → 46.6 %, at 400 units 4.9 % → 46.6 %); small hulls and close pairs keep the side-on shot | `docs/apex/REAPER_TWO_SHOT_QA_2026-11-10.md`, `scripts/cinematic-two-shot-qa.mjs` |
+| #39 (`ed39556`) | Staged Reaper death: bursts on the hull in the ship's own axes, drifting with it; a capital dies over 5.2 s (was 2.2) and a destroyer over 2.4 s (was 0.9) with bursts marching aft, failing lights, a slow list and curling limbs; hull pieces leave outward from the centre of the break | `docs/apex/REAPER_DEATH_SEQUENCE_QA_2026-11-10.md`, `scripts/reaper-death-qa.mjs` |
 
-The Pages deploy workflow succeeded on `655824d`; check the run for `8aa07f3`. The deployed site itself was not fetched from this environment (the network policy blocks it).
+The Pages deploy workflow succeeded on `8aa07f3`; check the run for `ed39556`. The deployed site itself was not fetched from this environment (the network policy blocks it).
 
-**Merged today (sandbox, base `main`):** #32 (`bfb66b5`, port of Codex #28), #33 (`7ba24bd`, port of #29), #34 (`40f7e32`, port of #30), #35 (`3eb06dc`, port of #31, #32 and #34), #36 (`7b47874`, port of #35 and #36, with `damageGlow.ts` and `breakup.ts` byte-identical). The sandbox now carries every merged Reaper visual change. Pages deployed after each (workflow status; the site was not fetched from this environment).
+**Merged today (sandbox, base `main`):** #32 (`bfb66b5`, port of Codex #28), #33 (`7ba24bd`, port of #29), #34 (`40f7e32`, port of #30), #35 (`3eb06dc`, port of #31, #32 and #34), #36 (`7b47874`, port of #35 and #36), #37 (`8c05b69`, port of #38, `cameras.ts` byte-identical). The sandbox carries every merged Reaper visual change except the bloom (#37 of the Codex build) and, until its port merges, the staged death. Pages deployed after each (workflow status; the site was not fetched from this environment).
 
 **Open at the time of writing — check their state before doing anything else:**
 
-- No pull request of this work is open. The bloom (#37) is not ported to the sandbox: the sandbox already has an optional bloom on its Ultra preset without the shader conversion, so its atmosphere and barrier shells are brighter there than at other presets. Whether that is the intended Ultra look is the owner's call; ask before porting `sceneColour.ts`.
+- Sandbox #38 `feat/reaper-death-sequence-20261110`: port of Codex #39 (`deathSequence.ts` and `breakup.ts` byte-identical, `BattleView.updateDying` verbatim, node test). Open with its checks running when this was written; merge it when they pass.
+- The bloom (#37) is not ported to the sandbox: the sandbox already has an optional bloom on its Ultra preset without the shader conversion, so its atmosphere and barrier shells are brighter there than at other presets. Whether that is the intended Ultra look is the owner's call; ask before porting `sceneColour.ts`.
 - Bloom was not measured on a hardware GPU. On CI's software renderer the browser job took 11.0 and 12.7 minutes with bloom on by default, against 8.9 to 11.7 minutes on the pull requests before it.
 - Sandbox `e2e/gunnery-pose.spec.ts:41` (destroyed gunner station) runs a duel at 8× until the gunner's ship dies. It takes 20.1 s locally before today's Reaper ports and 21.5 s after them; CI's software renderer takes about a second per frame, so it sat at the edge of the default 60 s and timed out inside its closing screenshot on #32, #35 and #36, with every assertion already passed. Sandbox #36 marked it `test.slow()` and then passed; no assertion changed. The durable fix is cheaper hero Reapers at the low preset (the level-of-detail work below).
 
@@ -37,8 +40,8 @@ The Pages deploy workflow succeeded on `655824d`; check the run for `8aa07f3`. T
 **What still falls short, in order of visible gain:**
 
 1. With bloom on, additive sprites (explosions, engine glows, impact flashes) blend in linear light and were not retuned; exposure is unchanged at 1.05; the brightest stars are held 16 levels lower.
-2. Reaper death is a breakup now, but with no directional blast from the killing hit, no secondary explosions along the limbs and no fracture of the carapace itself.
-3. Two-subject cinematic shots frame by the distance between ships; a Reaper fighting a target 20 km away is small in them. The tactical default distance is unchanged.
+2. Reaper death is staged now, but the bursts always start at the hood rather than where the killing hit landed, there is no new sound for it, and the carapace separates along its existing meshes rather than fracturing.
+3. In the over-the-shoulder two-shot a distant target is a small shape at the end of the beam, and the camera does not check for hulls between it and the Reaper. The tactical default distance is unchanged.
 4. No normal maps or micro-detail; silhouettes of the eight-sided limb sleeves are still eight-sided up close; further geometry needs a level-of-detail split first (see the other assistant's branch).
 5. The emitter itself is hidden under the hood from most angles; its light shows, the lens does not.
 6. Hull rotation, acceleration and inertia are the simulation's (P1 work package A, below); the render side adds no hull motion.
