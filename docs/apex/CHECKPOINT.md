@@ -2,6 +2,51 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
+## State on 10 Nov 2026, 16:35 UTC — Reaper visual overhaul
+
+Read this section first. Everything below it is older.
+
+**Merged today (Codex build, base `codex/apex-combat-overhaul`, head `8aa07f3`):**
+
+| PR | What | Evidence |
+|---|---|---|
+| #28 (`a1d2d9c`) | Instanced batches skip a template's hidden stand-in limbs (46–57 % fewer vertices per instanced Reaper); Ascendant renders at 300 units | `docs/apex/qa/INSTANCED_REAPER_LIMBS_2026-11-10.md` |
+| #29 (`2270474`) | Reaper hulls rebuilt: lofted carapace with armour bands, stepped hood, ribbed ventral cavity, faceted plated limbs with knuckles and blade claws, readable graphite palette; lengths, muzzle and engine nodes unchanged | `docs/apex/REAPER_VISUAL_QA_2026-11-10.md`, `docs/apex/qa/reaper-visual-20261110/` |
+| #30 (`ca6f4c5`) | Limb travel and combat stances, slow and limb by limb (claw-tip shift on a capital 14 m → 230 m) | `docs/apex/REAPER_LIMB_STANCES_QA_2026-11-10.md` |
+| #31 (`6dcd03f`) | Camera presence: over-the-carapace Reaper view; follow share of a Reaper 25 % → 45 % of the frame's width, solo cinematic 16 % → 27 %; small hulls unchanged | `docs/apex/REAPER_CAMERA_QA_2026-11-10.md` |
+| #32 (`e5c9b41`) | Local weapon light: a fixed pool of two point lights for charging and firing emitters | `docs/apex/REAPER_EMITTER_LIGHT_QA_2026-11-10.md` |
+| #34 (`496ebe5`) | Curved armour shading (creased normals) on bands, hood shells and limb sleeves; triangle budgets nearly used up | `docs/apex/REAPER_CURVED_ARMOUR_QA_2026-11-10.md` |
+| #35 (`505dcde`) | Damage response: below 60 % hull the seams run from pale blue to hot red-orange and flicker per ship; armour emissive capped so the plates stay graphite | `docs/apex/REAPER_DAMAGE_GLOW_QA_2026-11-10.md` |
+| #36 (`655824d`) | Breakup: a destroyed Reaper no longer vanishes; limbs, mandibles, hood shells and carapace become debris (0 → 23 pieces on a capital), hot seams carry into the wreck | `docs/apex/REAPER_BREAKUP_QA_2026-11-10.md`, `scripts/reaper-death-qa.mjs` |
+| #37 (`8aa07f3`) | Restrained HDR bloom on light sources (high preset, or the Bloom control in Settings): half-float 4× MSAA scene target, `UnrealBloomPass` at strength 0.1, radius 0.15, threshold 1.3, tone mapping once at the end; beam cores HDR in the beam's hue; the atmosphere, starfield and barrier-shell shaders convert their display-referred colours in that path, so Earth's limb measures (8,30,105) without bloom and (9,30,104) with it | `docs/apex/REAPER_BLOOM_QA_2026-11-10.md`, `scripts/bloom-qa.mjs` |
+
+The Pages deploy workflow succeeded on `655824d`; check the run for `8aa07f3`. The deployed site itself was not fetched from this environment (the network policy blocks it).
+
+**Merged today (sandbox, base `main`):** #32 (`bfb66b5`, port of Codex #28), #33 (`7ba24bd`, port of #29), #34 (`40f7e32`, port of #30), #35 (`3eb06dc`, port of #31, #32 and #34), #36 (`7b47874`, port of #35 and #36, with `damageGlow.ts` and `breakup.ts` byte-identical). The sandbox now carries every merged Reaper visual change. Pages deployed after each (workflow status; the site was not fetched from this environment).
+
+**Open at the time of writing — check their state before doing anything else:**
+
+- No pull request of this work is open. The bloom (#37) is not ported to the sandbox: the sandbox already has an optional bloom on its Ultra preset without the shader conversion, so its atmosphere and barrier shells are brighter there than at other presets. Whether that is the intended Ultra look is the owner's call; ask before porting `sceneColour.ts`.
+- Bloom was not measured on a hardware GPU. On CI's software renderer the browser job took 11.0 and 12.7 minutes with bloom on by default, against 8.9 to 11.7 minutes on the pull requests before it.
+- Sandbox `e2e/gunnery-pose.spec.ts:41` (destroyed gunner station) runs a duel at 8× until the gunner's ship dies. It takes 20.1 s locally before today's Reaper ports and 21.5 s after them; CI's software renderer takes about a second per frame, so it sat at the edge of the default 60 s and timed out inside its closing screenshot on #32, #35 and #36, with every assertion already passed. Sandbox #36 marked it `test.slow()` and then passed; no assertion changed. The durable fix is cheaper hero Reapers at the low preset (the level-of-detail work below).
+
+**Concurrent work by the other assistant — do not duplicate:** `fix/reaper-structural-lod-20261110` (no pull request when this was written): level-of-detail policy for Reapers (`shipLod.ts`, `applyShipLod`, `selectReaperRigDetail(level)`), covering the defect that hero Reapers never reduce detail. It was branched before #29 and edits `battleView.ts` near the `animateReaperRig` call and the signature of `selectReaperRigDetail`; merging it after today's work is a small mechanical merge. Their open PRs #26 (draft, reach) and #27 (Oculus damage) are untouched.
+
+**How to reproduce the evidence.** `npm run build && npx vite preview --port 4191 --strictPort`, then `node --import tsx/esm scripts/reaper-visual-qa.mjs <outDir> http://127.0.0.1:4191 after`: six exact-orbit views plus quarter and close views of each Reaper class, close/medium/distant, frigate-beside-capital, a 20-Reaper fleet, deep space and Earth orbit, and triangle counts. All captures so far are cloud Chromium with SwiftShader: shape, materials and framing only; nothing was measured on the RTX 5090, including the cost of the two emitter lights.
+
+**What still falls short, in order of visible gain:**
+
+1. With bloom on, additive sprites (explosions, engine glows, impact flashes) blend in linear light and were not retuned; exposure is unchanged at 1.05; the brightest stars are held 16 levels lower.
+2. Reaper death is a breakup now, but with no directional blast from the killing hit, no secondary explosions along the limbs and no fracture of the carapace itself.
+3. Two-subject cinematic shots frame by the distance between ships; a Reaper fighting a target 20 km away is small in them. The tactical default distance is unchanged.
+4. No normal maps or micro-detail; silhouettes of the eight-sided limb sleeves are still eight-sided up close; further geometry needs a level-of-detail split first (see the other assistant's branch).
+5. The emitter itself is hidden under the hood from most angles; its light shows, the lens does not.
+6. Hull rotation, acceleration and inertia are the simulation's (P1 work package A, below); the render side adds no hull motion.
+7. Static stand-in limbs and instanced Reapers show the neutral pose and no damage glow, and instanced Reapers die without hull pieces.
+8. Issue #16's P0 checklist (Sovereign-class, Harbinger, destroyer) is not ticked: that needs the owner's manual silhouette judgement against private references.
+
+**P1 combat-flow branches (not merged, no pull requests):** `feat/combat-reach-targeting-mass-20261109` (work package A: has PR #26 merged in, RC1+RC5 at `57bf531`, then a work-in-progress commit `0f01204` with the interrupted agent's unfinished RC2 edits and `tests/feasible-targeting.test.ts`) and `feat/fleet-composer-silhouette-20261109` (work package B: composer, headings, altitude bands and staging to `8725e8f`, then work-in-progress `6d30592`). Both are pushed; the work-in-progress commits typecheck but their tests were not run. The agents stopped when the session was interrupted. Do not interfere with #26.
+
 ## State on 10 Nov 2026, 02:50 UTC
 
 - **Reaper visual overhaul** (the owner's HIGH task of 10 Nov). Diagnosis first: rendered lengths already match the catalogue (Sovereign-class 20 units = 2,000 m, Harbinger 24, destroyer 1.6, frigate 1.7; 1 unit = 100 m), so the "too small" reading comes from the model, not the scale chain: six smooth glossy tube limbs with ball joints that dominate the silhouette, a short smooth lathe body with no layered plating, cavities, dorsal ridge or spinal housing (body diameter about 15 % of length where the design says under a tenth), a navy plastic-like palette with pink confetti running lights, and no surface detail to give a sense of size. Slices, each its own branch and pull request:
