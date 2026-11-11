@@ -4,7 +4,7 @@ Lead engineer's running checkpoint for the handover of 9 November 2026 (prioriti
 
 ## SR-2 candidate — 11 Nov 2026, 13:25 UTC
 
-Original Normandy SR-2 silhouette work is on branch `fix/normandy-sr2-profile-20261111` in both repositories. Codex PR #51 now integrates base `80ea61a` (worker and fleet-intent changes); the sandbox candidate integrates `9574e85`. Both checkpoint sections were retained when resolving the Codex documentation conflict; ship geometry was unaffected. The owner explicitly approved publishing the source and original-render evidence, posting the coordination note and merging after CI passes. Release proposals: [Codex #51](https://github.com/RDRM95/reaperwarCodexBuild/pull/51) and [sandbox #47](https://github.com/RDRM95/reaper-war-sandbox/pull/47). Their live merge/deployment outcome is recorded on [issue #16](https://github.com/RDRM95/reaperwarCodexBuild/issues/16).
+Original Normandy SR-2 silhouette work is on branch `fix/normandy-sr2-profile-20261111` in both repositories. Codex PR #51 now integrates base `d78638b` (worker, fleet intents and collision avoidance); the sandbox candidate integrates `9574e85`. Both checkpoint sections were retained when resolving the Codex documentation conflict; ship geometry was unaffected. The owner explicitly approved publishing the source and original-render evidence, posting the coordination note and merging after CI passes. Release proposals: [Codex #51](https://github.com/RDRM95/reaperwarCodexBuild/pull/51) and [sandbox #47](https://github.com/RDRM95/reaper-war-sandbox/pull/47). Their live merge/deployment outcome is recorded on [issue #16](https://github.com/RDRM95/reaperwarCodexBuild/issues/16).
 
 - Rounded fuselage, narrow swept supports, separate stepped nacelles, paired aft fins, deck joints/stripes and a dark flank belt. Measured beam/length 0.7943 → 0.4733; 216 m inferred gameplay length and gun datum retained. Exhaust nodes move with the revised nozzles and are verified by raycasts.
 - Five material batches remain. Full/reduced triangles per hull 496/220 → 1,752/1,460. A staged 1,000-hull render uses 5/2 calls in both repositories. SwiftShader only; no hardware FPS claim.
@@ -14,9 +14,23 @@ Original Normandy SR-2 silhouette work is on branch `fix/normandy-sr2-profile-20
 - Issue #16 remains unapproved. Official product photos corroborate the major shape but are not game orthographics; underside details and exact dimensions remain provisional. No other faction's approval status changed.
 - Shared combat, camera and LOD policy remain outside this candidate. Check live branches and PRs again before publishing or continuing; sandbox's 3D engagement port appeared while this work was in progress.
 
-## State on 11 Nov 2026, 03:40 UTC — fleet intents
+## State on 11 Nov 2026, 04:50 UTC — collision avoidance at every tick
 
 Read this section first. Everything below it is older.
+
+**Merged since the section below:** Codex #55 (`80ea61a`, flank and break-through orders) and its sandbox port #45 (`9574e85`). Both Pages deploys ran green.
+
+**In this change:** hulls no longer touch. Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick, the base had contacts in 10 of 36 seeds of the control battle and allied fleets deployed inside each other in the Final Battle of Earth. Hulls now thrust by what it takes to pass at a safe margin in the time left, and a deploying hull keeps clear of other fleets. Zero contacts in 71 of the 72 battles measured, one 0.45 s graze left under the hardcore rules (`scripts/contact-check.ts`); same winners. Figures and the correction are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 4". **Needs a sandbox port.**
+
+**Next, already built on a local branch (`feat/3d-deployment-depth-20261111`):** large fleets deploy in altitude bands (audit FS6): 14 to 35 km tall where they were 4 to 8 km. It raised the contact rate on the old avoidance, which is how the defect above was found; it goes up once this is merged.
+
+**Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 13 to 20 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
+
+**3D combat still missing, in order:** deployment in depth (built, see above); regroup and screen orders with reform after losses (audit FS5); bearings that react to barrier state and local threat; carriers and fighters.
+
+## State on 11 Nov 2026, 03:40 UTC — fleet intents
+
+Older than the section above.
 
 **Merged since the section below:** Codex #54 (`f3f72ab`, altitude lanes, with the worker browser test made independent of renderer speed) and its sandbox port #44 (`db15536`).
 
