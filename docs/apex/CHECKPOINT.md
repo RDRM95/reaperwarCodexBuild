@@ -2,19 +2,21 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 11 Nov 2026, 04:50 UTC — collision avoidance at every tick
+## State on 11 Nov 2026, 13:40 UTC — deployment in depth
 
 Read this section first. Everything below it is older.
 
-**Merged since the section below:** Codex #55 (`80ea61a`, flank and break-through orders) and its sandbox port #45 (`9574e85`). Both Pages deploys ran green.
+**Merged since the section below:** Codex #56 (`d78638b`) and its sandbox port #46 (`b669f29`): hulls keep clear of each other at every tick. Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick the old base had contacts in 10 of 36 seeds of the control battle, and allied fleets deployed inside each other in the Final Battle of Earth. Now zero in 71 of the 72 battles measured, one 0.45 s graze left under the hardcore rules (`scripts/contact-check.ts`).
 
-**In this change:** hulls no longer touch. Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick, the base had contacts in 10 of 36 seeds of the control battle and allied fleets deployed inside each other in the Final Battle of Earth. Hulls now thrust by what it takes to pass at a safe margin in the time left, and a deploying hull keeps clear of other fleets. Zero contacts in 71 of the 72 battles measured, one 0.45 s graze left under the hardcore rules (`scripts/contact-check.ts`); same winners. Figures and the correction are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 4". **Needs a sandbox port.**
+**In this change (3D combat slice 5):** large fleets deploy in altitude bands (audit FS6). The Fifth Fleet is 11.7 km tall where it was 2.6 km; fleets under the battle-group threshold are unchanged. Figures, stills and the re-pinned layout tests are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 5". **Needs a sandbox port.**
 
-**Next, already built on a local branch (`feat/3d-deployment-depth-20261111`):** large fleets deploy in altitude bands (audit FS6): 14 to 35 km tall where they were 4 to 8 km. It raised the contact rate on the old avoidance, which is how the defect above was found; it goes up once this is merged.
+**Built locally, not yet pushed (`feat/fleet-regroup-order-20261111`):** a Regroup order. Measured defect: in the Final Battle of Earth at 150 s a fleet down to 21 of 49 hulls still flies its 34 km deployment frontage with gaps up to 15 km. The order gives the survivors a fresh compact formation where they stand and resumes the attack once 80 % are on station or after 60 s. Simulation, AI and HUD button are written and typecheck; tests, contact check and twelve-seed batch are still to do.
 
-**Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 13 to 20 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
+**Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 5 to 8 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
 
-**3D combat still missing, in order:** deployment in depth (built, see above); regroup and screen orders with reform after losses (audit FS5); bearings that react to barrier state and local threat; carriers and fighters.
+**3D combat still missing, in order:** regroup (see above) and screen orders (audit FS5); bearings that react to barrier state and local threat; carriers and fighters.
+
+**The owner's directive of 11 Nov arrived cut off** in the middle of section 2 ("Do not simply change visual banking while leaving tactical"). Anything after that never reached the build agent.
 
 ## State on 11 Nov 2026, 03:40 UTC — fleet intents
 
