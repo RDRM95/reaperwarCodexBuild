@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { buildAllianceCruiser, buildAllianceDreadnought, buildAllianceFrigate, buildAllianceOmaha } from '@/rendering/ships/alliance';
+import { buildAllianceCarrier, buildAllianceCruiser, buildAllianceDreadnought, buildAllianceFrigate, buildAllianceOmaha } from '@/rendering/ships/alliance';
 import { PALETTES } from '@/rendering/materials';
 import type { BuiltShip } from '@/rendering/ships/types';
 
@@ -117,6 +117,50 @@ describe('Alliance line hulls', () => {
     };
     expect(top(0.5)).toBeLessThan(0.01);
     expect(top(-0.3)).toBeGreaterThan(0.05);
+  });
+
+  it('the carrier is a twin-prong flight deck with an island, in the armour of the line hulls', () => {
+    const ship = buildAllianceCarrier(), dreadnought = buildAllianceDreadnought();
+    expect(ship.lengthUnits).toBe(9);
+    // Prong tips to exhaust is the stated length; the old model was 9.82 units long for a stated 9.
+    const box = new THREE.Box3().setFromObject(ship.group);
+    expect(box.max.z).toBeCloseTo(4.5, 5);
+    expect(box.min.z).toBeGreaterThan(-4.5);
+    expect(box.min.z).toBeLessThan(-4.45);
+    expect(ship.engineNodes.map(p => p.toArray().map(v => +v.toFixed(5)))).toEqual([[0.603, 0.18, -4.5], [-0.603, 0.18, -4.5], [0, -0.27, -4.5]]);
+    expect(meshes(ship).map(m => m.name).sort()).toEqual(['accent', 'engine', 'hull', 'hullDark', 'windows']);
+    // Measured 1,976 (the box model was 432; the dreadnought is 1,660). A fleet carries one to four carriers.
+    expect(triangles(ship)).toBeLessThanOrEqual(2100);
+    const s = size(ship);
+    expect(s.z / s.x).toBeGreaterThan(3);
+    expect(s.z / s.y).toBeGreaterThan(5);
+    // Full beam past amidships, and the prongs still carry most of it where the dreadnought is down to its blade.
+    expect(halfBeam(ship, -0.2)).toBeCloseTo(0.15, 3);
+    expect(halfBeam(ship, 0.35)).toBeGreaterThan(0.12);
+    expect(halfBeam(ship, 0.35)).toBeGreaterThan(4 * halfBeam(dreadnought, 0.35));
+    // The launch channel: forward of the recovery deck no pale armour comes within 5 % of the length of the centre line.
+    const hull = (ship.group.getObjectByName('hull') as THREE.Mesh<THREE.BufferGeometry>).geometry.getAttribute('position');
+    let innermost = Infinity;
+    for (let i = 0; i < hull.count; i++) if (hull.getZ(i) > 0.23 * 9) innermost = Math.min(innermost, Math.abs(hull.getX(i)));
+    expect(innermost / 9).toBeGreaterThan(0.05);
+    // The highest point is the island's mast: aft of amidships and on the starboard deck edge.
+    let top = -Infinity, topX = 0, topZ = 0;
+    for (const mesh of meshes(ship)) {
+      const position = mesh.geometry.getAttribute('position');
+      for (let i = 0; i < position.count; i++) if (position.getY(i) > top) { top = position.getY(i); topX = position.getX(i); topZ = position.getZ(i); }
+    }
+    expect(topX / 9).toBeGreaterThan(0.1);
+    expect(topZ / 9).toBeLessThan(-0.15);
+    // Hangars are openings with a strip of light in them, not lit slabs: the old model's two slabs were 0.3 units
+    // tall and 2.4 long (30 m by 240 m). No lit element is now taller than 4.5 m.
+    const lit = (ship.group.getObjectByName('windows') as THREE.Mesh<THREE.BufferGeometry>).geometry.getAttribute('position');
+    let tallest = 0;
+    for (let t = 0; t < lit.count; t += 36) {
+      let low = Infinity, high = -Infinity;
+      for (let i = t; i < t + 36; i++) { low = Math.min(low, lit.getY(i)); high = Math.max(high, lit.getY(i)); }
+      tallest = Math.max(tallest, high - low);
+    }
+    expect(tallest).toBeLessThan(0.045);
   });
 
   it('lit ports are many and small, and belong to the detail tier that distant ships drop', () => {
