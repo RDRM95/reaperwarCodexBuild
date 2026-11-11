@@ -21,7 +21,13 @@ jobs:
         env:
           VITE_BASE: /reaperwar/
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
+        # The install also fetches system packages (fonts, mostly) with apt. When the runner cannot reach the
+        # package mirror that failed the whole job before any test ran, for as long as the mirror was down. The
+        # runner image already carries the libraries Chromium needs, so in that case install the browser alone.
+        run: |
+          if npx playwright install --with-deps chromium; then exit 0; fi
+          echo "::warning::System packages could not be fetched; installing the browser without them"
+          npx playwright install chromium
       - name: End-to-end tests (built app, software WebGL)
         run: npm run test:e2e -- --reporter=list,github,html
       - name: Upload Playwright report on failure

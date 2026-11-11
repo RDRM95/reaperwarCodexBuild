@@ -2,31 +2,26 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## SR-2 candidate — 11 Nov 2026, 13:25 UTC
-
-Original Normandy SR-2 silhouette work is on branch `fix/normandy-sr2-profile-20261111` in both repositories. Codex PR #51 now integrates base `d78638b` (worker, fleet intents and collision avoidance); the sandbox candidate integrates `9574e85`. Both checkpoint sections were retained when resolving the Codex documentation conflict; ship geometry was unaffected. The owner explicitly approved publishing the source and original-render evidence, posting the coordination note and merging after CI passes. Release proposals: [Codex #51](https://github.com/RDRM95/reaperwarCodexBuild/pull/51) and [sandbox #47](https://github.com/RDRM95/reaper-war-sandbox/pull/47). Their live merge/deployment outcome is recorded on [issue #16](https://github.com/RDRM95/reaperwarCodexBuild/issues/16).
-
-- Rounded fuselage, narrow swept supports, separate stepped nacelles, paired aft fins, deck joints/stripes and a dark flank belt. Measured beam/length 0.7943 → 0.4733; 216 m inferred gameplay length and gun datum retained. Exhaust nodes move with the revised nozzles and are verified by raycasts.
-- Five material batches remain. Full/reduced triangles per hull 496/220 → 1,752/1,460. A staged 1,000-hull render uses 5/2 calls in both repositories. SwiftShader only; no hardware FPS claim.
-- `docs/apex/NORMANDY_SR2_QA_2026-11-11.md` records source quality, six-view inspection, tests and limits; `docs/apex/qa/normandy-sr2-20261111/` contains only renders of original code. Private references remain outside both repositories.
-- Combined-state verification on `80ea61a`/`9574e85`: 440 Codex and 56 sandbox unit tests pass; TypeScript/build pass. The Codex SR-2 browser test passes. The existing fleet-overlay fixture is pinned to LOW/no bloom after reproducing a software-renderer UI timeout, preserving all assertions.
-- Initial Codex checks: 411 unit tests, typecheck/build, 320- and 1,000-ship browser checks. After the #49 rebase, all 69 unit files / 422 tests pass. Sandbox: 51 Node tests, typecheck/build, four selected browser cases (registry read passed on rerun after an edit-triggered reload). Final model tests pass in both.
-- Issue #16 remains unapproved. Official product photos corroborate the major shape but are not game orthographics; underside details and exact dimensions remain provisional. No other faction's approval status changed.
-- Shared combat, camera and LOD policy remain outside this candidate. Check live branches and PRs again before publishing or continuing; sandbox's 3D engagement port appeared while this work was in progress.
-
-## State on 11 Nov 2026, 04:50 UTC — collision avoidance at every tick
+## State on 11 Nov 2026, 15:40 UTC — regroup and screen orders
 
 Read this section first. Everything below it is older.
 
-**Merged since the section below:** Codex #55 (`80ea61a`, flank and break-through orders) and its sandbox port #45 (`9574e85`). Both Pages deploys ran green.
+**Merged today, Codex build and sandbox both:**
 
-**In this change:** hulls no longer touch. Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick, the base had contacts in 10 of 36 seeds of the control battle and allied fleets deployed inside each other in the Final Battle of Earth. Hulls now thrust by what it takes to pass at a safe margin in the time left, and a deploying hull keeps clear of other fleets. Zero contacts in 71 of the 72 battles measured, one 0.45 s graze left under the hardcore rules (`scripts/contact-check.ts`); same winners. Figures and the correction are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 4". **Needs a sandbox port.**
+- Hulls keep clear of each other at every tick (Codex #56 `d78638b`, sandbox #46). Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick the old base had contacts in 10 of 36 seeds of the control battle. Now none in 71 of 72 battles measured (`scripts/contact-check.ts`).
+- Large fleets deploy in altitude bands, audit FS6 (Codex #57 `322ed29`, sandbox #48): the Fifth Fleet is 11.7 km tall where it was 2.6 km.
+- Hulls do not give way to fighters (Codex #58 `414354a`, sandbox #49): carriers holding formation were pushed 5 to 6 km off station by their own wings and now hold within 0.11 km.
+- CI installs the browser alone when the runner cannot fetch system packages (Codex #59 `d7b5217`, and in the sandbox's two workflows via #49). The runners' package mirror was unreachable from 13:47 UTC for about two hours and every job died before its first test; retrying did not help, the fallback did.
 
-**Next, already built on a local branch (`feat/3d-deployment-depth-20261111`):** large fleets deploy in altitude bands (audit FS6): 14 to 35 km tall where they were 4 to 8 km. It raised the contact rate on the old avoidance, which is how the defect above was found; it goes up once this is merged.
+**In this change (3D combat slice 7):** two more fleet orders, **Regroup** and **Screen**, in the simulation and as HUD buttons (already in the sandbox's simulation through #49). Regroup gives a fleet's survivors a fresh compact formation where they stand and resumes the attack once formed (about 30 s); a winning fleet finishes sooner with fewer losses. Screen holds the capitals in formation and stands the escorts between them and the enemy wherever it is; it works geometrically (16 of 16 escorts between, was 7) but does not protect the capitals, because nothing in the simulation blocks a line of fire. Figures are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 7"; the slices before it are in the same note.
 
-**Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 13 to 20 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
+**The original `reaperwar` repository** runs a different simulation engine. Measured there on 11 Nov (canon_me3, seed 1): deployments are already deep (19 to 92 % as tall as their longest side) and clear; hull contacts at every tick exist (70 pair-ticks in Battle of Earth, 37 in the Final Battle of Earth); firing lines average 12 to 14° off the horizontal. The owner has been asked what to bring across; nothing there has been changed.
 
-**3D combat still missing, in order:** deployment in depth (built, see above); regroup and screen orders with reform after losses (audit FS5); bearings that react to barrier state and local threat; carriers and fighters.
+**Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 5 to 8 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
+
+**3D combat still missing, in order:** line-of-fire masking (without it a screen is only a picture); AI fleets ordering regroup or screen for themselves; bearings that react to barrier state and local threat; fighter squadron manoeuvres and carrier standoff.
+
+**The owner's directive of 11 Nov arrived cut off** in the middle of section 2 ("Do not simply change visual banking while leaving tactical"). Anything after that never reached the build agent.
 
 ## State on 11 Nov 2026, 03:40 UTC — fleet intents
 
@@ -186,3 +181,12 @@ The Pages deploy workflow succeeded on `ed39556`; check the run for `fb61d91`. T
 ## Rules in force
 
 Deterministic simulation (seeded Rng only; no `Math.random`, `Date.now`, `performance.now` or `process.env` under `src/simulation`, `src/data`, `src/scenarios`, `src/timelines`, `src/core`); no fake combat (ranges, arcs, barriers, charge, propulsion and collision decide outcomes; forced scene events are recorded as such); tests are the contract (a pinned value changes only with a measured new value and the reason in the commit); provenance on catalogue values; canon by default, AU labelled; HADES is a penetrator with a nuclear warhead; no ripped assets; GitHub's software WebGL is not hardware proof, so performance claims name what was measured and where.
+
+
+## SR-2 release handover — 11 Nov 2026, 18:46 UTC
+
+[Codex #51](https://github.com/RDRM95/reaperwarCodexBuild/pull/51) contains the original SR-2 geometry and rendered QA evidence. [Sandbox #47](https://github.com/RDRM95/reaper-war-sandbox/pull/47) merged as `20d6a39`; its Pages deployment and live six-view inspector check passed. Private references remain outside both repositories. The owner explicitly approved PR publication, coordination and safe merges. Final release status is recorded on [issue #16](https://github.com/RDRM95/reaperwarCodexBuild/issues/16).
+
+Codex now integrates `3e96c2e` (regroup/screen, carrier station, deployment depth and CI fallback), retaining the upstream checkpoint and overlay-test slow budget. SR-2 geometry is unchanged. On the preceding integrated head `b54418b`, all 448 unit tests, build and four targeted browser tests passed locally; both full CI runs and reference/large-fleet CI passed. The current head must pass CI before merging.
+
+Rounded fuselage, thin swept supports, separate stepped nacelles and paired fins reduce beam/length from 0.7943 to 0.4733. Gameplay length and gun datum stay fixed; exhaust nodes are verified against nozzle faces. Five material batches remain; full/reduced triangles are 1,752/1,460. See `docs/apex/NORMANDY_SR2_QA_2026-11-11.md` and its linked original-render evidence. SwiftShader checks establish draw counts and correctness, not RTX performance. Issue #16 remains unapproved: exact canon dimensions, underside detail and owner likeness review are outstanding.

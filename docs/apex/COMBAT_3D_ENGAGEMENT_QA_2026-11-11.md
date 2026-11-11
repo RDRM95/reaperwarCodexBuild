@@ -273,6 +273,161 @@ held above 0.2 for seeds 42 and 7. That share swings from 0.15 to 0.56 between s
 eight) and seed 7 came out at 0.19 here (mean 0.31), so each seed is now held above 0.12, still well clear of
 the 0.07 and 0.05 measured before attack bearings.
 
+## Slice 5: fleets deploy in depth
+
+**Defect** (audit FS6). A large fleet's battle groups all stood within a few kilometres of one level whatever
+its width, so before the fleets engaged, and from any distance, each one read as a sheet:
+
+| Fleet at deployment | Hulls | Width | Height before | Height after | After, share of width |
+|---|---:|---:|---:|---:|---:|
+| Fifth Fleet, Battle of Earth | 91 | 41.9 km | 2.6 km | 11.7 km | 28 % |
+| Sword Alliance, Final Battle of Earth | 96 | 46.0 km | 3.0 km | 12.1 km | 26 % |
+| Sword Turian | 50 | 34.8 km | 2.3 km | 5.6 km | 16 % |
+| Reaper blockade | 21 | 38.1 km | 3.4 km | 5.1 km | 13 % |
+| Hierarchy, Palaven | 68 | 30.3 km | 2.7 km | 8.6 km | 28 % |
+| Custom Alliance fleet | 176 | 78.7 km | 3.0 km | 14.1 km | 18 % |
+| Custom Alliance fleet | 528 | 132.3 km | 3.2 km | 14.0 km | 11 % |
+
+**Change** (`src/simulation/formations.ts`, battle-group layout only). The centre group of the leading wave
+keeps the fleet's level. The groups either side of it step alternately below and above, further the further out
+they stand, the same on both wings, and a following wave takes the opposite band, so it stands over or under the
+gap ahead of it and not directly astern of another group. The band height is 7 % of the frontage up to a limit
+of 6 km either side. The bands are centred on the fleet's level, so its anchor and its altitude lane (slice 2)
+mean what they did. Organic fleets keep their seeded per-group variation on top; Reaper fleets stay ordered.
+Nothing is random beyond the layout seed, and a fleet under the battle-group threshold (8 capitals, 12 cruisers,
+16 frigates) is laid out exactly as before: the ten-hull Reaper group at Earth keeps its 1.98 km.
+
+**Measured.** Fleet thickness (0 a sheet, 1 a ball) at the first sample of the control battle: 0.045 → 0.135
+(seed 42) and 0.14 (seed 7). Height is not a function of lateral position (correlation −0.03 over a hundred-hull
+line), so it is not one tilted sheet. Every pair of slots is still clear by more than the two radii.
+
+`qa/combat-3d-20261111/deployment-edge-before-after.jpg` and `deployment-front-before-after.jpg`: the 108 v 76
+battle one second in, side-on and head-on, before and after (cloud software rendering; hulls are small and dim at
+this distance, the pictures show where they stand). Height of everything in frame: 4.6 km before, 11.9 km after.
+
+**Balance**, measured against the base with the collision fix and not tuned. Twelve-seed control battle: Reaper
+hull destroyed 0.225 → 0.218, Reapers destroyed 6.58 → 7.42, length 118.1 → 112.5 s, frigate hits 425 → 376.
+In-battle thickness and the abaft share are a little lower in that mean (0.376 → 0.331, 0.269 → 0.230): a fleet
+that starts in depth does not end deeper. Eight seeds each of Battle of Earth, Final Battle of Earth and Defence
+of Palaven under prime_apex and canon_me3: the same side wins every time, lengths move −11 % to +6 %, hull lost
+by at most 3 points.
+
+**Contacts at every tick** (`scripts/contact-check.ts`), with the bands: none in the
+control battle over 36 seeds (prime_apex), 12 seeds (canon_me3) and 8 seeds (reaper_hardcore, where the base has
+one graze), and none in Battle of Earth, Final Battle of Earth and Defence of Palaven over four seeds each.
+
+Without the collision fix the bands raised contacts (16 of 36 seeds against 10), which is how that defect was
+found; the two belong together.
+
+**Tests.** `tests/deployment-depth.test.ts` (5): scenario fleets stand at least an eighth as tall as wide with
+every hull clear; the height grows with the fleet and stops at the limit; the bands are centred on the fleet
+level; hulls stand on both sides of it on each wing; same seed, same deployment, and small fleets unchanged.
+Assertions that a deployment is flat are re-pinned to the measured banded one, each with the old and new figure
+in a comment: `tests/battlegroup-layout.test.ts` (a mixed fleet 50.4 km wide is 11.9 km tall, was under 7; a
+hundred-hull line 13.1 km, was under 8; a column stays 6.0 km), `tests/formations.test.ts` (13.1 km, 15.1 km
+dispersed, column under 8 as before) and `tests/engagement-3d.test.ts` (the first sample is no longer a sheet).
+
+**Limits.** The simulation has no line-of-fire masking, so standing over the gap ahead changes what a fleet
+looks like and how it closes, not who can shoot. Small fleets and columns are as flat as they were. The
+composer branch `feat/fleet-composer-silhouette-20261109` is untouched and still stale.
+
+## Slice 6: carriers hold their station
+
+**Defect**, found while testing the screen order: two carriers of a fleet that was holding its line grazed each
+other. They should not have been moving at all. The clearance field treated a fighter like any other hull, so a
+carrier gave way to its own wing as it formed up and came back to land. Holding formation in the Battle of Earth
+(prime_apex, 150 s, wings in the air):
+
+| Seed | Carrier, furthest off station before | After | Dreadnought, before | After |
+|---|---:|---:|---:|---:|
+| 1 | 5.11 km | 0.01 km | 0.79 km | 0.14 km |
+| 2 | 5.43 km | 0.11 km | 0.20 km | 0.20 km |
+| 3 | 6.01 km | 0.00 km | 0.18 km | 0.16 km |
+
+This predates the collision work above (the same figures on `80ea61a`).
+
+**Change** (`src/simulation/separation.ts` and the reference it is compared with bit for bit): a hull ignores
+fighters in the clearance field. The fighter is the one that can turn; fighters still avoid hulls and each other.
+
+**Measured.** No fighter ends up deep inside a hull that is not its own carrier, before or after (sampled twice a
+second, 48 fighters aloft). Hull contacts at every tick: none in Battle of Earth, Final Battle of Earth and Defence
+of Palaven over four seeds each, nor in the control battle over twelve. Battles without fighters are bit for bit
+what they were (the twelve-seed control battle and Palaven reproduce exactly). With carriers, eight seeds each:
+the same side wins every time; Battle of Earth runs 157.0 → 172.2 s under prime_apex (Alliance hull lost 0.272 →
+0.296) and 167.6 → 194.0 s under canon_me3 (Reaper hull lost 0.065 → 0.059); Final Battle of Earth 150.5 → 153.3 s
+and 298.7 → 308.5 s. Measured, not tuned.
+
+**Tests.** `tests/carrier-station.test.ts` (3): on each of three seeds a carrier holding formation stays within
+0.5 km of its station with its wing flying, and no fighter is inside a foreign hull. They fail on the base.
+
+## Slice 7: regroup and screen orders
+
+Two more fleet orders from the owner's list, in the simulation and as HUD buttons (both clicked in a real browser:
+order issued, button lit, toast shown, no page errors).
+
+### Regroup
+
+**Defect** (audit FS5). A fleet that has taken losses went on flying the formation it deployed in, with a hole
+wherever a hull had died. Final Battle of Earth, canon_me3, seed 1, 150 s in: the Alliance fleet is down to 21 of
+49 hulls and their stations still span 482 km² of the formation's plan, 23.0 km² a hull where it deployed at
+19.1. No order closed it up; Hold formation sent hulls back to the same holed layout.
+
+**Change.** `regroup` gives the survivors a fresh formation of their own number, centred where they now are and
+facing the enemy; each hull takes the nearest free station of its own class, nearest pairs first, so nobody
+crosses the formation. Hulls fly to station with their guns on their targets. Once 80 % are on station, or after
+60 s at most, the fleet resumes the attack by itself.
+
+**Measured.** Same battle: stations span 482 → 98 km², mean gap between neighbouring stations 2.60 → 1.58 km,
+worst 5.1 → 2.3 km. Battle of Earth, ordered at 80 s: no hull on its new station at the order, 80 % formed and
+attacking again 29.5 s later, 114 shots fired meanwhile, no two hulls touching at any tick. Matching hulls to the
+nearest station matters: measured before it was added, the fleet had not formed when the 60 s limit ran out.
+
+What it is worth, eight seeds each, the Alliance ordered to regroup once:
+
+| Battle | Battle length | Alliance hull lost | Reaper hull lost |
+|---|---:|---:|---:|
+| Battle of Earth, prime_apex (Alliance wins), at 60 s | 172.2 → 143.7 s | 0.296 → 0.260 | all |
+| Battle of Earth, canon_me3 (Alliance loses), at 60 s | 194.0 → 176.9 s | all | 0.059 → 0.071 |
+| Final Battle of Earth, canon_me3, at 120 s | 308.5 → 288.4 s | all | 0.481 → 0.486 |
+
+A winning fleet finishes sooner with fewer losses; a losing one does slightly more damage and dies sooner.
+
+### Screen
+
+**Defect.** A formation's escort stations face the way the fleet deployed. Control battle (weapons do no damage;
+4 dreadnoughts, 8 cruisers, 8 frigates hold formation; 11 Reapers flank), at 160 s: 7 of the 16 escorts stand
+between the capitals and the enemy, the escorts are 60° off that line on average, and the nearest Reaper is
+6.4 km from a dreadnought.
+
+**Change.** Under `screen` the capitals hold their formation, which does not turn, and the escorts stand in a
+dish between the capitals' centre and the enemy's, 0.4 of the way out (at most 0.6 of the fleet's range). The
+dish swings as the enemy's bearing changes. An escort keeps its formation offset across and up the dish, so
+stations that were clear of each other stay clear; ranks of the formation become layers of the dish. Escorts
+favour whatever is shooting at their capitals.
+
+**Measured.** Same battle: 16 of 16 escorts between, 22° off the line, nearest Reaper 9.0 km from a dreadnought,
+every hull firing, capitals within 1.5 km of their stations. At Earth the closest pair of screen stations is
+0.32 km clear of the two hulls' radii, and no two hulls touch at any tick over 200 s on four seeds.
+
+What it is worth with weapons live (54 Alliance hulls defending against 11 Reapers, eight seeds, 240 s):
+
+| Enemy | Order | Reaper hull destroyed | Dreadnought hull lost | Fleet hull lost |
+|---|---|---:|---:|---:|
+| Flanks | Screen | 0.694 | 0.974 | 0.881 |
+| Flanks | Hold formation | 0.643 | 0.958 | 0.870 |
+| Attacks head-on | Screen | 0.845 | 0.913 | 0.790 |
+| Attacks head-on | Hold formation | 0.915 | 0.885 | 0.725 |
+
+**The screen does not protect the capitals here.** Nothing in the simulation blocks a line of fire, so a Reaper
+shoots past the escorts at whichever hull it chose. Against a flanker the screening fleet does a little more
+damage for the same losses; head-on it does worse than holding formation. It is a posture a commander can
+order and see; it will only be worth ordering once hulls mask fire. Nothing was tuned to make it look better.
+
+**Tests.** `tests/regroup.test.ts` (4) and `tests/screen.test.ts` (3) hold the figures above, the contact checks
+and determinism.
+
+**Not done:** AI fleets ordering either for themselves; line-of-fire masking.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the
@@ -302,6 +457,7 @@ numbers; `scripts/engagement-3d-qa.mjs` for the pictures.
   class-specific reaction to barrier state, no faction-specific behaviour beyond the Reaper classes' own swings.
 - Reapers keep their rule of never backing off: a Reaper whose swung station lies farther from the enemy than
   it is holds where it is instead.
-- Deployment is still a flat formation; the depth appears as fleets close.
+- Deployment was a flat formation when this was written; see "Slice 5" for fleets over the battle-group
+  threshold.
 - Fighters and carriers are unchanged.
 - Balance was measured, not tuned.
