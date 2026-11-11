@@ -1,5 +1,7 @@
 # Normandy SR-2: narrower plan and curved fuselage
 
+PRs: [Codex #51](https://github.com/RDRM95/reaperwarCodexBuild/pull/51), [sandbox #47](https://github.com/RDRM95/reaper-war-sandbox/pull/47). Release results are recorded on [issue #16](https://github.com/RDRM95/reaperwarCodexBuild/issues/16).
+
 Status: original procedural reconstruction, **not visually approved** under issue #16. This is a focused ALL-002 improvement, not completion of the 43-class programme.
 
 ## Reference evidence and scope
@@ -59,3 +61,9 @@ CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium node scripts/normandy-sr2-qa.mjs /tmp
 The script serves an empty document through Playwright interception, then loads only project modules from the dev server. It does not alter the application's HTML or load any private reference assets.
 
 Simulation, collision data, saves, class IDs, weapons and common materials are unchanged. Shared combat and LOD work is outside this patch. CI, mergeability and deployment must be verified on the eventual PR head before merging. Issue #16 remains unchecked.
+
+## Integration verification, 13:25 UTC
+
+Integrated the subsequent merged worker and fleet-intent work without changing the SR-2 geometry. Base commits: Codex `80ea61a`, sandbox `9574e85`. Only the Codex checkpoint required conflict resolution; both independent sections were retained. On this combined state, TypeScript/build passes in both repositories; Codex has 440 passing tests in 73 files and sandbox has 56 passing Node tests. The 1,000-ship SR-2 browser case passes on the combined Codex build.
+
+The original PR run passed 38 of 39 browser cases, including SR-2, but the pre-existing fleet-overlay UI fixture exceeded 120 seconds. The same head's push CI passed. The timeout was reproduced locally on the combined state while clicking Watch battle after selecting 96 hero hulls with HIGH+bloom. The overlay fixture now explicitly selects LOW and disables bloom before launch; all annotation, projection-budget, selection, persistence, simulation-state and WebGL assertions are retained. The previously timed-out case passes in 26.4 seconds; all three overlay cases pass. This changes only the test fixture. Model/full-detail inspection uses its separate QA harness.

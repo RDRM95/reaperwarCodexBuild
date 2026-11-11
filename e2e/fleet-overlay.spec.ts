@@ -6,6 +6,10 @@ async function launchLarge(page: Page) {
   await expect(page.locator('[data-menu="quick-battle"]')).toBeVisible();
   await page.evaluate(() => {
     const app = (window as unknown as { reaperwar: App }).reaperwar;
+    // This fixture measures annotation work and UI interaction. Selecting 96
+    // hero hulls with HIGH+bloom can exhaust its time budget in software WebGL.
+    // Keep real rendering and every overlay assertion, at the low preset.
+    app.prefs.graphics.quality = 'low'; app.prefs.graphics.bloom = false;
     app.prefs.showOverlay = true; app.prefs.overlayIndependent = true; app.prefs.overlayDetail = 'auto';
     app.startBattle({ id: 'fleet-labels', name: 'Fleet annotation review', scenarioId: 'custom', seed: 62,
       rules: app.getTimeline('prime_apex'), environment: 'deep_space', maxDuration: 180, perspectiveSide: 'A', objective: 'Inspect bounded fleet annotations.',
