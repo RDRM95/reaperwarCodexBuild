@@ -1,4 +1,4 @@
-import type { BattleSimulation } from './battle';
+import type { BattleLike } from './battleLike';
 
 /**
  * Reaper strategic assessment, derived from actual simulation state. The
@@ -19,7 +19,7 @@ export interface ReaperAssessment {
   lines: string[];
 }
 
-export function assessReapers(sim: BattleSimulation): ReaperAssessment {
+export function assessReapers(sim: BattleLike): ReaperAssessment {
   const reaperShips = sim.ships.filter((s) => s.faction === 'reaper');
   const organicShips = sim.ships.filter((s) => s.faction !== 'reaper' && s.role !== 'fighter');
   const reaperStart = reaperShips.reduce((a, s) => a + s.pointValue, 0);

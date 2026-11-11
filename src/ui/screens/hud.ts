@@ -27,6 +27,8 @@ export interface Hud {
 const ORDERS: { id: OrderType; label: string }[] = [
   { id: 'attack', label: 'Attack' },
   { id: 'advance', label: 'Advance' },
+  { id: 'flank', label: 'Flank' },
+  { id: 'breakthrough', label: 'Break through' },
   { id: 'hold_formation', label: 'Hold formation' },
   { id: 'defend_position', label: 'Defend position' },
   { id: 'withdraw', label: 'Withdraw' },

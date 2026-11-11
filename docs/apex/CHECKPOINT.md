@@ -2,9 +2,9 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## Local SR-2 candidate — 11 Nov 2026
+## SR-2 candidate — 11 Nov 2026, 13:25 UTC
 
-Original Normandy SR-2 silhouette work is on local branch `fix/normandy-sr2-profile-20261111` in both repositories. Codex was rebased without conflicts onto `d7f1313` after the 3D engagement PR #49 merged; sandbox starts at `86d0598`. The owner explicitly approved publishing the source and original-render evidence, posting the coordination note and merging after CI passes. Publication is proceeding; the release result will be recorded on issue #16 after exact-head CI and deployment verification.
+Original Normandy SR-2 silhouette work is on branch `fix/normandy-sr2-profile-20261111` in both repositories. Codex PR #51 now integrates base `80ea61a` (worker and fleet-intent changes); the sandbox candidate integrates `9574e85`. Both checkpoint sections were retained when resolving the Codex documentation conflict; ship geometry was unaffected. The owner explicitly approved publishing the source and original-render evidence, posting the coordination note and merging after CI passes. Publication is proceeding; the release result will be recorded on issue #16 after exact-head CI and deployment verification.
 
 - Rounded fuselage, narrow swept supports, separate stepped nacelles, paired aft fins, deck joints/stripes and a dark flank belt. Measured beam/length 0.7943 → 0.4733; 216 m inferred gameplay length and gun datum retained. Exhaust nodes move with the revised nozzles and are verified by raycasts.
 - Five material batches remain. Full/reduced triangles per hull 496/220 → 1,752/1,460. A staged 1,000-hull render uses 5/2 calls in both repositories. SwiftShader only; no hardware FPS claim.
@@ -13,9 +13,64 @@ Original Normandy SR-2 silhouette work is on local branch `fix/normandy-sr2-prof
 - Issue #16 remains unapproved. Official product photos corroborate the major shape but are not game orthographics; underside details and exact dimensions remain provisional. No other faction's approval status changed.
 - Shared combat, camera and LOD policy remain outside this candidate. Check live branches and PRs again before publishing or continuing; sandbox's 3D engagement port appeared while this work was in progress.
 
-## State on 11 Nov 2026, 00:00 UTC — performance and Alliance hulls
+## State on 11 Nov 2026, 03:40 UTC — fleet intents
 
 Read this section first. Everything below it is older.
+
+**Merged since the section below:** Codex #54 (`f3f72ab`, altitude lanes, with the worker browser test made independent of renderer speed) and its sandbox port #44 (`db15536`).
+
+**In this change (3D combat slice 3):** two fleet orders, **Flank** and **Break through**, in the simulation and as HUD buttons. Flank takes a fleet 65° round the enemy at its own range; break through drives it past the enemy to the far side, hulls keeping their places in the line until it is through. Measurements, the hull-track plot and what the orders are worth over twelve seeds are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 3". The sandbox port needs the simulation and type changes only: its interface is its own.
+
+**The owner's directive of 11 Nov arrived cut off** in the middle of section 2 ("Do not simply change visual banking while leaving tactical"). Anything after that sentence, and any later sections, never reached the build agent.
+
+**3D combat still missing, in order:** screen and regroup orders and AI fleets choosing an intent; flat deployment within a fleet (audit FS6; the composer branch is stale); Reaper capitals penetrating a formation; bearings that react to barrier state and local threat; carriers and fighters.
+
+## State on 11 Nov 2026, 02:45 UTC — worker merged, altitude lanes
+
+Everything below this line is older than the section above.
+
+**Merged since the section below was written:** #53 (`640c8fa`), the worker simulation behind the Simulation thread setting. The line below that calls it open is out of date; everything else there stands.
+
+**In this change:** altitude lanes for allied fleets (3D combat slice 2). The first fleet of a side keeps its level; each further fleet takes a lane above or below while it closes. Final Battle of Earth: the Alliance fleets' anchors spread 1.1 → 10.9 km in altitude and each fleet's hulls stack at -0.4, +4.0, -3.7, +2.7 and -1.5 km. Single-fleet sides are unaffected. Details, measurements and the cost (about five points less enemy hull destroyed inside 150 s in two of three scenarios) are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 2". `scripts/scenario-batch.ts` measures a built-in scenario over several seeds. The sandbox port follows the same way as #43.
+
+**3D combat still missing, in order:** flat deployment within a fleet (audit FS6; the composer branch is stale), fleet intent orders (flank, breakthrough, screen, regroup), Reaper capitals penetrating a formation, bearings that react to barrier state and local threat, carriers and fighters.
+
+## State on 11 Nov 2026, 02:05 UTC — simulation in a Web Worker
+
+Everything below this line is older than the section above.
+
+**Merged (Codex build, head `aff712f`):** #50 (twelve-seed outcomes for the 3D slice, the unshipped attack-run finding) and #52 (snapshot codec and mirror: `src/simulation/snapshot.ts`, `tests/snapshot-mirror.test.ts`; the mirror equals the simulation field for field over three seeded battles). Sandbox #43 (port of the 3D attack bearings) merged as `76f300e`.
+
+**Open at the time of writing:** the second worker slice, `feat/sim-worker-host-20261111`: the worker (`simWorkerCore.ts`, `simWorker.ts`), `RemoteBattle` (the mirror plus commands and queries), the `BattleLike` type the view and HUD now take, and the **Simulation thread** setting (default main; "Worker (experimental)" applies to the next battle). Measured in the real app with a real worker, cloud software rendering: the drawing thread's simulation cost per tick 9.63 → 0.74 ms at 1,104 ships and 21.25 → 1.19 ms at 2,208. Everything about it, including the known differences in worker mode and what remains, is in `docs/apex/SIM_WORKER_DESIGN_2026-11-11.md`. Merge when its checks pass.
+
+**What only the owner can do next:** turn the setting on with a large fleet on the RTX 5090 machine and say whether it is smoother; watch the 3D attack bearings in motion and judge them; judge the Alliance hulls against the private references.
+
+**Not ported to the sandbox:** the simulation tick speed-up (#43), the bloom fix (#44) and the worker (#52 and its second slice).
+
+## State on 11 Nov 2026, 01:40 UTC — true 3D fleet combat, slice 1
+
+Everything below this line is older than the section above.
+
+The owner's directive of 11 Nov ("COMPLETE DEVELOPMENT CONTINUATION") makes true three-dimensional fleet combat the top priority, and the owner also approved the Web Worker move for the simulation.
+
+**Merged (Codex build, head `d7f1313`):** #49 — engaging hulls take attack bearings round their targets (`src/simulation/manoeuvre.ts`, applied last in `movementGoal`): dreadnoughts 5–14° as a stepped firing line, cruisers 22–55°, frigates 45–105°, Reaper capitals 3–12°, destroyers 20–60°; the middle of a line goes over or under, the wings round their own side; the swing opens as the hull closes. Measured: fleet thickness 0.03–0.10 → 0.12–0.38, firing-line elevation 4–11° → 10–34°, no hull overlaps, same winners; over twelve seeds Reaper hull destroyed 0.215 → 0.216. Evidence and the full tables: `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`; tests `tests/engagement-3d.test.ts`; probes `scripts/engagement-geometry.ts` (one seed) and `scripts/engagement-batch.ts` (twelve; use this to judge balance, single seeds diverge by a fifth).
+
+**Open at the time of writing:** sandbox #43 `port/3d-engagement-bearings-20261111` (port of #49; the same seeded battle measures identically there). Merge when its checks pass.
+
+**Tried and not shipped:** frigate attack runs (pass, extend, re-attack). Over twelve seeds they cost frigates about a quarter of their hits and the Alliance about a fifth of its kills, because a frigate flying away is not firing and nothing in the simulation rewards an attack from astern. Details in the QA note. Do not retry without one of those two things changing.
+
+**3D combat: what is still missing from the directive, in the order I would take it:**
+
+1. Deployment is still a flat sheet (audit FS6); depth appears only as fleets close. The unmerged `feat/fleet-composer-silhouette-20261109` branch has altitude bands in its composer; it is behind the base by 30 commits and its last commit is an interrupted agent's work with tests not run.
+2. Fleet intent orders (flank, breakthrough, screen, regroup) do not exist; orders still translate one rigid anchor.
+3. Reaper capitals do not penetrate a formation; Reapers hold where they are when a swung station lies farther from the enemy than they are.
+4. No reaction to barrier state or local threat in the choice of bearing; bearings are fixed for the battle.
+5. Carriers and fighters are unchanged.
+6. The unmerged `feat/combat-reach-targeting-mass-20261109` branch and the owner's draft #26 edit `movementGoal`; they need #49 merged in when they resume.
+
+**Web Worker simulation (approved, not started in code).** An inventory of what the render and UI side reads from the simulation is done: about 30 ship fields and 11 weapon fields every frame, `projectiles`, `missiles`, `flashes`, fleet orders, the event stream, three read-only queries and four commands; no UI code writes simulation state. What makes it hard: `ShipVisual` and HUD rows hold live `ShipState` objects for the whole battle, simulation helpers (`shipEngagementRange`, `engagementBand`, `inWeaponArc`, `assessReapers`) run on the main thread against live ships, and 14 QA scripts call `app.battle.sim.step()` synchronously. Intended shape: the main thread keeps its own never-stepped `BattleSimulation` built from the same config as a mirror, the worker steps the real one and sends each tick's dynamic fields packed in typed arrays plus new events and spawned ships, the mirror is updated in place so every existing reader keeps working, commands are posted to the worker, and the inline mode stays for tests, scripts and headless runs. First slice: the snapshot codec with a test that a mirrored battle equals an inline one field for field.
+
+## State on 11 Nov 2026, 00:00 UTC — performance and Alliance hulls
 
 Two owner requests since the Reaper work below: a faster game at high ship counts ("playable high fps, high ship count, graphical upgrade, a local version to take advantage of my hardware"), and original Alliance hull improvements from a private pack of fleet reference frames. The frames are never committed; every image in `docs/` is a render of this project's own models.
 
