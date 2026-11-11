@@ -26,6 +26,8 @@ export class SeparationField {
   private responseTime: Float64Array;
   private reaper: Uint8Array;
   private fighter: Uint8Array;
+  /** 0 for the first side seen, 1 for the other. */
+  private side: Uint8Array;
   /** Unit vector to the hull's enemy target; `aimed` is 0 where there is none. */
   private aimed: Uint8Array;
   private aimX: Float64Array; private aimY: Float64Array; private aimZ: Float64Array;
@@ -40,7 +42,7 @@ export class SeparationField {
     this.posX = new Float64Array(n); this.posY = new Float64Array(n); this.posZ = new Float64Array(n);
     this.velX = new Float64Array(n); this.velY = new Float64Array(n); this.velZ = new Float64Array(n);
     this.radius = new Float64Array(n); this.thrust = new Float64Array(n); this.responseTime = new Float64Array(n);
-    this.reaper = new Uint8Array(n); this.fighter = new Uint8Array(n); this.aimed = new Uint8Array(n);
+    this.reaper = new Uint8Array(n); this.fighter = new Uint8Array(n); this.side = new Uint8Array(n); this.aimed = new Uint8Array(n);
     this.aimX = new Float64Array(n); this.aimY = new Float64Array(n); this.aimZ = new Float64Array(n);
     const byId = new Map<string, ShipState>();
     for (const ship of ships) byId.set(ship.id, ship);
@@ -63,6 +65,7 @@ export class SeparationField {
       this.responseTime[i] = Math.sqrt(speedSq) / acceleration;
       this.reaper[i] = ship.faction === 'reaper' ? 1 : 0;
       this.fighter[i] = ship.role === 'fighter' ? 1 : 0;
+      this.side[i] = ship.side === 'A' ? 0 : 1;
       if (target?.alive && !target.escaped && target.side !== ship.side) {
         // normalize(sub(target.pos, ship.pos)), operation for operation.
         const dx = target.pos.x - ship.pos.x, dy = target.pos.y - ship.pos.y, dz = target.pos.z - ship.pos.z;
@@ -102,8 +105,11 @@ export class SeparationField {
   /** Stable passing side. Collinear arrival paths have no geometric normal;
    * choosing opposite vertical lanes breaks that symmetry without random noise. */
   private passingDirection(a: number, b: number, dx: number, dy: number, dz: number): void {
-    const aimed = this.reaper[a] === 1 && this.aimed[a] === 1;
+    // A Reaper never backs away from the enemy to clear another hull, it sidesteps. The one exception: while it is
+    // advancing, it may brake for a hull of its own side (it slows, it does not reverse).
     const tx = this.aimX[a], ty = this.aimY[a], tz = this.aimZ[a];
+    const aimed = this.reaper[a] === 1 && this.aimed[a] === 1
+      && !(this.side[a] === this.side[b] && this.velX[a] * tx + this.velY[a] * ty + this.velZ[a] * tz > 0);
     if (aimed) {
       const along = dx * tx + dy * ty + dz * tz;
       if (along < 0) { dx = dx - tx * along; dy = dy - ty * along; dz = dz - tz * along; }
@@ -135,6 +141,12 @@ export class SeparationField {
     const radius = Math.ceil(reach / this.cellSize);
     const cx = Math.floor(sx / this.cellSize), cy = Math.floor(sy / this.cellSize), cz = Math.floor(sz / this.cellSize);
     let fx = 0, fy = 0, fz = 0;
+    // For a Reaper advancing on its target, what its own side asks of it is kept apart and may brake it; the rest
+    // is made lateral below.
+    let ownX = 0, ownY = 0, ownZ = 0;
+    const split = this.reaper[self] === 1 && this.aimed[self] === 1
+      && svx * this.aimX[self] + svy * this.aimY[self] + svz * this.aimZ[self] > 0;
+    const selfSide = this.side[self];
     const reachSq = reach * reach;
     let checks = 0;
     // Cells are visited in ascending x, y, z and members in ship order, so forces add up in a fixed order. Only
@@ -192,7 +204,8 @@ export class SeparationField {
             if (pressure >= anticipation) this.passingDirection(self, other, dx, dy, dz);
             else this.passingDirection(self, other, qx, qy, qz);
             const push = selfThrust * Math.min(20, strength);
-            fx = fx + this.px * push; fy = fy + this.py * push; fz = fz + this.pz * push;
+            if (split && this.side[other] === selfSide) { ownX = ownX + this.px * push; ownY = ownY + this.py * push; ownZ = ownZ + this.pz * push; }
+            else { fx = fx + this.px * push; fy = fy + this.py * push; fz = fz + this.pz * push; }
           }
         }
       }
@@ -205,6 +218,6 @@ export class SeparationField {
       const away = fx * tx + fy * ty + fz * tz;
       if (away < 0) { fx = fx - tx * away; fy = fy - ty * away; fz = fz - tz * away; }
     }
-    return v3(fx, fy, fz);
+    return split ? v3(fx + ownX, fy + ownY, fz + ownZ) : v3(fx, fy, fz);
   }
 }
