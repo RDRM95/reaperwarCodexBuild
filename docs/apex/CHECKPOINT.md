@@ -2,9 +2,23 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 11 Nov 2026, 03:40 UTC — fleet intents
+## State on 11 Nov 2026, 04:50 UTC — collision avoidance at every tick
 
 Read this section first. Everything below it is older.
+
+**Merged since the section below:** Codex #55 (`80ea61a`, flank and break-through orders) and its sandbox port #45 (`9574e85`). Both Pages deploys ran green.
+
+**In this change:** hulls no longer touch. Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick, the base had contacts in 10 of 36 seeds of the control battle and allied fleets deployed inside each other in the Final Battle of Earth. Hulls now thrust by what it takes to pass at a safe margin in the time left, and a deploying hull keeps clear of other fleets. Zero contacts in 71 of the 72 battles measured, one 0.45 s graze left under the hardcore rules (`scripts/contact-check.ts`); same winners. Figures and the correction are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 4". **Needs a sandbox port.**
+
+**Next, already built on a local branch (`feat/3d-deployment-depth-20261111`):** large fleets deploy in altitude bands (audit FS6): 14 to 35 km tall where they were 4 to 8 km. It raised the contact rate on the old avoidance, which is how the defect above was found; it goes up once this is merged.
+
+**Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 13 to 20 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
+
+**3D combat still missing, in order:** deployment in depth (built, see above); regroup and screen orders with reform after losses (audit FS5); bearings that react to barrier state and local threat; carriers and fighters.
+
+## State on 11 Nov 2026, 03:40 UTC — fleet intents
+
+Older than the section above.
 
 **Merged since the section below:** Codex #54 (`f3f72ab`, altitude lanes, with the worker browser test made independent of renderer speed) and its sandbox port #44 (`db15536`).
 
