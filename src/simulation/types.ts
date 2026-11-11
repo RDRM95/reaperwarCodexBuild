@@ -34,6 +34,8 @@ export type OrderType =
   | 'flank'
   /** Attack through the enemy: the fleet drives past it to the far side. */
   | 'breakthrough'
+  /** Capitals hold their formation; escorts stand between them and the enemy, wherever the enemy is. */
+  | 'screen'
   /** Close up: the survivors take a fresh, compact formation where the fleet now is, then resume the attack. */
   | 'regroup'
   | 'retreat';
