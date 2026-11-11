@@ -259,6 +259,25 @@ function manoeuvreGoal(fleet: FleetState, enemy: Vec3 | undefined, desiredRange:
   return goal;
 }
 
+/**
+ * Regrouping. The simulation gives a fleet ordered to regroup a fresh, compact formation where it stands; its hulls
+ * fly to their new stations, guns on their targets. Once most of them are there, or after a minute at most, the
+ * fleet goes back to the attack on its own, so a commander closes the line up with one order and not two.
+ */
+export const REGROUP_FORMED_SHARE = 0.8;
+export const REGROUP_TIME_LIMIT = 60;
+const regroupStarted = new WeakMap<FleetState, number>();
+
+/** Whether a hull is on its formation station, near enough for the fleet to count as formed. */
+const onStation = (fleet: FleetState, ship: ShipState): boolean =>
+  distance(ship.pos, slotToWorld(fleet.anchor, fleet.heading, ship.slot)) <= Math.max(0.6, ship.lengthKm * 1.5);
+
+/** The share of a regrouping fleet's hulls that are on station (for the HUD and tests). */
+export function regroupProgress(fleet: FleetState, ships: readonly ShipState[]): number {
+  const mine = ships.filter(s => s.fleetId === fleet.spec.id && isCombatant(s) && s.role !== 'fighter' && !s.withdrawing);
+  return mine.length ? mine.filter(s => onStation(fleet, s)).length / mine.length : 1;
+}
+
 /** Stable fleet fire control and formation translation. Tactical observations
  * are shared; individual movement never rebuilds a global enemy centroid. */
 export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): void {
@@ -302,6 +321,15 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   const desiredRange = range * preferredFactor;
   const slowest = Math.min(...core.map(s => s.maxSpeed * (0.25 + 0.75 * s.subsystems.engines)));
   let desired: Vec3 | undefined;
+  if (fleet.orders.order === 'regroup') {
+    const started = regroupStarted.get(fleet) ?? ctx.time;
+    regroupStarted.set(fleet, started);
+    if (regroupProgress(fleet, mine) >= REGROUP_FORMED_SHARE || ctx.time - started >= REGROUP_TIME_LIMIT) {
+      fleet.orders = { ...fleet.orders, order: 'attack' };
+      fleet.engagementMode = 'approach';
+      regroupStarted.delete(fleet);
+    }
+  } else if (regroupStarted.has(fleet)) regroupStarted.delete(fleet);
   const o = fleet.orders;
   const noRetreat = fleet.spec.faction === 'reaper';
   const withdrawing = !noRetreat && (o.order === 'withdraw' || o.order === 'retreat');

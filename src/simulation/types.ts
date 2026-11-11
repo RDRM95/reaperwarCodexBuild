@@ -34,6 +34,8 @@ export type OrderType =
   | 'flank'
   /** Attack through the enemy: the fleet drives past it to the far side. */
   | 'breakthrough'
+  /** Close up: the survivors take a fresh, compact formation where the fleet now is, then resume the attack. */
+  | 'regroup'
   | 'retreat';
 
 export type TargetPriority = 'default' | 'reaper_destroyers' | 'reaper_capitals' | 'capitals' | 'escorts' | 'fighters';
