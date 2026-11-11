@@ -24,7 +24,15 @@ describe('fleet formations', () => {
       const extent = (axis: 'x' | 'y' | 'z') => Math.max(...positions.map(p => p[axis])) - Math.min(...positions.map(p => p[axis]));
       // A hundred two-kilometre hulls should span a broad front or a deliberate
       // column, rather than being packed into the old 40 x 40 x 40 km box.
-      expect(extent('y')).toBeLessThan(8);
+      // It stands in altitude bands and is not a sheet: 13.1 units tall (15.1 dispersed), where a flat deployment
+      // measured under 8, and still several times wider than it is tall. The bands are a share of the frontage, so
+      // a column, which has almost none, stays 6.0 tall.
+      if (formation === 'capital_column') expect(extent('y')).toBeLessThan(8);
+      else {
+        expect(extent('y')).toBeGreaterThan(10);
+        expect(extent('y')).toBeLessThan(16);
+      }
+      expect(Math.max(extent('x'), extent('z'))).toBeGreaterThan(extent('y') * 4);
       expect(extent('x')).toBeLessThan(formation === 'dispersed' ? 170 : 120);
       expect(extent('z')).toBeLessThan(formation === 'capital_column' ? 150 : formation === 'dispersed' ? 100 : 60);
       let minimumDistance = Infinity;

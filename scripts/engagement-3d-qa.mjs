@@ -44,12 +44,16 @@ for (const seconds of (process.env.TIMES ?? '10,45,70').split(',').map(Number)) 
     const centre = (side) => { const m = ships.filter((s) => s.side === side); return m.reduce((a, s) => ({ x: a.x + s.pos.x / m.length, y: a.y + s.pos.y / m.length, z: a.z + s.pos.z / m.length }), { x: 0, y: 0, z: 0 }); };
     const a = centre('A'), e = centre('B');
     const ys = ships.map((s) => s.pos.y);
-    window.__geo = { mid: { x: (a.x + e.x) / 2, y: 0, z: (a.z + e.z) / 2 }, axis: { x: e.x - a.x, z: e.z - a.z } };
+    window.__geo = { mid: { x: (a.x + e.x) / 2, y: 0, z: (a.z + e.z) / 2 }, axis: { x: e.x - a.x, z: e.z - a.z }, first: a };
     return { ships: ships.length, heightKm: +(Math.max(...ys) - Math.min(...ys)).toFixed(2) };
   }, ticks);
-  for (const [view, across, up, along] of [['edge', 46, 0, 0], ['above', 30, 34, -18]]) {
-    await page.evaluate(({ across, up, along }) => {
-      const b = window.reaperwar.battle, KM = 10, { mid, axis } = window.__geo, cam = b.view.rig.camera;
+  // VIEWS=front adds the first fleet seen from the enemy's side: its width across the picture and its height up it.
+  const views = [['edge', 46, 0, 0], ['above', 30, 34, -18], ['front', 0, 0, Number(process.env.FRONT_DISTANCE ?? 40)]].filter(([name]) => (process.env.VIEWS ?? 'edge,above').split(',').includes(name));
+  for (const [view, across, up, along] of views) {
+    await page.evaluate(({ across, up, along, view }) => {
+      const b = window.reaperwar.battle, KM = 10, geo = window.__geo, { axis } = geo, cam = b.view.rig.camera;
+      // The front view looks back at the first fleet from `along` ahead of its centre, toward the enemy.
+      const mid = view === 'front' ? { x: geo.first.x, y: geo.first.y, z: geo.first.z } : geo.mid;
       const n = Math.hypot(axis.x, axis.z) || 1, fx = axis.x / n, fz = axis.z / n;
       // `across` is to the side of the line between the fleets; `along` is back toward the first fleet.
       const place = () => { cam.position.set((mid.x + fz * across + fx * along) * KM, (mid.y + up) * KM, (mid.z - fx * across + fz * along) * KM);
@@ -58,7 +62,7 @@ for (const seconds of (process.env.TIMES ?? '10,45,70').split(',').map(Number)) 
       const fill = b.view.fillLight, dir = cam.getWorldDirection(cam.position.clone());
       fill.position.copy(cam.position); fill.target.position.copy(cam.position).add(dir.multiplyScalar(100)); fill.target.updateMatrixWorld(true);
       b.view.render();
-    }, { across, up, along });
+    }, { across, up, along, view });
     await page.screenshot({ path: `${outDir}/${label}-t${seconds}-${view}.jpg`, type: 'jpeg', quality: 88 });
   }
 }
