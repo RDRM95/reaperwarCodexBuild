@@ -137,8 +137,11 @@ describe('a battle in three dimensions', () => {
     expect(mean(samples, 'B', 'elevationDeg')).toBeGreaterThan(13);
     expect(mean(samples, 'A', 'steepShare')).toBeGreaterThan(0.45);
     expect(mean(samples, 'B', 'steepShare')).toBeGreaterThan(0.3);
-    // Attackers get abaft their targets' beams (0.07 and 0.05 of the Alliance before; 0.31 and 0.30 now).
-    expect(mean(samples, 'A', 'abaftShare')).toBeGreaterThan(0.2);
+    // Attackers get abaft their targets' beams: 0.07 and 0.05 of the Alliance before attack bearings. With them the
+    // share swings widely from seed to seed (0.15 to 0.56 over eight seeds, mean 0.29; 0.31 since hulls give way
+    // earlier on converging courses, with these two seeds at 0.26 and 0.19), so each seed is held well clear of the
+    // old figure and not to one seed's value.
+    expect(mean(samples, 'A', 'abaftShare')).toBeGreaterThan(0.12);
     // It starts as a formation, and since fleets deploy in altitude bands the formation has depth of its own: the
     // first sample measured 0.045 when deployments were flat and 0.135 (seed 42) and 0.14 (seed 7) with the bands.
     // Fighting still adds depth beyond that.

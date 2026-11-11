@@ -201,6 +201,78 @@ starts from the fleet's present bearing; the same seed and order give the same p
 **Not done:** screen and regroup orders; AI fleets choosing to flank or break through; Reaper capitals
 penetrating a formation on their own initiative.
 
+## Slice 4: collision avoidance at every tick
+
+**Correction to the sections above.** Every "no overlapping hulls" and "0 overlap samples" figure in slices 1 to 3
+came from looking at the battle every 5 s (10 s in the scenario batch). Two hulls passing at a kilometre a second
+are in contact for about a second, so that sampling missed nearly all of it. Counted at every tick, hulls did touch,
+before these slices and after them. A contact here is a tick on which two live hulls are closer than the sum of
+their radii; a radius is half a hull's length, so it is the first moment two hulls could meet end to end, not
+proof that plating crossed.
+
+**Defect, measured on the base (`80ea61a`)** with the new `scripts/contact-check.ts`:
+
+| Battle | Seeds | Seeds with a contact | Pair-ticks in contact | Deepest, share of the two radii |
+|---|---:|---:|---:|---:|
+| 54 v 38 control battle, prime_apex, 150 s | 36 | 10 | 178 | 16.7 % |
+| 54 v 38 control battle, canon_me3, 150 s | 12 | 4 | 40 | 12.1 % |
+| 54 v 38 control battle, reaper_hardcore, 150 s | 8 | 2 | 83 | 39.2 % |
+| Battle of Earth, 200 s | 4 | 1 | 34 | 4.9 % |
+| Defence of Palaven, 200 s | 4 | 1 | 34 | 11.6 % |
+| Final Battle of Earth, 200 s | 4 | 4 | 479 (6 at deployment) | 39.2 % |
+
+Two causes:
+
+1. **Hulls gave way too late.** The clearance thrust had a warning term that only grew strong a second or two
+   before a pass. Traced on four contacts: hulls closing at 0.8 to 1.6 km/s, on 0.14 to 0.4 km/s² of thrust, were
+   asked for nothing three seconds out, for less than their full thrust until about a second before, and only
+   then for all of it. Pairs were of
+   every kind: a destroyer into a cruiser, a cruiser into its own dreadnought, a destroyer into its own capital.
+2. **Allied fleets deployed inside each other.** A fleet's own slots are cleared against each other, but fleets
+   are laid out one at a time. The Final Battle of Earth stations five fleets abreast and seed 1 deployed three
+   pairs of hulls from different fleets overlapping, the worst a quarian heavy 35 % into an Alliance dreadnought.
+
+**Change.**
+
+- `src/simulation/separation.ts`: beside the old warning, a hull now thrusts by what it takes to open the
+  predicted miss to a safe margin (1.25 clearances) in the time left, `2 × shortfall / time²`, as a multiple of
+  its own thrust. That is small while the pass is seconds away and rises as it nears, so the agile hull of a pair
+  starts to give way while it still can. It is still a thrust request within class limits: no position is ever
+  corrected. The reference implementation the field is tested against bit for bit carries the same term.
+- `src/simulation/battle.ts`: a deploying hull that would stand within 1.1 radius-sums of a hull from another
+  fleet takes the nearest free station beside its slot (largest hulls keep their slots first). This also covers a
+  reinforcement arriving where a fight is going on. A fleet deploying clear of others is untouched.
+
+**Measured after**, same battles and seeds:
+
+| Battle | Seeds | Seeds with a contact | Pair-ticks in contact | Deepest |
+|---|---:|---:|---:|---:|
+| 54 v 38 control battle, prime_apex | 36 | 0 | 0 | |
+| 54 v 38 control battle, canon_me3 | 12 | 0 | 0 | |
+| 54 v 38 control battle, reaper_hardcore | 8 | 1 | 9 | 2.6 % |
+| Battle of Earth | 4 | 0 | 0 | |
+| Defence of Palaven | 4 | 0 | 0 | |
+| Final Battle of Earth | 4 | 0 | 0 | |
+
+Rannoch and the Battle of the Citadel, two seeds each, also have none. **One graze remains:** under the hardcore
+rules, seed 7, a Reaper destroyer and an Alliance cruiser are within their radii for 9 ticks (0.45 s) by 2.6 %.
+So this is a large reduction measured on these battles and seeds, not a guarantee: avoidance is thrust-limited,
+and a hull with dead engines cannot dodge at all.
+
+**Balance**, measured and not tuned. Twelve-seed control battle: Reaper hull destroyed 0.216 → 0.225, Reapers
+destroyed 7.42 → 6.58, battle length 111.9 → 118.1 s, frigate hits 414 → 425. Eight seeds each of Battle of Earth,
+Final Battle of Earth and Defence of Palaven under prime_apex and canon_me3: the same side wins every time;
+lengths move by −6 % to +12 % and the share of hull lost by at most 4 points. Tick cost is unchanged within
+run-to-run spread (3.7 to 4.1 ms at 368 hulls against 3.8 ms).
+
+**Tests.** `tests/collision-avoidance.test.ts` (8): four seeds that had contacts fight 150 s with none at any
+tick; the Final Battle deploys clear on three seeds and runs 100 s with no contact; a second wave arriving on top
+of the first takes clear stations; the result is the same for the same seed. Seven of the eight fail on the base.
+One pin moved: in `tests/engagement-3d.test.ts` the share of Alliance attackers abaft their target's beam was
+held above 0.2 for seeds 42 and 7. That share swings from 0.15 to 0.56 between seeds on the base (mean 0.29 over
+eight) and seed 7 came out at 0.19 here (mean 0.31), so each seed is now held above 0.12, still well clear of
+the 0.07 and 0.05 measured before attack bearings.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the

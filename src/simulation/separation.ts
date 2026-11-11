@@ -1,6 +1,9 @@
 import { v3, type Vec3 } from '@/core/vec3';
 import type { ShipState } from './types';
 
+/** Hulls on converging courses aim to pass this many clearances apart. */
+export const SAFE_PASSING_MARGIN = 1.25;
+
 /** One immutable broad-phase snapshot per tick. Local clearance is a thrust
  * request, never a positional correction or an extra source of velocity.
  *
@@ -169,8 +172,16 @@ export class SeparationField {
             const qx = dx + rx * closestAt, qy = dy + ry * closestAt, qz = dz + rz * closestAt;
             const closestDistance = Math.sqrt(qx * qx + qy * qy + qz * qz);
             const pressure = dist < influence ? (influence - dist) / Math.max(clearance * 0.08, dist - clearance) : 0;
-            const anticipation = closestAt > 0 && closestDistance < clearance
+            const warning = closestAt > 0 && closestDistance < clearance
               ? (1 - closestDistance / clearance) * (horizon - closestAt) / Math.max(0.5, horizon * 0.3) : 0;
+            // The thrust that opens the predicted miss to a safe margin in the time left, as a multiple of this
+            // hull's own thrust. Small while the pass is seconds away and rising as it nears, so a hull starts to
+            // give way while it still can instead of when the other is alongside.
+            const safe = clearance * SAFE_PASSING_MARGIN;
+            const timeLeft = Math.max(0.5, closestAt);
+            const evasion = closestAt > 0 && closestDistance < safe
+              ? 2 * (safe - closestDistance) / (timeLeft * timeLeft * selfThrust) : 0;
+            const anticipation = Math.max(warning, evasion);
             const strength = Math.max(pressure, anticipation);
             if (strength <= 0) continue;
             if (pressure >= anticipation) this.passingDirection(self, other, dx, dy, dz);
