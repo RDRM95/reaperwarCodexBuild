@@ -13,7 +13,7 @@ const { chromium } = await import(process.env.REAPERWAR_PLAYWRIGHT ?? '@playwrig
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 const [outDir, base, label, root] = process.argv.slice(2);
-const { buildCustomBattle } = await import(path.join(root, 'src/scenarios/index.ts'));
+const { buildCustomBattle, buildScenario } = await import(path.join(root, 'src/scenarios/index.ts'));
 mkdirSync(outDir, { recursive: true });
 const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } }); page.setDefaultTimeout(900000);
@@ -22,7 +22,8 @@ await page.goto(base);
 await page.waitForSelector('[data-menu="quick-battle"]');
 await page.waitForFunction(() => getComputedStyle(document.getElementById('boot')).opacity === '0');
 const scale = Number(process.env.SCALE ?? 2);
-const config = buildCustomBattle({ seed: Number(process.env.SEED ?? 42), rulesId: 'prime_apex', environment: 'deep_space', startingDistanceKm: 60, maxDuration: 600,
+// SCENARIO=<id> captures a built-in scenario (several fleets a side) instead of the two-fleet custom battle.
+const config = process.env.SCENARIO ? buildScenario(process.env.SCENARIO, 'prime_apex', Number(process.env.SEED ?? 42)) : buildCustomBattle({ seed: Number(process.env.SEED ?? 42), rulesId: 'prime_apex', environment: 'deep_space', startingDistanceKm: 60, maxDuration: 600,
   sideA: { faction: 'alliance', name: 'Alliance line', formation: 'line_abreast', counts: { alliance_dreadnought: 6 * scale, alliance_cruiser: 18 * scale, alliance_frigate: 30 * scale } },
   sideB: { faction: 'reaper', name: 'Reaper pressure', formation: 'strike_wedge', counts: { reaper_capital: 8 * scale, reaper_destroyer: 30 * scale } } });
 await page.evaluate((cfg) => {
@@ -33,7 +34,7 @@ await page.evaluate((cfg) => {
 }, config);
 const out = {};
 let simulated = 0;
-for (const seconds of [10, 45, 70]) {
+for (const seconds of (process.env.TIMES ?? '10,45,70').split(',').map(Number)) {
   const ticks = Math.round((seconds - simulated) / 0.05); simulated = seconds;
   out[seconds] = await page.evaluate((ticks) => {
     const b = window.reaperwar.battle;

@@ -109,6 +109,43 @@ away from its target is not firing at it, and nothing in the simulation yet rewa
 runs to capital-scale targets left about five runs a battle, too few to see. It is not merged; it needs either
 frigate weapons that bear while the hull extends, or a real advantage to an attack from astern, first.
 
+## Slice 2: altitude lanes for allied fleets
+
+**Defect.** Attack bearings give a battle depth once hulls engage, but allied fleets still closed on one level.
+In the Final Battle of Earth the five Alliance fleets' anchors stayed within 1.1 km of each other in altitude
+(mean of six seeds, `scripts/scenario-batch.ts`), and at 70 s the mean altitude of each fleet's hulls was between
+-0.3 and +1.0 km.
+
+**Change.** `altitudeLane` in `src/simulation/ai.ts`: the first fleet of a side keeps the level it deployed at;
+each further fleet of that side, including one that arrives later, takes the next lane (+1, -1, +0.5, -0.5, ...)
+and climbs or descends to it while it closes, by 0.45 of its engagement range per unit of lane. The second side
+mirrors the first, so opposing fleets of the same rank do not climb together. Lanes are absolute levels, not
+offsets from the enemy, so two fleets cannot chase each other upward. A side with one fleet is unaffected, which
+is why no existing test changed.
+
+**Measured** (six seeds each, `prime_apex`, up to 150 s; before → after):
+
+| Scenario | Altitude spread of side A's fleet anchors | Side B's | Side A hull lost | Side B hull lost | Battle length | Hulls that fired | Overlap samples |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Final Battle of Earth (5 v 2 fleets) | 1.1 → 10.9 km | 0.2 → 1.8 km | 0.152 → 0.159 | 0.955 → 0.905 | 128.2 → 127.4 s | 0.871 → 0.867 | 2 → 0 |
+| Battle of the Citadel (3 v 2) | 2.0 → 7.7 km | 0.7 → 6.6 km | 0.203 → 0.193 | 1.000 → 0.937 | 113.4 → 125.0 s | 0.603 → 0.604 | 0 → 0 |
+| Cerberus Intervention (2 v 1) | 0.2 → 6.2 km | 0 → 0 | 0.117 → 0.135 | 1.000 → 1.000 | 77.8 → 80.4 s | 0.854 → 0.856 | 0 → 0 |
+
+In the Final Battle of Earth (seed 1, 70 s) the mean altitude of each Alliance fleet's hulls goes from -0.2,
++0.6, +1.0, -0.3 and +0.3 km to -0.4, +4.0, -3.7, +2.7 and -1.5 km: the fleets are stacked.
+`qa/combat-3d-20261111/altitude-lanes-side-elevation.png` plots those positions (a plot of the simulation's own
+ship positions, not a render): one dot a hull, one colour a fleet, arrows marking fleet anchors.
+
+The same side wins. Fleets that climb take a little longer to bring their guns to bear: in two of the three
+scenarios the enemy loses about five points less of its hull inside 150 s. This was measured, not tuned.
+
+In the 3D view the difference is hard to see from one still: hulls already spread ±10 km once engaged, and the
+lanes shift whole fleets inside that. Nobody has watched it in motion.
+
+`tests/altitude-lanes.test.ts` (4 tests): lane assignment and mirroring; a single-fleet side does not climb; the
+Final Battle of Earth's Alliance fleets end more than 10 km apart in altitude, each on its own side of its
+starting level, at least 1.5 km from the next, with no overlapping hulls; the same seed gives the same anchors.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the
