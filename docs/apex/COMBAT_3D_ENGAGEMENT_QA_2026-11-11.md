@@ -273,6 +273,64 @@ held above 0.2 for seeds 42 and 7. That share swings from 0.15 to 0.56 between s
 eight) and seed 7 came out at 0.19 here (mean 0.31), so each seed is now held above 0.12, still well clear of
 the 0.07 and 0.05 measured before attack bearings.
 
+## Slice 5: fleets deploy in depth
+
+**Defect** (audit FS6). A large fleet's battle groups all stood within a few kilometres of one level whatever
+its width, so before the fleets engaged, and from any distance, each one read as a sheet:
+
+| Fleet at deployment | Hulls | Width | Height before | Height after | After, share of width |
+|---|---:|---:|---:|---:|---:|
+| Fifth Fleet, Battle of Earth | 91 | 41.9 km | 2.6 km | 11.7 km | 28 % |
+| Sword Alliance, Final Battle of Earth | 96 | 46.0 km | 3.0 km | 12.1 km | 26 % |
+| Sword Turian | 50 | 34.8 km | 2.3 km | 5.6 km | 16 % |
+| Reaper blockade | 21 | 38.1 km | 3.4 km | 5.1 km | 13 % |
+| Hierarchy, Palaven | 68 | 30.3 km | 2.7 km | 8.6 km | 28 % |
+| Custom Alliance fleet | 176 | 78.7 km | 3.0 km | 14.1 km | 18 % |
+| Custom Alliance fleet | 528 | 132.3 km | 3.2 km | 14.0 km | 11 % |
+
+**Change** (`src/simulation/formations.ts`, battle-group layout only). The centre group of the leading wave
+keeps the fleet's level. The groups either side of it step alternately below and above, further the further out
+they stand, the same on both wings, and a following wave takes the opposite band, so it stands over or under the
+gap ahead of it and not directly astern of another group. The band height is 7 % of the frontage up to a limit
+of 6 km either side. The bands are centred on the fleet's level, so its anchor and its altitude lane (slice 2)
+mean what they did. Organic fleets keep their seeded per-group variation on top; Reaper fleets stay ordered.
+Nothing is random beyond the layout seed, and a fleet under the battle-group threshold (8 capitals, 12 cruisers,
+16 frigates) is laid out exactly as before: the ten-hull Reaper group at Earth keeps its 1.98 km.
+
+**Measured.** Fleet thickness (0 a sheet, 1 a ball) at the first sample of the control battle: 0.045 → 0.135
+(seed 42) and 0.14 (seed 7). Height is not a function of lateral position (correlation −0.03 over a hundred-hull
+line), so it is not one tilted sheet. Every pair of slots is still clear by more than the two radii.
+
+`qa/combat-3d-20261111/deployment-edge-before-after.jpg` and `deployment-front-before-after.jpg`: the 108 v 76
+battle one second in, side-on and head-on, before and after (cloud software rendering; hulls are small and dim at
+this distance, the pictures show where they stand). Height of everything in frame: 4.6 km before, 11.9 km after.
+
+**Balance**, measured against the base with the collision fix and not tuned. Twelve-seed control battle: Reaper
+hull destroyed 0.225 → 0.218, Reapers destroyed 6.58 → 7.42, length 118.1 → 112.5 s, frigate hits 425 → 376.
+In-battle thickness and the abaft share are a little lower in that mean (0.376 → 0.331, 0.269 → 0.230): a fleet
+that starts in depth does not end deeper. Eight seeds each of Battle of Earth, Final Battle of Earth and Defence
+of Palaven under prime_apex and canon_me3: the same side wins every time, lengths move −11 % to +6 %, hull lost
+by at most 3 points.
+
+**Contacts at every tick** (`scripts/contact-check.ts`), with the bands: none in the
+control battle over 36 seeds (prime_apex), 12 seeds (canon_me3) and 8 seeds (reaper_hardcore, where the base has
+one graze), and none in Battle of Earth, Final Battle of Earth and Defence of Palaven over four seeds each.
+
+Without the collision fix the bands raised contacts (16 of 36 seeds against 10), which is how that defect was
+found; the two belong together.
+
+**Tests.** `tests/deployment-depth.test.ts` (5): scenario fleets stand at least an eighth as tall as wide with
+every hull clear; the height grows with the fleet and stops at the limit; the bands are centred on the fleet
+level; hulls stand on both sides of it on each wing; same seed, same deployment, and small fleets unchanged.
+Assertions that a deployment is flat are re-pinned to the measured banded one, each with the old and new figure
+in a comment: `tests/battlegroup-layout.test.ts` (a mixed fleet 50.4 km wide is 11.9 km tall, was under 7; a
+hundred-hull line 13.1 km, was under 8; a column stays 6.0 km), `tests/formations.test.ts` (13.1 km, 15.1 km
+dispersed, column under 8 as before) and `tests/engagement-3d.test.ts` (the first sample is no longer a sheet).
+
+**Limits.** The simulation has no line-of-fire masking, so standing over the gap ahead changes what a fleet
+looks like and how it closes, not who can shoot. Small fleets and columns are as flat as they were. The
+composer branch `feat/fleet-composer-silhouette-20261109` is untouched and still stale.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the
@@ -302,6 +360,7 @@ numbers; `scripts/engagement-3d-qa.mjs` for the pictures.
   class-specific reaction to barrier state, no faction-specific behaviour beyond the Reaper classes' own swings.
 - Reapers keep their rule of never backing off: a Reaper whose swung station lies farther from the enemy than
   it is holds where it is instead.
-- Deployment is still a flat formation; the depth appears as fleets close.
+- Deployment was a flat formation when this was written; see "Slice 5" for fleets over the battle-group
+  threshold.
 - Fighters and carriers are unchanged.
 - Balance was measured, not tuned.
