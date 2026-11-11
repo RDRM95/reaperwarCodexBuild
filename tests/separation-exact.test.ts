@@ -31,7 +31,9 @@ describe('separation field', () => {
       }
       // The comparison is not vacuous: many hulls are actually being pushed apart.
       expect(compared).toBeGreaterThan(800);
-      expect(nonZero).toBeGreaterThan(50);
+      // Measured 47 and 46 of 1,380 since hulls take three-dimensional attack bearings; more than 50 crowded each
+      // other while both fleets met in one plane.
+      expect(nonZero).toBeGreaterThan(30);
     }
   });
 });
