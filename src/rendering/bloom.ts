@@ -69,9 +69,13 @@ const EMITTER_HIGH_PASS = /* glsl */`
   }
 `;
 
-/** Bloom is part of the high preset; an explicit setting overrides it either way. */
-export function bloomFor(settings: { quality: 'low' | 'medium' | 'high'; bloom?: boolean }): BloomConfig | null {
-  return (settings.bloom ?? settings.quality === 'high') ? RESTRAINED_BLOOM : null;
+/** The same bloom with eight-sample antialiasing of the scene, for the Ultra preset (capped by what the GPU offers). */
+export const ULTRA_BLOOM: BloomConfig = { ...RESTRAINED_BLOOM, samples: 8 };
+
+/** Bloom is part of the high and ultra presets; an explicit setting overrides it either way. */
+export function bloomFor(settings: { quality: 'low' | 'medium' | 'high' | 'ultra'; bloom?: boolean }): BloomConfig | null {
+  const on = settings.bloom ?? (settings.quality === 'high' || settings.quality === 'ultra');
+  return on ? (settings.quality === 'ultra' ? ULTRA_BLOOM : RESTRAINED_BLOOM) : null;
 }
 
 export interface BloomPipeline {

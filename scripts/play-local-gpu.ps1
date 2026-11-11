@@ -66,10 +66,14 @@ if ($LASTEXITCODE -ne 0) { throw 'Production build failed. No source files were 
 Write-Host ''
 Write-Host 'Starting REAPER WAR CODEX on 127.0.0.1:5174'
 Write-Host 'Hardware-accelerated WebGL runs on the PC GPU when enabled in the browser.'
+Write-Host 'First start applies the local hardware profile (Ultra quality, native resolution, simulation on its own thread).'
+Write-Host 'Bigger battles: Custom Battle has Double fleets and Fleets x4 buttons.'
 Write-Host 'No cloud server is used to simulate or render the battle.'
 Write-Host 'Keep this window open during play. Press Ctrl+C to stop.'
 Write-Host ''
 # Codex runs on its own localhost port; export/import saves when switching origins.
 # The production preview avoids Vite's source-transform/HMR development overhead.
-& npm.cmd run preview -- --host 127.0.0.1 --port 5174 --strictPort --open
+# ?profile=local-gpu asks the game for its local-hardware profile the first time it starts: Ultra quality, native
+# resolution and the simulation on its own thread. Settings changed afterwards are kept.
+& npm.cmd run preview -- --host 127.0.0.1 --port 5174 --strictPort --open "/?profile=local-gpu"
 if ($LASTEXITCODE -ne 0) { throw 'Local game server could not start. Close any other server on port 5174.' }

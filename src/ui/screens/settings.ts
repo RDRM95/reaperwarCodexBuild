@@ -1,6 +1,7 @@
 import type { App } from '../app';
 import { el } from '../dom';
 import { storage } from '@/core/storage';
+import { applyLocalGpuProfile, pixelRatioCapFor } from '@/core/hardwareProfile';
 import { UI_SCALE_LEVELS } from '../tvDisplay';
 import { OVERLAY_DETAIL_LABELS, type OverlayDetail } from '../fleetLabels';
 
@@ -32,9 +33,17 @@ export function renderSettings(app: App): HTMLElement {
 
         el('label', { class: 'field' }, ['Quality', el('select', { onchange: (e: Event) => {
           p.graphics.quality = (e.target as HTMLSelectElement).value as typeof p.graphics.quality;
-          p.graphics.pixelRatioCap = p.graphics.quality === 'high' ? 2 : p.graphics.quality === 'medium' ? 1.5 : 1;
+          p.graphics.pixelRatioCap = pixelRatioCapFor(p.graphics.quality);
           void app.savePrefs();
-        } }, ['low', 'medium', 'high'].map((q) => el('option', { value: q, selected: p.graphics.quality === q }, q)))]),
+        }, 'data-action': 'quality' }, ['low', 'medium', 'high', 'ultra'].map((q) => el('option', { value: q, selected: p.graphics.quality === q }, q === 'ultra' ? 'ultra (strong discrete GPU)' : q)))]),
+        el('button', { class: 'btn small', 'data-action': 'local-gpu-profile', onclick: () => {
+          app.prefs = applyLocalGpuProfile(app.prefs);
+          void app.savePrefs();
+          app.show('settings');
+          app.toast('Local hardware profile applied: Ultra quality, native resolution, simulation on its own thread');
+        } }, 'Use local hardware profile'),
+        el('p', { class: 'dim', style: { fontSize: '12px' } },
+          'For a gaming PC running the Local GPU Edition. Ultra keeps ship detail three times further out, draws at the display\'s native pixel density with 8x antialiasing, and the simulation runs on its own thread. Takes effect in the next battle.'),
         el('label', { class: 'field' }, ['Engine glow sprites', el('select', { onchange: (e: Event) => {
           p.graphics.showEngineGlow = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();

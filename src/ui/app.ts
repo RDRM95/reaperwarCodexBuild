@@ -2,6 +2,7 @@ import { audio, type SoundId } from '@/audio/engine';
 import { deathSounds } from '@/rendering/deathSequence';
 import { installShipReferenceInspector } from '@/references/ShipReferenceInspector';
 import { DEFAULT_PREFERENCES, storage, type Preferences } from '@/core/storage';
+import { applyLocalGpuProfile, shouldApplyLocalGpuProfile } from '@/core/hardwareProfile';
 import { BattleView } from '@/rendering/battleView';
 import type { CameraMode } from '@/rendering/cameras';
 import { BattleSimulation, SIM_DT } from '@/simulation/battle';
@@ -720,6 +721,11 @@ export class App {
     applyUiScale(this.ui, this.prefs.uiScale);
     this.prefs.graphics = { ...DEFAULT_PREFERENCES.graphics, ...this.prefs.graphics };
     this.prefs.audio = { ...DEFAULT_PREFERENCES.audio, ...this.prefs.audio };
+    // The local launcher opens the game with ?profile=local-gpu: apply the local-hardware profile the first time.
+    if (shouldApplyLocalGpuProfile(window.location.search, this.prefs)) {
+      this.prefs = applyLocalGpuProfile(this.prefs);
+      void this.savePrefs();
+    }
     this.prefs.overlayIndependent = this.prefs.overlayIndependent === true;
     if (!['auto', 'ships', 'fleets'].includes(this.prefs.overlayDetail)) this.prefs.overlayDetail = 'auto';
     this.customTimelines = await storage.get('customTimelines', []);
