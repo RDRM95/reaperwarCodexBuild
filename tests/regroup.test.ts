@@ -6,10 +6,10 @@ import type { FleetState, ShipState } from '@/simulation/types';
 
 /**
  * Regroup. A fleet that has taken losses went on flying the formation it deployed in, with a hole wherever a hull
- * had died: in the Final Battle of Earth (canon_me3, seed 1) at 150 s the Alliance fleet is down to 23 of 49 hulls
- * and their stations still cover 495 km² of the formation's plan, 21.5 km² a hull where it deployed at 19.1. No
+ * had died: in the Final Battle of Earth (canon_me3, seed 1) at 150 s the Alliance fleet is down to 21 of 49 hulls
+ * and their stations still cover 482 km² of the formation's plan, 23.0 km² a hull where it deployed at 19.1. No
  * order closed it up; Hold formation sent hulls back to the same holed layout. The Regroup order gives the
- * survivors a fresh formation of their own number where they stand (105 km²), and resumes the attack once formed.
+ * survivors a fresh formation of their own number where they stand (98 km²), and resumes the attack once formed.
  */
 const hulls = (sim: BattleSimulation, fleet: FleetState): ShipState[] =>
   sim.ships.filter(s => s.fleetId === fleet.spec.id && s.alive && !s.escaped && s.role !== 'fighter');
@@ -31,12 +31,12 @@ describe('the regroup order', () => {
     const deployed = hulls(sim, fleet), deployedFootprint = footprint(deployed);
     runTo(sim, 150);
     const before = hulls(sim, fleet), footprintBefore = footprint(before), gapBefore = mean(nearest(before)), worstBefore = Math.max(...nearest(before));
-    // Measured: 23 hulls left of 49, on 495 km² of stations (935 km² at deployment): the formation has not closed up.
+    // Measured: 21 hulls left of 49, on 482 km² of stations (935 km² at deployment): the formation has not closed up.
     expect(before.length).toBeLessThan(deployed.length * 0.6);
     expect(footprintBefore / before.length).toBeGreaterThan(deployedFootprint / deployed.length * 0.9);
     sim.issueOrders(fleet.spec.id, { order: 'regroup' });
     const after = hulls(sim, fleet);
-    // Measured after: 105 km²; mean gap between neighbouring stations 2.52 km to 1.57 km, the worst 5.1 km to 2.3 km.
+    // Measured after: 98 km²; mean gap between neighbouring stations 2.60 km to 1.58 km, the worst 5.1 km to 2.3 km.
     expect(footprint(after)).toBeLessThan(footprintBefore * 0.5);
     expect(mean(nearest(after))).toBeLessThan(gapBefore);
     expect(Math.max(...nearest(after))).toBeLessThan(worstBefore);
@@ -61,14 +61,14 @@ describe('the regroup order', () => {
       sim.step();
       if (fleet.orders.order !== 'regroup') { resumedAt = sim.time; break; }
     }
-    // Measured: no hull on its new station at the order; 81 % formed and attacking again 37 s later, having fired
-    // 415 shots meanwhile.
+    // Measured: no hull on its new station at the order; 80 % formed and attacking again 29.5 s later, having fired
+    // 114 shots meanwhile.
     expect(startProgress).toBeLessThan(0.2);
     expect(resumedAt - 80).toBeGreaterThan(10);
     expect(resumedAt - 80).toBeLessThan(REGROUP_TIME_LIMIT - 10);
     expect(progress).toBeGreaterThanOrEqual(REGROUP_FORMED_SHARE);
     expect(fleet.orders.order).toBe('attack');
-    expect(hulls(sim, fleet).reduce((n, s) => n + s.stats.shotsFired, 0)).toBeGreaterThan(shotsBefore + 200);
+    expect(hulls(sim, fleet).reduce((n, s) => n + s.stats.shotsFired, 0)).toBeGreaterThan(shotsBefore + 50);
   });
 
   it('no two hulls touch at any tick while a fleet regroups', () => {

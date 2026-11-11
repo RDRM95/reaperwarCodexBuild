@@ -11,7 +11,7 @@ import type { OrderType, ShipState } from '@/simulation/types';
  * Reapers flank) 7 of its 16 escorts ended between the capitals and the enemy, the escorts 60° off that line on
  * average, and the nearest Reaper stood 6.4 km from a dreadnought. Under the Screen order the capitals hold their
  * formation and the escorts stand between them and the enemy wherever it is: 16 of 16, 22° off the line, the nearest
- * Reaper 10.1 km from a dreadnought.
+ * Reaper 9.0 km from a dreadnought.
  */
 const escort = (s: ShipState) => s.role === 'cruiser' || s.role === 'frigate' || s.role === 'reaper_destroyer';
 
@@ -49,7 +49,7 @@ describe('the screen order', () => {
     // Holding formation: measured 7 of 16 between, 60° off the line, nearest Reaper 6.4 km from a dreadnought.
     expect(held.between).toBeLessThanOrEqual(9);
     expect(held.offAxis).toBeGreaterThan(45);
-    // Screening: measured 16 of 16, 22° off the line, nearest Reaper 10.1 km from a dreadnought.
+    // Screening: measured 16 of 16, 22° off the line, nearest Reaper 9.0 km from a dreadnought.
     expect(screened.between).toBe(16);
     expect(screened.offAxis).toBeLessThan(30);
     expect(screened.nearestToCapital).toBeGreaterThan(held.nearestToCapital * 1.3);
@@ -67,7 +67,8 @@ describe('the screen order', () => {
     const fleet = [...sim.fleets.values()].find(f => f.spec.side === 'A')!;
     sim.issueOrders(fleet.spec.id, { order: 'screen' });
     let contacts = 0, clearance = Infinity;
-    while (!sim.finished && sim.time < 100) {
+    // 200 s: before hulls stopped giving way to fighters, two carriers of a screening fleet grazed each other late on.
+    while (!sim.finished && sim.time < 200) {
       sim.step();
       const ships = sim.ships.filter(s => s.alive && !s.escaped && s.role !== 'fighter');
       for (let i = 0; i < ships.length; i++) for (let j = 0; j < i; j++) {
@@ -81,7 +82,7 @@ describe('the screen order', () => {
       for (let i = 0; i < escorts.length; i++) for (let j = 0; j < i; j++)
         clearance = Math.min(clearance, Math.hypot(stations[i].x - stations[j].x, stations[i].y - stations[j].y, stations[i].z - stations[j].z) - escorts[i].radiusKm - escorts[j].radiusKm);
     }
-    // Measured: the closest pair of stations is 0.24 km clear of the two hulls' radii.
+    // Measured: the closest pair of stations is 0.32 km clear of the two hulls' radii.
     expect(clearance).toBeGreaterThan(0.1);
     expect(contacts).toBe(0);
   });
