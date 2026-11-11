@@ -22,6 +22,8 @@ export interface Preferences {
   overlayDetail: OverlayDetail;
   /** Where the battle simulation runs: on the thread that draws, or in a Web Worker (experimental). */
   simulationThread?: 'main' | 'worker';
+  /** Set once the local-hardware profile has been applied, so it is not re-applied over the player's own changes. */
+  hardwareProfile?: 'local-gpu';
 }
 
 export interface SaveData {

@@ -98,6 +98,12 @@ instead of running the Vite development server.
 - A later launch tries a fast-forward update from `codex/apex-combat-overhaul`;
   if offline or if local source files were edited, the existing installation
   is kept. Nothing overwrites the original Reaper War or Spectator installs.
+- The first start applies the **local hardware profile**: the Ultra quality
+  preset (ship detail three times further out, the display's native pixel
+  density, 8x antialiasing with bloom) and the simulation on its own thread.
+  Any setting changed afterwards is kept; Settings has the same profile as a
+  button and Ultra as a quality level. **Custom Battle** has *Double fleets*
+  and *Fleets ×4* for bigger battles.
 - The game runs at **http://127.0.0.1:5174/**, avoiding ports 4180 (original)
   and 5173 (spectator). A production preview server must remain open during
   play. Once installed, the battles themselves require no internet connection.

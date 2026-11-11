@@ -1,3 +1,4 @@
+import { scaleCounts } from '@/core/hardwareProfile';
 import type { App } from '../app';
 import { el } from '../dom';
 import { buildCustomBattle, type CustomBattleInput, type CustomFaction, type CustomFleetInput } from '@/scenarios';
@@ -267,6 +268,12 @@ export function renderCustom(app: App, params?: { template?: CustomBattleInput }
                 input.extraB = [];
                 render();
               } }, 'Destroyer hunt (small engagement)'),
+              // Bigger or smaller battles in one click: every fleet on both sides, reinforcements included.
+              ...([[0.5, 'Halve fleets'], [2, 'Double fleets'], [4, 'Fleets ×4']] as const).map(([factor, label]) => el('button', { class: 'btn small', 'data-action': `scale-fleets-${factor}`, onclick: () => {
+                for (const fleet of [input.sideA, input.sideB, ...(input.extraA ?? []), ...(input.extraB ?? [])]) fleet.counts = scaleCounts(fleet.counts, factor);
+                if (input.reinforcementCounts) input.reinforcementCounts = scaleCounts(input.reinforcementCounts, factor);
+                render();
+              } }, label)),
               el('button', { class: 'btn small', 'data-action': 'preset-sword', onclick: () => {
                 input.sideA = { faction: 'alliance', name: 'Sword Fleet (Alliance)', formation: 'line_abreast', counts: { alliance_dreadnought: 6, alliance_carrier: 2, alliance_cruiser: 16, alliance_frigate: 24, alliance_frigate_thanix: 1 }, arrivalTime: 0 };
                 input.extraA = [

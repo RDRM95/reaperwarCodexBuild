@@ -13,6 +13,7 @@ import { KM } from './geometry';
 import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
 import { InstancedFleet } from './instancedFleet';
 import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
+import { detailReach } from '@/core/hardwareProfile';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -51,7 +52,8 @@ export interface ShipVisual {
 }
 
 export interface GraphicsSettings {
-  quality: 'low' | 'medium' | 'high';
+  /** `ultra` is for a strong discrete GPU: detail three times further out, native pixel density, 8x antialiasing. */
+  quality: 'low' | 'medium' | 'high' | 'ultra';
   showEngineGlow: boolean;
   pixelRatioCap: number;
   /** Restrained HDR bloom on light sources. Unset: on with the high preset. */
@@ -308,6 +310,7 @@ export class BattleView {
     const sim = this.sim;
     const cam = this.rig.camera.position;
     const lodOn = this.settings.lod !== false;
+    const reach = detailReach(this.settings.quality);
     const useInstancing = sim.ships.length >= 150;
     let far = 0;
     let articulatedHeroes = 0;
@@ -339,7 +342,7 @@ export class BattleView {
       const priority = this.selectedIds.has(ship.id) || this.followId === ship.id ||
         this.cine.fromId === ship.id || this.cine.toId === ship.id ||
         (this.cine.members?.includes(ship.id) ?? false);
-      const level = useInstancing && priority ? 'full' : lodLevelSquared(distanceSquared, lengthUnits, ship.role, lodOn);
+      const level = useInstancing && priority ? 'full' : lodLevelSquared(distanceSquared, lengthUnits, ship.role, lodOn, reach);
       this.lodCounts[level]++;
       this.sphere.center.set(px, py, pz);
       this.sphere.radius = lengthUnits * .8 + 2;
