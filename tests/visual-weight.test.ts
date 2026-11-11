@@ -134,12 +134,14 @@ describe('visual weight of flashes', () => {
       }
     }
     // Measured (58 main shots, 2,708 lighter): main guns 35.5 % of muzzle-flash area before, 90.8 % now; light
-    // guns' flashes cover 5.6 % of what they did; light hits 59 %, throwing under half the sparks.
+    // guns' flashes cover 5.6 % of what they did; hits under 100 damage 59 %, and they threw 494 sparks and now
+    // throw none (none of them does 40 damage to a hull). Heavier hits throw the 421 they always did.
     expect(main / (main + lightBefore)).toBeLessThan(0.45);
     expect(main / (main + lightNow)).toBeGreaterThan(0.85);
     expect(lightNow / lightBefore).toBeLessThan(0.1);
     expect(hitNow / hitBefore).toBeLessThan(0.7);
-    expect(sparksNow / sparksBefore).toBeLessThan(0.6);
+    expect(sparksBefore).toBeGreaterThan(300);
+    expect(sparksNow / sparksBefore).toBeLessThan(0.2);
   });
 });
 

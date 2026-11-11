@@ -64,8 +64,9 @@ Measured over the Battle of Earth (prime_apex, seed 1, first 120 s; 58 main-gun 
 |---|---:|---:|
 | Main guns' share of muzzle-flash area | 35.5 % | 90.8 % |
 | Area light guns' flashes cover | 100 % | 5.6 % |
-| Area light hits cover | 100 % | 59 % |
-| Sparks thrown by light hits | 915 | 421 |
+| Area the flashes of hits under 100 damage cover | 100 % | 59 % |
+| Sparks thrown by hits under 100 damage | 494 | 0 |
+| Sparks thrown by all hits | 915 | 421 |
 
 `qa/visual-weight-20261111/fighter-melee-before-after.jpg`: 24 Tridents and three frigates against 24 Oculus and a
 destroyer, 7.5 s in, same camera, the same shots drawn in both (cloud software rendering). The upper picture is
