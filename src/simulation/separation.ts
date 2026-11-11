@@ -25,6 +25,7 @@ export class SeparationField {
   private thrust: Float64Array;
   private responseTime: Float64Array;
   private reaper: Uint8Array;
+  private fighter: Uint8Array;
   /** Unit vector to the hull's enemy target; `aimed` is 0 where there is none. */
   private aimed: Uint8Array;
   private aimX: Float64Array; private aimY: Float64Array; private aimZ: Float64Array;
@@ -39,7 +40,7 @@ export class SeparationField {
     this.posX = new Float64Array(n); this.posY = new Float64Array(n); this.posZ = new Float64Array(n);
     this.velX = new Float64Array(n); this.velY = new Float64Array(n); this.velZ = new Float64Array(n);
     this.radius = new Float64Array(n); this.thrust = new Float64Array(n); this.responseTime = new Float64Array(n);
-    this.reaper = new Uint8Array(n); this.aimed = new Uint8Array(n);
+    this.reaper = new Uint8Array(n); this.fighter = new Uint8Array(n); this.aimed = new Uint8Array(n);
     this.aimX = new Float64Array(n); this.aimY = new Float64Array(n); this.aimZ = new Float64Array(n);
     const byId = new Map<string, ShipState>();
     for (const ship of ships) byId.set(ship.id, ship);
@@ -61,6 +62,7 @@ export class SeparationField {
       const speedSq = vx * vx + vy * vy + vz * vz;
       this.responseTime[i] = Math.sqrt(speedSq) / acceleration;
       this.reaper[i] = ship.faction === 'reaper' ? 1 : 0;
+      this.fighter[i] = ship.role === 'fighter' ? 1 : 0;
       if (target?.alive && !target.escaped && target.side !== ship.side) {
         // normalize(sub(target.pos, ship.pos)), operation for operation.
         const dx = target.pos.x - ship.pos.x, dy = target.pos.y - ship.pos.y, dz = target.pos.z - ship.pos.z;
@@ -155,6 +157,9 @@ export class SeparationField {
             const other = cell[c];
             if (other === self) continue;
             checks++;
+            // A hull does not give way to a fighter: the fighter is the one that can turn. A carrier's own wing,
+            // forming up and landing on it, otherwise pushed it kilometres off its station.
+            if (this.fighter[other] === 1 && this.fighter[self] === 0) continue;
             // The broad phase includes many nearby grid cells that are still outside
             // reaction distance. Reject them without a sqrt.
             const dx = sx - posX[other];

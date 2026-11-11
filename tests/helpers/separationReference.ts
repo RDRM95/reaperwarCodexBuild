@@ -1,6 +1,6 @@
 // The vector implementation that src/simulation/separation.ts replaced, kept as the reference for
 // tests/separation-exact.test.ts: the optimised field must return bit-identical thrust requests. It changes only
-// when the rule itself changes (the evasion term was added to both together).
+// when the rule itself changes (the evasion term, and hulls not giving way to fighters, were added to both together).
 import { add, dot, length, lengthSq, normalize, scale, sub, v3, type Vec3 } from '@/core/vec3';
 import { SAFE_PASSING_MARGIN } from '@/simulation/separation';
 import type { ShipState } from '@/simulation/types';
@@ -13,6 +13,7 @@ interface Neighbour {
   acceleration: number;
   responseTime: number;
   reaper: boolean;
+  fighter: boolean;
   toEnemy?: Vec3;
 }
 
@@ -40,6 +41,7 @@ export class ReferenceSeparationField {
         radius: Math.max(0.02, ship.radiusKm), acceleration,
         responseTime: length(ship.vel) / acceleration,
         reaper: ship.faction === 'reaper',
+        fighter: ship.role === 'fighter',
         toEnemy: target?.alive && !target.escaped && target.side !== ship.side
           ? normalize(sub(target.pos, ship.pos)) : undefined,
       };
@@ -110,6 +112,7 @@ export class ReferenceSeparationField {
     for (const other of this.nearby(cx, cy, cz, radius)) {
     if (other.id === self.id) continue;
     this.pairChecks++;
+    if (other.fighter && !self.fighter) continue;
     // The broad phase includes many nearby grid cells that are still outside
     // reaction distance. Reject them without allocating a vector or sqrt.
     const dx = self.pos.x - other.pos.x;
