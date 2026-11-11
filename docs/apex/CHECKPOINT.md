@@ -2,9 +2,30 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 11 Nov 2026, 00:00 UTC — performance and Alliance hulls
+## State on 11 Nov 2026, 01:40 UTC — true 3D fleet combat, slice 1
 
 Read this section first. Everything below it is older.
+
+The owner's directive of 11 Nov ("COMPLETE DEVELOPMENT CONTINUATION") makes true three-dimensional fleet combat the top priority, and the owner also approved the Web Worker move for the simulation.
+
+**Merged (Codex build, head `d7f1313`):** #49 — engaging hulls take attack bearings round their targets (`src/simulation/manoeuvre.ts`, applied last in `movementGoal`): dreadnoughts 5–14° as a stepped firing line, cruisers 22–55°, frigates 45–105°, Reaper capitals 3–12°, destroyers 20–60°; the middle of a line goes over or under, the wings round their own side; the swing opens as the hull closes. Measured: fleet thickness 0.03–0.10 → 0.12–0.38, firing-line elevation 4–11° → 10–34°, no hull overlaps, same winners; over twelve seeds Reaper hull destroyed 0.215 → 0.216. Evidence and the full tables: `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`; tests `tests/engagement-3d.test.ts`; probes `scripts/engagement-geometry.ts` (one seed) and `scripts/engagement-batch.ts` (twelve; use this to judge balance, single seeds diverge by a fifth).
+
+**Open at the time of writing:** sandbox #43 `port/3d-engagement-bearings-20261111` (port of #49; the same seeded battle measures identically there). Merge when its checks pass.
+
+**Tried and not shipped:** frigate attack runs (pass, extend, re-attack). Over twelve seeds they cost frigates about a quarter of their hits and the Alliance about a fifth of its kills, because a frigate flying away is not firing and nothing in the simulation rewards an attack from astern. Details in the QA note. Do not retry without one of those two things changing.
+
+**3D combat: what is still missing from the directive, in the order I would take it:**
+
+1. Deployment is still a flat sheet (audit FS6); depth appears only as fleets close. The unmerged `feat/fleet-composer-silhouette-20261109` branch has altitude bands in its composer; it is behind the base by 30 commits and its last commit is an interrupted agent's work with tests not run.
+2. Fleet intent orders (flank, breakthrough, screen, regroup) do not exist; orders still translate one rigid anchor.
+3. Reaper capitals do not penetrate a formation; Reapers hold where they are when a swung station lies farther from the enemy than they are.
+4. No reaction to barrier state or local threat in the choice of bearing; bearings are fixed for the battle.
+5. Carriers and fighters are unchanged.
+6. The unmerged `feat/combat-reach-targeting-mass-20261109` branch and the owner's draft #26 edit `movementGoal`; they need #49 merged in when they resume.
+
+**Web Worker simulation (approved, not started in code).** An inventory of what the render and UI side reads from the simulation is done: about 30 ship fields and 11 weapon fields every frame, `projectiles`, `missiles`, `flashes`, fleet orders, the event stream, three read-only queries and four commands; no UI code writes simulation state. What makes it hard: `ShipVisual` and HUD rows hold live `ShipState` objects for the whole battle, simulation helpers (`shipEngagementRange`, `engagementBand`, `inWeaponArc`, `assessReapers`) run on the main thread against live ships, and 14 QA scripts call `app.battle.sim.step()` synchronously. Intended shape: the main thread keeps its own never-stepped `BattleSimulation` built from the same config as a mirror, the worker steps the real one and sends each tick's dynamic fields packed in typed arrays plus new events and spawned ships, the mirror is updated in place so every existing reader keeps working, commands are posted to the worker, and the inline mode stays for tests, scripts and headless runs. First slice: the snapshot codec with a test that a mirrored battle equals an inline one field for field.
+
+## State on 11 Nov 2026, 00:00 UTC — performance and Alliance hulls
 
 Two owner requests since the Reaper work below: a faster game at high ship counts ("playable high fps, high ship count, graphical upgrade, a local version to take advantage of my hardware"), and original Alliance hull improvements from a private pack of fleet reference frames. The frames are never committed; every image in `docs/` is a render of this project's own models.
 

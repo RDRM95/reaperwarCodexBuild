@@ -78,6 +78,7 @@ Alliance has 30 → 22 hulls left on seed 42 and 12 → 28 on seed 7. This slice
 **Cost.** Mean simulation tick, bundled, cloud CPU: 13.7 and 13.9 ms before, 14.9 and 13.9 ms after at 1,104
 ships (two runs each); 28.4 → 30.3 ms at 2,208.
 
+<<<<<<< HEAD
 ## Twelve seeds, not one
 
 A single seeded battle is chaotic: two builds that differ by almost nothing diverge by about a fifth in who hits
@@ -109,6 +110,8 @@ away from its target is not firing at it, and nothing in the simulation yet rewa
 runs to capital-scale targets left about five runs a battle, too few to see. It is not merged; it needs either
 frigate weapons that bear while the hull extends, or a real advantage to an attack from astern, first.
 
+=======
+>>>>>>> origin/codex/apex-combat-overhaul
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the
@@ -132,8 +135,12 @@ numbers; `scripts/engagement-3d-qa.mjs` for the pictures.
 
 - The renders are from cloud software rendering in deep space, where hulls are dim; they show where ships are.
   Nobody has watched this in motion on the owner's hardware.
+<<<<<<< HEAD
 - A swung station is a place to hold, not an attack run: frigates do not pass, extend and re-attack (see
   "Tried and not shipped").
+=======
+- A swung station is a place to hold, not an attack run: frigates do not yet pass, extend and re-attack.
+>>>>>>> origin/codex/apex-combat-overhaul
 - No breakthrough or regroup behaviour, no fleet-level intent orders (flank, breakthrough, screen), no
   class-specific reaction to barrier state, no faction-specific behaviour beyond the Reaper classes' own swings.
 - Reapers keep their rule of never backing off: a Reaper whose swung station lies farther from the enemy than
