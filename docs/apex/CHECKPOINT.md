@@ -10,6 +10,8 @@ Read this section first. Everything below it is older.
 
 **In this change (3D combat slice 5):** large fleets deploy in altitude bands (audit FS6). The Fifth Fleet is 11.7 km tall where it was 2.6 km; fleets under the battle-group threshold are unchanged. Figures, stills and the re-pinned layout tests are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 5". **Needs a sandbox port.**
 
+**Also in this stack:** hulls no longer give way to fighters. Carriers holding formation were pushed 5 to 6 km off station by their own wings (they now hold within 0.11 km); "Slice 6" in the same note. **Needs a sandbox port.**
+
 **Built locally, not yet pushed (`feat/fleet-regroup-order-20261111`):** a Regroup order. Measured defect: in the Final Battle of Earth at 150 s a fleet down to 21 of 49 hulls still flies its 34 km deployment frontage with gaps up to 15 km. The order gives the survivors a fresh compact formation where they stand and resumes the attack once 80 % are on station or after 60 s. Simulation, AI and HUD button are written and typecheck; tests, contact check and twelve-seed batch are still to do.
 
 **Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 5 to 8 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
