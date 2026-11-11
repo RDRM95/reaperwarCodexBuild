@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildScenario } from '@/scenarios';
 import { BattleSimulation } from '@/simulation/battle';
-import { farPointBrightness, MAIN_CALIBRE, pointDefenceBrightness, tracerSize } from '@/rendering/visualWeight';
+import {
+  explosionSize, explosionSmoke, farPointBrightness, HEAVY_HIT, impactSize, impactSparks, MAIN_CALIBRE, muzzleFlashSize,
+  pointDefenceBrightness, SMALL_CRAFT_LENGTH, tracerSize,
+} from '@/rendering/visualWeight';
+import { getShipTemplate } from '@/rendering/ships';
 import { WEAPONS } from '@/data/weapons';
 
 /**
@@ -65,3 +69,77 @@ describe('visual weight of weapon fire', () => {
     for (const role of ['frigate', 'cruiser', 'dreadnought', 'carrier', 'reaper_destroyer', 'reaper_capital'] as const) expect(farPointBrightness(role)).toBe(1);
   });
 });
+
+/**
+ * The flashes that go with the fire. Every gun below main calibre flashed at one size, 60 to 156 m across, whether
+ * it was a cruiser's battery or a fighter's cannon firing four times a second; a fighter's 6-damage round hit with
+ * a 43 to 100 m burst and two sparks; and a 36 m fighter died with a frigate's explosion.
+ */
+describe('visual weight of flashes', () => {
+  const before = { muzzle: (calibre: number) => (calibre >= MAIN_CALIBRE ? 3.6 : 1.2), impact: (damage: number) => Math.min(8, 0.4 + Math.sqrt(damage) * 0.09),
+    sparks: (hull: number) => Math.min(10, 2 + Math.floor(hull / 120)), explosion: (length: number) => Math.max(1.5, length * 0.6) };
+
+  it('main guns flash as they did; lighter guns flash in proportion to their round', () => {
+    expect(muzzleFlashSize(MAIN_CALIBRE, false)).toBe(3.6);
+    expect(muzzleFlashSize(40000, false)).toBe(3.6);
+    expect(muzzleFlashSize(900, true)).toBe(1.8);
+    const fighter = muzzleFlashSize(WEAPONS.fighter_gun.damage, false), frigate = muzzleFlashSize(88, false), cruiser = muzzleFlashSize(199, false);
+    // A fighter's cannon: a flash that grows to 19 m, where it grew to 156 m.
+    expect(fighter * 1.3).toBeLessThan(0.2);
+    expect(fighter).toBeLessThan(frigate);
+    expect(frigate).toBeLessThan(cruiser);
+    for (const calibre of [1, 6, 88, 199, 400, 599]) expect(muzzleFlashSize(calibre, false)).toBeLessThan(1.2);
+    // The gunnery camera sits on the gun: it keeps its smaller flashes in the same proportion as before.
+    expect(muzzleFlashSize(88, true) / muzzleFlashSize(88, false)).toBeCloseTo(0.75 / 1.2, 9);
+  });
+
+  it('heavy hits and hull explosions are unchanged; light hits and small craft are scaled to their size', () => {
+    for (const damage of [HEAVY_HIT, 199, 900, 5000, 40000]) {
+      expect(impactSize(damage)).toBe(before.impact(damage));
+      expect(impactSparks(damage)).toBe(before.sparks(damage));
+    }
+    expect(impactSize(6) / before.impact(6)).toBeLessThan(0.4);
+    expect(impactSize(88) / before.impact(88)).toBeGreaterThan(0.9);
+    expect(impactSparks(6)).toBe(0);
+    expect(impactSparks(39)).toBe(0);
+    expect(impactSparks(88)).toBe(2);
+    // No step at the threshold.
+    expect(impactSize(HEAVY_HIT - 0.001)).toBeCloseTo(impactSize(HEAVY_HIT), 3);
+    for (const length of [SMALL_CRAFT_LENGTH, 1.7, 5.2, 8.88, 20]) expect(explosionSize(length)).toBe(before.explosion(length));
+    // A Trident (36 m) dies in a 47 m explosion with one cloud of smoke, where it was 150 m with four.
+    const trident = getShipTemplate('alliance_fighter').lengthUnits;
+    expect(explosionSize(trident)).toBeCloseTo(0.468, 6);
+    expect(explosionSize(getShipTemplate('reaper_oculus').lengthUnits)).toBe(0.45);
+    expect(explosionSmoke(explosionSize(trident))).toBe(1);
+    expect(explosionSmoke(1.5)).toBe(4);
+    expect(explosionSmoke(5)).toBe(10);
+  });
+
+  it('in the Battle of Earth main guns make nine tenths of the muzzle flash where they made a third', () => {
+    const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
+    while (!sim.finished && sim.time < 120) sim.step();
+    const square = (n: number) => n * n;
+    let main = 0, lightBefore = 0, lightNow = 0, hitBefore = 0, hitNow = 0, sparksBefore = 0, sparksNow = 0;
+    for (const event of sim.events) {
+      if (event.type === 'weapon_fired' && event.kind === 'mass_accelerator') {
+        const damage = sim.getShip(event.shipId)!.weapons[event.weaponIndex].def.damage;
+        if (damage >= MAIN_CALIBRE) main += square(muzzleFlashSize(damage, false));
+        // Light-gun flashes are thinned to 35 % of shots, before and now.
+        else { lightBefore += 0.35 * square(before.muzzle(damage)); lightNow += 0.35 * square(muzzleFlashSize(damage, false)); }
+      } else if (event.type === 'projectile_impact' && !event.glancing) {
+        const damage = event.barrierDamage + event.hullDamage;
+        if (damage <= 0 || damage >= HEAVY_HIT) continue;
+        hitBefore += square(before.impact(damage)); hitNow += square(impactSize(damage));
+        if (!(event.barrierDamage > event.hullDamage && event.barrierDamage > 3)) { sparksBefore += before.sparks(event.hullDamage); sparksNow += impactSparks(event.hullDamage); }
+      }
+    }
+    // Measured (58 main shots, 2,708 lighter): main guns 35.5 % of muzzle-flash area before, 90.8 % now; light
+    // guns' flashes cover 5.6 % of what they did; light hits 59 %, throwing under half the sparks.
+    expect(main / (main + lightBefore)).toBeLessThan(0.45);
+    expect(main / (main + lightNow)).toBeGreaterThan(0.85);
+    expect(lightNow / lightBefore).toBeLessThan(0.1);
+    expect(hitNow / hitBefore).toBeLessThan(0.7);
+    expect(sparksNow / sparksBefore).toBeLessThan(0.6);
+  });
+});
+

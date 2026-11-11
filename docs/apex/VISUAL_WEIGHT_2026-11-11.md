@@ -44,16 +44,42 @@ picture yet:** the count of bright pixels over space fell only from 1,055 to 941
 that frame is something else (see below). No point-defence line happens to be in that frame, so its dimming is
 shown by the code and the unit test, not by the picture.
 
+## Second pass, same day: the flashes
+
+The picture above was not clean because tracers were only part of it. Three more things made a fighter fight a
+field of sparks, and each was a size rule with a floor meant for larger ships:
+
+| What | Before | After |
+|---|---|---|
+| Muzzle flash of any gun below main calibre | grows to 156 m | in proportion to the round: a fighter's cannon 19 m, a frigate's gun 32 m |
+| Hit by a fighter's 6-damage round | a 43 to 100 m burst and two sparks | a 17 to 39 m burst, no sparks |
+| Death of a 36 m fighter | a 150 m explosion, 330 m flash, four clouds of smoke for up to 8 s, four pieces of wreckage | a 47 m explosion, one cloud, one piece |
+
+Main-gun flashes, hits of 100 damage or more and the explosions of every hull from the frigate up are exactly as
+they were (`tests/visual-weight.test.ts` holds each against the old rule).
+
+Measured over the Battle of Earth (prime_apex, seed 1, first 120 s; 58 main-gun shots and 2,708 lighter ones):
+
+| | Before | After |
+|---|---:|---:|
+| Main guns' share of muzzle-flash area | 35.5 % | 90.8 % |
+| Area light guns' flashes cover | 100 % | 5.6 % |
+| Area light hits cover | 100 % | 59 % |
+| Sparks thrown by light hits | 915 | 421 |
+
+`qa/visual-weight-20261111/fighter-melee-before-after.jpg`: 24 Tridents and three frigates against 24 Oculus and a
+destroyer, 7.5 s in, same camera, the same shots drawn in both (cloud software rendering). The upper picture is
+the build before the fighter models, engine glow and these flashes changed; the lower is with all three. What
+stands out in the lower one is the frigate's main gun and the destroyer's beam.
+
 ## Not done, from the same report
 
-- The loose grey specks around a fight are hull debris and close fighters drawn as models, not weapon fire.
-  They are untouched.
-- "Correct colour for actual organic fighters" and "improve ship": the fighter model and its colours are
-  unchanged. I was not sure which colour is meant; the distant glow uses each faction's engine colour.
-- "Rework low grade blocky designs for better likeness as per reference pack": not started. The Alliance
-  dreadnought, cruiser and frigate were rebuilt on 10 November; the carrier, the fighters and the other factions'
-  hulls are still the older block models.
+- "Correct colour for actual organic fighters": nothing was recoloured. The owner was asked which colour is meant.
+  With the glow, the lit canopy and the flashes gone, each fighter now shows its faction's own hull colours
+  (`FIGHTER_MODELS_2026-11-11.md`).
+- Other factions' capitals are still the older block models (`ALLIANCE_CARRIER_2026-11-11.md`).
+- Whether fighters are now too hard to see is the owner's to judge on their own hardware.
 
 ## Tests
 
-`tests/visual-weight.test.ts` (3).
+`tests/visual-weight.test.ts` (6: three for tracers, point defence and distant fighters; three for flashes, hits and explosions).
