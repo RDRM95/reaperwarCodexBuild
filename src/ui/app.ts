@@ -5,6 +5,9 @@ import { DEFAULT_PREFERENCES, storage, type Preferences } from '@/core/storage';
 import { BattleView } from '@/rendering/battleView';
 import type { CameraMode } from '@/rendering/cameras';
 import { BattleSimulation, SIM_DT } from '@/simulation/battle';
+import type { BattleLike } from '@/simulation/battleLike';
+import { RemoteBattle } from '@/simulation/remoteBattle';
+import type { FromWorker } from '@/simulation/simWorkerCore';
 import type { BattleConfig, BattleEvent, BattleResult, FleetOrders } from '@/simulation/types';
 import { PRESETS, getPreset } from '@/timelines/presets';
 import { cloneRules, type RuleSet } from '@/timelines/rules';
@@ -47,7 +50,7 @@ export interface CampaignBattleLink {
 }
 
 export interface LastBattle {
-  sim: BattleSimulation;
+  sim: BattleLike;
   result: BattleResult;
   config: BattleConfig;
   comparison?: ComparisonReport;
@@ -64,7 +67,7 @@ export const SPEEDS = [0.25, 0.5, 1, 2, 4, 8];
  * view, the tactical overlay, the HUD and all input.
  */
 export class BattleController {
-  sim: BattleSimulation;
+  sim: BattleLike;
   readonly view: BattleView;
   readonly overlay: TacticalOverlay;
   hud: Hud;
@@ -82,6 +85,9 @@ export class BattleController {
   private keys = new Set<string>();
   private dragging: { button: number; x: number; y: number; moved: boolean } | null = null;
   private hudTimer = 0;
+  /** Set when the simulation runs in a worker: `sim` is then this mirror of it. */
+  private remote?: RemoteBattle;
+  private worker?: Worker;
   private ended = false;
   /** Events consumed by the HUD since last frame. */
   private pendingEvents: BattleEvent[] = [];
@@ -98,7 +104,17 @@ export class BattleController {
     isReplay: boolean,
   ) {
     this.isReplay = isReplay;
-    this.sim = new BattleSimulation(config);
+    if (app.prefs.simulationThread === 'worker' && typeof Worker !== 'undefined') {
+      // The simulation steps in a worker; this thread draws a mirror of it. See docs/apex/SIM_WORKER_DESIGN_2026-11-11.md.
+      const worker = new Worker(new URL('../simulation/simWorker.ts', import.meta.url), { type: 'module' });
+      const remote = new RemoteBattle(config, message => worker.postMessage(message), SIM_DT);
+      worker.onmessage = (event: MessageEvent<FromWorker>) => remote.receive(event.data);
+      this.worker = worker;
+      this.remote = remote;
+      this.sim = remote;
+    } else {
+      this.sim = new BattleSimulation(config);
+    }
     this.view = new BattleView(canvas, this.sim, app.prefs.graphics);
     this.view.onBreakup = (role, position) => {
       const cue = deathSounds(role);
@@ -380,7 +396,13 @@ export class BattleController {
     const dtReal = Math.min(0.1, (now - this.lastFrame) / 1000);
     this.lastFrame = now;
     this.handleKeys(dtReal);
-    if (!this.paused && !this.sim.finished) {
+    if (this.remote) {
+      // The worker steps the simulation. This thread only says how much simulated time has passed and applies the
+      // snapshots that are due, so a tick costs this frame the copy, not the simulation.
+      const running = !this.paused && !this.sim.finished;
+      this.remote.advance(running ? dtReal * this.speed : 0, Math.max(0.2, this.speed * 0.2));
+      this.accumulator = this.remote.accumulator;
+    } else if (!this.paused && !this.sim.finished) {
       this.accumulator += dtReal * this.speed;
       // Simulation runs on the main thread, so a 40 ms catch-up budget
       // guarantees visible stutter even on a fast CPU/GPU. Reserve most of
@@ -646,6 +668,7 @@ export class BattleController {
     this.hud.root.remove();
     this.gunneryOverlay.root.remove();
     this.view.dispose();
+    this.worker?.terminate();
     this.overlay.resize(1, 1, 1);
   }
 }

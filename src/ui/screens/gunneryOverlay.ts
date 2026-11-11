@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BattleSimulation } from '@/simulation/battle';
+import type { BattleLike } from '@/simulation/battleLike';
 import type { ShipState, BattleEvent } from '@/simulation/types';
 import { primaryGunneryMount,isMainGunShot } from '@/rendering/gunnery';
 import { inWeaponArc } from '@/simulation/fireControl';
@@ -58,7 +58,7 @@ export class TargetTelemetry {
     this.enabled=on;this.root.hidden=!on;
   }
   /** Called only for actual simulation events. No visual timers fire weapons. */
-  notify(event:BattleEvent,shipId:string|undefined,sim?:BattleSimulation):void{
+  notify(event:BattleEvent,shipId:string|undefined,sim?:BattleLike):void{
     if(!shipId)return;
     if(event.type==='ship_destroyed'&&event.shipId===shipId){
       this.signalLossUntilMs=performance.now()+1150;
@@ -76,7 +76,7 @@ export class TargetTelemetry {
     }
   }
 
-  update(sim:BattleSimulation,view:BattleView,shipId:string|undefined){
+  update(sim:BattleLike,view:BattleView,shipId:string|undefined){
     if(!this.enabled)return;
     this.opticalView = view;
     this.zoomButton.textContent = view.rig.gunneryZoomed ? 'ZOOM ×1 · Z' : 'ZOOM ×2 · Z';

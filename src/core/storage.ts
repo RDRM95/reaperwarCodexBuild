@@ -20,6 +20,8 @@ export interface Preferences {
   /** Keep tactical annotations visible when the interface is minimal/hidden. */
   overlayIndependent: boolean;
   overlayDetail: OverlayDetail;
+  /** Where the battle simulation runs: on the thread that draws, or in a Web Worker (experimental). */
+  simulationThread?: 'main' | 'worker';
 }
 
 export interface SaveData {
