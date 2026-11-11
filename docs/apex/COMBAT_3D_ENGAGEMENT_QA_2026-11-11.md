@@ -360,6 +360,74 @@ and 298.7 → 308.5 s. Measured, not tuned.
 **Tests.** `tests/carrier-station.test.ts` (3): on each of three seeds a carrier holding formation stays within
 0.5 km of its station with its wing flying, and no fighter is inside a foreign hull. They fail on the base.
 
+## Slice 7: regroup and screen orders
+
+Two more fleet orders from the owner's list, in the simulation and as HUD buttons (both clicked in a real browser:
+order issued, button lit, toast shown, no page errors).
+
+### Regroup
+
+**Defect** (audit FS5). A fleet that has taken losses went on flying the formation it deployed in, with a hole
+wherever a hull had died. Final Battle of Earth, canon_me3, seed 1, 150 s in: the Alliance fleet is down to 21 of
+49 hulls and their stations still span 482 km² of the formation's plan, 23.0 km² a hull where it deployed at
+19.1. No order closed it up; Hold formation sent hulls back to the same holed layout.
+
+**Change.** `regroup` gives the survivors a fresh formation of their own number, centred where they now are and
+facing the enemy; each hull takes the nearest free station of its own class, nearest pairs first, so nobody
+crosses the formation. Hulls fly to station with their guns on their targets. Once 80 % are on station, or after
+60 s at most, the fleet resumes the attack by itself.
+
+**Measured.** Same battle: stations span 482 → 98 km², mean gap between neighbouring stations 2.60 → 1.58 km,
+worst 5.1 → 2.3 km. Battle of Earth, ordered at 80 s: no hull on its new station at the order, 80 % formed and
+attacking again 29.5 s later, 114 shots fired meanwhile, no two hulls touching at any tick. Matching hulls to the
+nearest station matters: without it the same fleet needed the full 60 s.
+
+What it is worth, eight seeds each, the Alliance ordered to regroup once:
+
+| Battle | Battle length | Alliance hull lost | Reaper hull lost |
+|---|---:|---:|---:|
+| Battle of Earth, prime_apex (Alliance wins), at 60 s | 172.2 → 143.7 s | 0.296 → 0.260 | all |
+| Battle of Earth, canon_me3 (Alliance loses), at 60 s | 194.0 → 176.9 s | all | 0.059 → 0.071 |
+| Final Battle of Earth, canon_me3, at 120 s | 308.5 → 288.4 s | all | 0.481 → 0.486 |
+
+A winning fleet finishes sooner with fewer losses; a losing one does slightly more damage and dies sooner.
+
+### Screen
+
+**Defect.** A formation's escort stations face the way the fleet deployed. Control battle (weapons do no damage;
+4 dreadnoughts, 8 cruisers, 8 frigates hold formation; 11 Reapers flank), at 160 s: 7 of the 16 escorts stand
+between the capitals and the enemy, the escorts are 60° off that line on average, and the nearest Reaper is
+6.4 km from a dreadnought.
+
+**Change.** Under `screen` the capitals hold their formation, which does not turn, and the escorts stand in a
+dish between the capitals' centre and the enemy's, 0.4 of the way out (at most 0.6 of the fleet's range). The
+dish swings as the enemy's bearing changes. An escort keeps its formation offset across and up the dish, so
+stations that were clear of each other stay clear; ranks of the formation become layers of the dish. Escorts
+favour whatever is shooting at their capitals.
+
+**Measured.** Same battle: 16 of 16 escorts between, 22° off the line, nearest Reaper 9.0 km from a dreadnought,
+every hull firing, capitals within 1.5 km of their stations. At Earth the closest pair of screen stations is
+0.32 km clear of the two hulls' radii, and no two hulls touch at any tick over 200 s on four seeds.
+
+What it is worth with weapons live (54 Alliance hulls defending against 11 Reapers, eight seeds, 240 s):
+
+| Enemy | Order | Reaper hull destroyed | Dreadnought hull lost | Fleet hull lost |
+|---|---|---:|---:|---:|
+| Flanks | Screen | 0.694 | 0.974 | 0.881 |
+| Flanks | Hold formation | 0.643 | 0.958 | 0.870 |
+| Attacks head-on | Screen | 0.845 | 0.913 | 0.790 |
+| Attacks head-on | Hold formation | 0.915 | 0.885 | 0.725 |
+
+**The screen does not protect the capitals here.** Nothing in the simulation blocks a line of fire, so a Reaper
+shoots past the escorts at whichever hull it chose. Against a flanker the screening fleet does a little more
+damage for the same losses; head-on it does worse than holding formation. It is a posture a commander can
+order and see; it will only be worth ordering once hulls mask fire. Nothing was tuned to make it look better.
+
+**Tests.** `tests/regroup.test.ts` (4) and `tests/screen.test.ts` (3) hold the figures above, the contact checks
+and determinism.
+
+**Not done:** AI fleets ordering either for themselves; line-of-fire masking.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the

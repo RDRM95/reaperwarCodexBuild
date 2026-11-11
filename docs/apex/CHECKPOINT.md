@@ -12,11 +12,11 @@ Read this section first. Everything below it is older.
 
 **Also in this stack:** hulls no longer give way to fighters. Carriers holding formation were pushed 5 to 6 km off station by their own wings (they now hold within 0.11 km); "Slice 6" in the same note. **Needs a sandbox port.**
 
-**Built locally, not yet pushed (`feat/fleet-regroup-order-20261111`):** a Regroup order. Measured defect: in the Final Battle of Earth at 150 s a fleet down to 21 of 49 hulls still flies its 34 km deployment frontage with gaps up to 15 km. The order gives the survivors a fresh compact formation where they stand and resumes the attack once 80 % are on station or after 60 s. Simulation, AI and HUD button are written and typecheck; tests, contact check and twelve-seed batch are still to do.
+**Also in this stack (3D combat slice 7):** two more fleet orders, **Regroup** and **Screen**, in the simulation and as HUD buttons. Regroup gives a fleet's survivors a fresh compact formation where they stand and resumes the attack once formed (about 30 s); a winning fleet finishes sooner with fewer losses. Screen holds the capitals in formation and stands the escorts between them and the enemy wherever it is; it works geometrically (16 of 16 escorts between, was 7) but does not protect the capitals, because nothing in the simulation blocks a line of fire. "Slice 7" in the same note. **Needs a sandbox port.**
 
 **Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 5 to 8 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
 
-**3D combat still missing, in order:** regroup (see above) and screen orders (audit FS5); bearings that react to barrier state and local threat; carriers and fighters.
+**3D combat still missing, in order:** line-of-fire masking (without it a screen is only a picture); AI fleets ordering regroup or screen for themselves; bearings that react to barrier state and local threat; fighter squadron manoeuvres and carrier standoff.
 
 **The owner's directive of 11 Nov arrived cut off** in the middle of section 2 ("Do not simply change visual banking while leaving tactical"). Anything after that never reached the build agent.
 
