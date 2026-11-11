@@ -78,6 +78,37 @@ Alliance has 30 → 22 hulls left on seed 42 and 12 → 28 on seed 7. This slice
 **Cost.** Mean simulation tick, bundled, cloud CPU: 13.7 and 13.9 ms before, 14.9 and 13.9 ms after at 1,104
 ships (two runs each); 28.4 → 30.3 ms at 2,208.
 
+## Twelve seeds, not one
+
+A single seeded battle is chaotic: two builds that differ by almost nothing diverge by about a fifth in who hits
+what, so the per-seed outcome figures above cannot show small effects. `scripts/engagement-batch.ts` averages
+the same 54 v 38 battle over seeds 1 to 12 (up to 150 s each):
+
+| Mean of 12 seeds | `prime_apex` before | after | `reaper_hardcore` before | after |
+|---|---:|---:|---:|---:|
+| Battle length | 105.8 s | 111.9 s | 59.7 s | 56.4 s |
+| Reaper hull destroyed (share of all Reaper hull) | 0.215 | 0.216 | 0.002 | 0.000 |
+| Reapers destroyed | 8.58 | 7.42 | 0.08 | 0.00 |
+| Hits by frigates | 342 | 414 | 109 | 105 |
+| Alliance thickness | 0.096 | 0.382 | 0.148 | 0.146 |
+| Alliance attackers abaft their target's beam | 0.083 | 0.287 | 0.000 | 0.176 |
+| Samples with overlapping hulls | 0 | 0 | 0 | 0 |
+
+Under `prime_apex` the Alliance does the same damage to the Reapers' hulls, spread over more of them (about one
+fewer destroyed), and lasts about six seconds longer. Under `reaper_hardcore` the Alliance is destroyed in under a
+minute either way, before most of the swing has opened, so depth barely changes there at this fleet size.
+
+## Tried and not shipped: frigate attack runs
+
+A second slice gave frigates latched attack runs: in past the target on the side they approached from, on beyond
+it, about, and in again from the other side of the target's level. Measured the same way over 12 seeds, with
+runs against every target (34 runs a battle): Alliance attackers abaft the beam 0.287 → 0.382, but hits by
+frigates 414 → 316, Reaper hull destroyed 0.216 → 0.196 and Reapers destroyed 7.42 → 6.08. A frigate flying
+away from its target is not firing at it, and nothing in the simulation yet rewards being astern of a ship
+(there is no weaker stern armour, and the target's slew matters only for its narrow main battery). Restricting
+runs to capital-scale targets left about five runs a battle, too few to see. It is not merged; it needs either
+frigate weapons that bear while the hull extends, or a real advantage to an attack from astern, first.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the
@@ -101,7 +132,8 @@ numbers; `scripts/engagement-3d-qa.mjs` for the pictures.
 
 - The renders are from cloud software rendering in deep space, where hulls are dim; they show where ships are.
   Nobody has watched this in motion on the owner's hardware.
-- A swung station is a place to hold, not an attack run: frigates do not yet pass, extend and re-attack.
+- A swung station is a place to hold, not an attack run: frigates do not pass, extend and re-attack (see
+  "Tried and not shipped").
 - No breakthrough or regroup behaviour, no fleet-level intent orders (flank, breakthrough, screen), no
   class-specific reaction to barrier state, no faction-specific behaviour beyond the Reaper classes' own swings.
 - Reapers keep their rule of never backing off: a Reaper whose swung station lies farther from the enemy than
