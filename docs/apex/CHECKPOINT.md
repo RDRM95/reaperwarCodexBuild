@@ -2,9 +2,21 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 11 Nov 2026, 01:40 UTC — true 3D fleet combat, slice 1
+## State on 11 Nov 2026, 02:05 UTC — simulation in a Web Worker
 
 Read this section first. Everything below it is older.
+
+**Merged (Codex build, head `aff712f`):** #50 (twelve-seed outcomes for the 3D slice, the unshipped attack-run finding) and #52 (snapshot codec and mirror: `src/simulation/snapshot.ts`, `tests/snapshot-mirror.test.ts`; the mirror equals the simulation field for field over three seeded battles). Sandbox #43 (port of the 3D attack bearings) merged as `76f300e`.
+
+**Open at the time of writing:** the second worker slice, `feat/sim-worker-host-20261111`: the worker (`simWorkerCore.ts`, `simWorker.ts`), `RemoteBattle` (the mirror plus commands and queries), the `BattleLike` type the view and HUD now take, and the **Simulation thread** setting (default main; "Worker (experimental)" applies to the next battle). Measured in the real app with a real worker, cloud software rendering: the drawing thread's simulation cost per tick 9.63 → 0.74 ms at 1,104 ships and 21.25 → 1.19 ms at 2,208. Everything about it, including the known differences in worker mode and what remains, is in `docs/apex/SIM_WORKER_DESIGN_2026-11-11.md`. Merge when its checks pass.
+
+**What only the owner can do next:** turn the setting on with a large fleet on the RTX 5090 machine and say whether it is smoother; watch the 3D attack bearings in motion and judge them; judge the Alliance hulls against the private references.
+
+**Not ported to the sandbox:** the simulation tick speed-up (#43), the bloom fix (#44) and the worker (#52 and its second slice).
+
+## State on 11 Nov 2026, 01:40 UTC — true 3D fleet combat, slice 1
+
+Everything below this line is older than the section above.
 
 The owner's directive of 11 Nov ("COMPLETE DEVELOPMENT CONTINUATION") makes true three-dimensional fleet combat the top priority, and the owner also approved the Web Worker move for the simulation.
 
