@@ -1,0 +1,98 @@
+import { describe, expect, it } from 'vitest';
+import { buildScenario } from '@/scenarios';
+import { BattleSimulation } from '@/simulation/battle';
+import { REGROUP_FORMED_SHARE, REGROUP_TIME_LIMIT, regroupProgress } from '@/simulation/ai';
+import type { FleetState, ShipState } from '@/simulation/types';
+
+/**
+ * Regroup. A fleet that has taken losses went on flying the formation it deployed in, with a hole wherever a hull
+ * had died: in the Final Battle of Earth (canon_me3, seed 1) at 150 s the Alliance fleet is down to 21 of 49 hulls,
+ * still on its 34 km deployment frontage, with a gap of 15.2 km between neighbouring stations (5.6 km at
+ * deployment). No order closed it up; Hold formation sent hulls back to the same holed layout. The Regroup order
+ * gives the survivors a fresh formation of their own number where they stand, and resumes the attack once formed.
+ */
+const hulls = (sim: BattleSimulation, fleet: FleetState): ShipState[] =>
+  sim.ships.filter(s => s.fleetId === fleet.spec.id && s.alive && !s.escaped && s.role !== 'fighter');
+const nearest = (ships: ShipState[]): number[] => ships.map((a, i) =>
+  Math.min(...ships.filter((_, j) => j !== i).map(b => Math.hypot(a.slot.x - b.slot.x, a.slot.y - b.slot.y, a.slot.z - b.slot.z))));
+const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
+const firstFleet = (sim: BattleSimulation) => [...sim.fleets.values()].find(f => f.spec.side === 'A')!;
+const runTo = (sim: BattleSimulation, seconds: number) => { while (!sim.finished && sim.time < seconds) sim.step(); };
+
+describe('the regroup order', () => {
+  it('closes the gaps losses leave: survivors get a compact formation centred where they are', () => {
+    const sim = new BattleSimulation(buildScenario('final_battle_of_earth', 'canon_me3', 1));
+    const fleet = firstFleet(sim);
+    const deployedGap = Math.max(...nearest(hulls(sim, fleet)));
+    runTo(sim, 150);
+    const before = hulls(sim, fleet);
+    // Measured: 21 hulls left of 49, worst gap between neighbouring stations 15.2 km (5.6 km at deployment).
+    expect(before.length).toBeLessThan(30);
+    expect(Math.max(...nearest(before))).toBeGreaterThan(deployedGap * 2);
+    sim.issueOrders(fleet.spec.id, { order: 'regroup' });
+    const after = hulls(sim, fleet);
+    // Measured after: worst gap 3.8 km, mean 1.94 km against 1.89 km at deployment.
+    expect(Math.max(...nearest(after))).toBeLessThan(deployedGap);
+    expect(mean(nearest(after))).toBeLessThan(2.5);
+    // The new formation is centred on the survivors, so the line closes up over the shortest distance.
+    for (const axis of ['x', 'y', 'z'] as const) {
+      expect(fleet.anchor[axis]).toBeCloseTo(mean(after.map(s => s.pos[axis])), 6);
+      expect(mean(after.map(s => s.slot[axis]))).toBeCloseTo(0, 6);
+    }
+    expect(fleet.orders.order).toBe('regroup');
+  });
+
+  it('forms up in well under the time limit, keeps firing meanwhile, and resumes the attack on its own', () => {
+    const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
+    const fleet = firstFleet(sim);
+    runTo(sim, 80);
+    const shotsBefore = hulls(sim, fleet).reduce((n, s) => n + s.stats.shotsFired, 0);
+    sim.issueOrders(fleet.spec.id, { order: 'regroup' });
+    const startProgress = regroupProgress(fleet, sim.ships);
+    let progress = startProgress, resumedAt = -1;
+    while (!sim.finished && sim.time < 80 + REGROUP_TIME_LIMIT + 5) {
+      if (fleet.orders.order === 'regroup') progress = regroupProgress(fleet, sim.ships);
+      sim.step();
+      if (fleet.orders.order !== 'regroup') { resumedAt = sim.time; break; }
+    }
+    // Measured: no hull on its new station at the order; 81 % formed and attacking again 36 s later, having fired
+    // 499 shots meanwhile.
+    expect(startProgress).toBeLessThan(0.2);
+    expect(resumedAt - 80).toBeGreaterThan(10);
+    expect(resumedAt - 80).toBeLessThan(REGROUP_TIME_LIMIT - 10);
+    expect(progress).toBeGreaterThanOrEqual(REGROUP_FORMED_SHARE);
+    expect(fleet.orders.order).toBe('attack');
+    expect(hulls(sim, fleet).reduce((n, s) => n + s.stats.shotsFired, 0)).toBeGreaterThan(shotsBefore + 200);
+  });
+
+  it('no two hulls touch at any tick while a fleet regroups', () => {
+    const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
+    const fleet = firstFleet(sim);
+    runTo(sim, 80);
+    sim.issueOrders(fleet.spec.id, { order: 'regroup' });
+    let contacts = 0;
+    while (!sim.finished && sim.time < 135) {
+      sim.step();
+      const ships = sim.ships.filter(s => s.alive && !s.escaped && s.role !== 'fighter');
+      for (let i = 0; i < ships.length; i++) for (let j = 0; j < i; j++) {
+        const a = ships[i], b = ships[j], reach = a.radiusKm + b.radiusKm, dx = a.pos.x - b.pos.x;
+        if (dx > reach || dx < -reach) continue;
+        if (Math.hypot(dx, a.pos.y - b.pos.y, a.pos.z - b.pos.z) < reach) contacts++;
+      }
+    }
+    expect(contacts).toBe(0);
+  });
+
+  it('is the same manoeuvre for the same seed, and a fleet given no such order is not touched', () => {
+    const run = (regroup: boolean) => {
+      const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 3));
+      runTo(sim, 60);
+      if (regroup) sim.issueOrders(firstFleet(sim).spec.id, { order: 'regroup' });
+      runTo(sim, 100);
+      return sim.ships.map(s => [s.pos.x, s.pos.y, s.pos.z, s.slot.x, s.slot.y, s.slot.z]);
+    };
+    const a = run(true);
+    expect(a).toEqual(run(true));
+    expect(a).not.toEqual(run(false));
+  });
+});
