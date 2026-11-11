@@ -29,6 +29,8 @@ const ORDERS: { id: OrderType; label: string }[] = [
   { id: 'advance', label: 'Advance' },
   { id: 'flank', label: 'Flank' },
   { id: 'breakthrough', label: 'Break through' },
+  { id: 'regroup', label: 'Regroup' },
+  { id: 'screen', label: 'Screen' },
   { id: 'hold_formation', label: 'Hold formation' },
   { id: 'defend_position', label: 'Defend position' },
   { id: 'withdraw', label: 'Withdraw' },

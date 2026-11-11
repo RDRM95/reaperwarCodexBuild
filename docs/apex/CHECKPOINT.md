@@ -2,21 +2,24 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 11 Nov 2026, 13:40 UTC — deployment in depth
+## State on 11 Nov 2026, 15:40 UTC — regroup and screen orders
 
 Read this section first. Everything below it is older.
 
-**Merged since the section below:** Codex #56 (`d78638b`) and its sandbox port #46 (`b669f29`): hulls keep clear of each other at every tick. Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick the old base had contacts in 10 of 36 seeds of the control battle, and allied fleets deployed inside each other in the Final Battle of Earth. Now zero in 71 of the 72 battles measured, one 0.45 s graze left under the hardcore rules (`scripts/contact-check.ts`).
+**Merged today, Codex build and sandbox both:**
 
-**In this change (3D combat slice 5):** large fleets deploy in altitude bands (audit FS6). The Fifth Fleet is 11.7 km tall where it was 2.6 km; fleets under the battle-group threshold are unchanged. Figures, stills and the re-pinned layout tests are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 5". **Needs a sandbox port.**
+- Hulls keep clear of each other at every tick (Codex #56 `d78638b`, sandbox #46). Earlier notes said "no overlapping hulls" from looking every 5 s; counted at every tick the old base had contacts in 10 of 36 seeds of the control battle. Now none in 71 of 72 battles measured (`scripts/contact-check.ts`).
+- Large fleets deploy in altitude bands, audit FS6 (Codex #57 `322ed29`, sandbox #48): the Fifth Fleet is 11.7 km tall where it was 2.6 km.
+- Hulls do not give way to fighters (Codex #58 `414354a`, sandbox #49): carriers holding formation were pushed 5 to 6 km off station by their own wings and now hold within 0.11 km.
+- CI installs the browser alone when the runner cannot fetch system packages (Codex #59 `d7b5217`, and in the sandbox's two workflows via #49). The runners' package mirror was unreachable from 13:47 UTC for about two hours and every job died before its first test; retrying did not help, the fallback did.
 
-**Also in this stack:** hulls no longer give way to fighters. Carriers holding formation were pushed 5 to 6 km off station by their own wings (they now hold within 0.11 km); "Slice 6" in the same note. **Needs a sandbox port.**
+**In this change (3D combat slice 7):** two more fleet orders, **Regroup** and **Screen**, in the simulation and as HUD buttons (already in the sandbox's simulation through #49). Regroup gives a fleet's survivors a fresh compact formation where they stand and resumes the attack once formed (about 30 s); a winning fleet finishes sooner with fewer losses. Screen holds the capitals in formation and stands the escorts between them and the enemy wherever it is; it works geometrically (16 of 16 escorts between, was 7) but does not protect the capitals, because nothing in the simulation blocks a line of fire. Figures are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 7"; the slices before it are in the same note.
 
-**Built locally, not yet pushed (`feat/fleet-regroup-order-20261111`):** a Regroup order. Measured defect: in the Final Battle of Earth at 150 s a fleet down to 21 of 49 hulls still flies its 34 km deployment frontage with gaps up to 15 km. The order gives the survivors a fresh compact formation where they stand and resumes the attack once 80 % are on station or after 60 s. Simulation, AI and HUD button are written and typecheck; tests, contact check and twelve-seed batch are still to do.
+**The original `reaperwar` repository** runs a different simulation engine. Measured there on 11 Nov (canon_me3, seed 1): deployments are already deep (19 to 92 % as tall as their longest side) and clear; hull contacts at every tick exist (70 pair-ticks in Battle of Earth, 37 in the Final Battle of Earth); firing lines average 12 to 14° off the horizontal. The owner has been asked what to bring across; nothing there has been changed.
 
 **Measured and not built: AI fleets choosing flank or break-through.** Battles here last 100 to 170 s and a break-through needs about 220 s to get a fleet past its enemy, so a Reaper fleet ordered through from the start is still 5 to 8 km short when the battle ends (Battle of Earth, canon_me3 and prime_apex, six to eight seeds; outcomes unchanged). Fleet-level manoeuvres have no room to show until battles last longer or fleets close faster.
 
-**3D combat still missing, in order:** regroup (see above) and screen orders (audit FS5); bearings that react to barrier state and local threat; carriers and fighters.
+**3D combat still missing, in order:** line-of-fire masking (without it a screen is only a picture); AI fleets ordering regroup or screen for themselves; bearings that react to barrier state and local threat; fighter squadron manoeuvres and carrier standoff.
 
 **The owner's directive of 11 Nov arrived cut off** in the middle of section 2 ("Do not simply change visual banking while leaving tactical"). Anything after that never reached the build agent.
 
