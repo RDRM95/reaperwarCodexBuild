@@ -380,7 +380,7 @@ crosses the formation. Hulls fly to station with their guns on their targets. On
 **Measured.** Same battle: stations span 482 → 98 km², mean gap between neighbouring stations 2.60 → 1.58 km,
 worst 5.1 → 2.3 km. Battle of Earth, ordered at 80 s: no hull on its new station at the order, 80 % formed and
 attacking again 29.5 s later, 114 shots fired meanwhile, no two hulls touching at any tick. Matching hulls to the
-nearest station matters: without it the same fleet needed the full 60 s.
+nearest station matters: measured before it was added, the fleet had not formed when the 60 s limit ran out.
 
 What it is worth, eight seeds each, the Alliance ordered to regroup once:
 
