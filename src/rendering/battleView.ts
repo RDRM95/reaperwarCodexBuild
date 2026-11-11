@@ -14,7 +14,7 @@ import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
 import { InstancedFleet } from './instancedFleet';
 import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
 import { detailReach } from '@/core/hardwareProfile';
-import { engineGlowSize, farPointBrightness } from './visualWeight';
+import { engineGlowSize, farPointBrightness, muzzleFlashSize } from './visualWeight';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -633,8 +633,7 @@ export class BattleView {
             direction: new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z).normalize()
           };
           const pov = this.rig.mode === 'gunnery' && ship.id === this.followId;
-          this.effects.muzzleFlash(pose.position, pose.direction,
-            pov ? (big ? 1.8 : 0.75) : (big ? 3.6 : 1.2), ship.faction === 'reaper');
+          this.effects.muzzleFlash(pose.position, pose.direction, muzzleFlashSize(w.def.damage, pov), ship.faction === 'reaper');
           if (big && this.rig.mode === 'projectile') this.projectileTrack = { id: this.sim.projectiles[this.sim.projectiles.length - 1]?.id ?? 0 };
           break;
         }
