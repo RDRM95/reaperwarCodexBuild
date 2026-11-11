@@ -2,9 +2,19 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 11 Nov 2026, 02:05 UTC — simulation in a Web Worker
+## State on 11 Nov 2026, 02:45 UTC — worker merged, altitude lanes
 
 Read this section first. Everything below it is older.
+
+**Merged since the section below was written:** #53 (`640c8fa`), the worker simulation behind the Simulation thread setting. The line below that calls it open is out of date; everything else there stands.
+
+**In this change:** altitude lanes for allied fleets (3D combat slice 2). The first fleet of a side keeps its level; each further fleet takes a lane above or below while it closes. Final Battle of Earth: the Alliance fleets' anchors spread 1.1 → 10.9 km in altitude and each fleet's hulls stack at -0.4, +4.0, -3.7, +2.7 and -1.5 km. Single-fleet sides are unaffected. Details, measurements and the cost (about five points less enemy hull destroyed inside 150 s in two of three scenarios) are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 2". `scripts/scenario-batch.ts` measures a built-in scenario over several seeds. The sandbox port follows the same way as #43.
+
+**3D combat still missing, in order:** flat deployment within a fleet (audit FS6; the composer branch is stale), fleet intent orders (flank, breakthrough, screen, regroup), Reaper capitals penetrating a formation, bearings that react to barrier state and local threat, carriers and fighters.
+
+## State on 11 Nov 2026, 02:05 UTC — simulation in a Web Worker
+
+Everything below this line is older than the section above.
 
 **Merged (Codex build, head `aff712f`):** #50 (twelve-seed outcomes for the 3D slice, the unshipped attack-run finding) and #52 (snapshot codec and mirror: `src/simulation/snapshot.ts`, `tests/snapshot-mirror.test.ts`; the mirror equals the simulation field for field over three seeded battles). Sandbox #43 (port of the 3D attack bearings) merged as `76f300e`.
 
