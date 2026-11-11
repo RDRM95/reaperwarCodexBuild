@@ -469,6 +469,47 @@ they stand off).
 pair of allied lanes at 100 s is 1.3 km apart (was 2.2 km) because one fleet is still descending to its lane; the
 floor is now 1 km, with the reason in the test.
 
+## Slice 9: Reaper capitals advance as individuals
+
+**Defect** (owner's report: "ships reaper still move a bit too rigid, like they are all in a line, i know they are
+organised but its different"). Measured on the default Custom Battle and on the same battle at four times its
+size (canon_me3, three seeds, capitals only, 40 to 140 s):
+
+| | Default, before | Default, after | ×4, before | ×4, after |
+|---|---:|---:|---:|---:|
+| Velocity alignment (1 = all moving the same way) | 0.73 | 0.47 | 0.75 | 0.56 |
+| Height spread | 1.1 km | 2.3 km | 3.2 km | 3.7 km |
+| Depth spread | 2.9 km | 3.8 km | 7.6 km | 6.9 km |
+| Nearest neighbour, off abreast | 41° | 55° | 53° | 55° |
+| Capitals firing | 93 % | 91 % | 95 % | 96 % |
+
+**Cause.** A capital's attack swing was 3° to 12°, and its class line moved forward as a block, which put every
+capital at the same distance from the enemy.
+
+**Change.** Each capital fights at its own share of its range, between 0.52 and 0.86, fixed for the hull for the
+battle from its identity (`pressOf`, `REAPER_PRESS` in `ai.ts`), and swings 8° to 26° round its target
+(`manoeuvre.ts`). A 10° to 36° swing loosened them more but cost fire at the default size (86 % firing); 8° to 26°
+kept it.
+
+**A second change this needed** (`separation.ts` and its reference). A Reaper clearing another hull was only ever
+allowed to sidestep, never to give ground. With capitals on individual paths, a destroyer overtaking a capital
+could not slow down and grazed it in one pinned seed (20 ticks, 6.2 %). A Reaper may now brake for a hull of its own
+side while it is advancing on its target. It still never backs away: a Reaper that is not advancing only
+sidesteps, and the existing test of that rule passes unchanged.
+
+**Checked.** Hull contacts at every tick: none in 68 battles (control battle 36 seeds prime_apex, 12 canon_me3,
+8 reaper_hardcore; Battle of Earth, Final Battle of Earth and Palaven four seeds each). The hardcore graze that
+remained after slice 4 is gone. **Balance**, measured and not tuned: same winners in all six scenario sets. In the
+twelve-seed control battle the Reapers lose less hull (0.227 → 0.166) and frigates land fewer hits (490 → 393):
+capitals that press individually fight better. Scenario lengths move −16 % to +6 %.
+
+**Tests.** `tests/reaper-advance.test.ts` (2). `tests/regroup.test.ts`: its first case asserted how much area the
+survivors' stations span, which depends on how many hulls a given battle leaves; it now asserts what the order is
+for, that the gaps between neighbouring stations shrink (mean by at least a tenth, worst by at least a fifth).
+
+**Limits.** Line-ness along the fleet's width is unchanged: a wide Reaper fleet is still wide, and capitals keep
+their order along it. Destroyers are untouched. Nobody has watched this in motion.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the

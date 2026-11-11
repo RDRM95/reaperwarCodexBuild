@@ -7,19 +7,14 @@ import type { FleetState, ShipState } from '@/simulation/types';
 /**
  * Regroup. A fleet that has taken losses went on flying the formation it deployed in, with a hole wherever a hull
  * had died: in the Final Battle of Earth (canon_me3, seed 1) at 150 s the Alliance fleet is down to 21 of 49 hulls
- * and their stations still cover 482 km² of the formation's plan, 23.0 km² a hull where it deployed at 19.1. No
- * order closed it up; Hold formation sent hulls back to the same holed layout. The Regroup order gives the
- * survivors a fresh formation of their own number where they stand (98 km²), and resumes the attack once formed.
+ * with gaps of up to 7.1 km between neighbouring stations (2.85 km on average). No order closed it up; Hold
+ * formation sent hulls back to the same holed layout. The Regroup order gives the survivors a fresh formation of
+ * their own number where they stand, and resumes the attack once formed.
  */
 const hulls = (sim: BattleSimulation, fleet: FleetState): ShipState[] =>
   sim.ships.filter(s => s.fleetId === fleet.spec.id && s.alive && !s.escaped && s.role !== 'fighter');
 const nearest = (ships: ShipState[]): number[] => ships.map((a, i) =>
   Math.min(...ships.filter((_, j) => j !== i).map(b => Math.hypot(a.slot.x - b.slot.x, a.slot.y - b.slot.y, a.slot.z - b.slot.z))));
-/** The plan area the fleet's stations span: width times depth. */
-const footprint = (ships: ShipState[]): number => {
-  const span = (axis: 'x' | 'z') => Math.max(...ships.map(s => s.slot[axis])) - Math.min(...ships.map(s => s.slot[axis]));
-  return span('x') * span('z');
-};
 const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
 const firstFleet = (sim: BattleSimulation) => [...sim.fleets.values()].find(f => f.spec.side === 'A')!;
 const runTo = (sim: BattleSimulation, seconds: number) => { while (!sim.finished && sim.time < seconds) sim.step(); };
@@ -28,18 +23,20 @@ describe('the regroup order', () => {
   it('closes the gaps losses leave: survivors get a compact formation centred where they are', () => {
     const sim = new BattleSimulation(buildScenario('final_battle_of_earth', 'canon_me3', 1));
     const fleet = firstFleet(sim);
-    const deployed = hulls(sim, fleet), deployedFootprint = footprint(deployed);
+    const deployed = hulls(sim, fleet);
     runTo(sim, 150);
-    const before = hulls(sim, fleet), footprintBefore = footprint(before), gapBefore = mean(nearest(before)), worstBefore = Math.max(...nearest(before));
-    // Measured: 21 hulls left of 49, on 482 km² of stations (935 km² at deployment): the formation has not closed up.
-    expect(before.length).toBeLessThan(deployed.length * 0.6);
-    expect(footprintBefore / before.length).toBeGreaterThan(deployedFootprint / deployed.length * 0.9);
+    const before = hulls(sim, fleet), gapBefore = mean(nearest(before)), worstBefore = Math.max(...nearest(before));
+    // The fleet has taken losses. How many, and which, differs with every change to how battles go: three versions
+    // of this battle left 21, 21 and 31 hulls of 49, with mean gaps between neighbouring stations of 2.69 to
+    // 2.85 km and worst gaps of 7.1 to 15.6 km.
+    expect(before.length).toBeLessThan(deployed.length * 0.8);
+    expect(before.length).toBeGreaterThan(5);
     sim.issueOrders(fleet.spec.id, { order: 'regroup' });
     const after = hulls(sim, fleet);
-    // Measured after: 98 km²; mean gap between neighbouring stations 2.60 km to 1.58 km, the worst 5.1 km to 2.3 km.
-    expect(footprint(after)).toBeLessThan(footprintBefore * 0.5);
-    expect(mean(nearest(after))).toBeLessThan(gapBefore);
-    expect(Math.max(...nearest(after))).toBeLessThan(worstBefore);
+    // Regrouping closes the gaps: in those versions the mean fell to 1.57 to 2.31 km and the worst to 2.3 to 5.4 km.
+    // (The area the stations span is not asserted: above the battle-group size a fresh formation is no smaller.)
+    expect(mean(nearest(after))).toBeLessThan(gapBefore * 0.9);
+    expect(Math.max(...nearest(after))).toBeLessThan(worstBefore * 0.8);
     // The new formation is centred on the survivors, so the line closes up over the shortest distance.
     for (const axis of ['x', 'y', 'z'] as const) {
       expect(fleet.anchor[axis]).toBeCloseTo(mean(after.map(s => s.pos[axis])), 6);
@@ -52,7 +49,10 @@ describe('the regroup order', () => {
     const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
     const fleet = firstFleet(sim);
     runTo(sim, 80);
-    const shotsBefore = hulls(sim, fleet).reduce((n, s) => n + s.stats.shotsFired, 0);
+    // Shots by every hull of the fleet, lost or not: a hull that dies while the fleet forms up still fired.
+    const everyHull = sim.ships.filter(s => s.fleetId === fleet.spec.id && s.role !== 'fighter');
+    const shots = () => everyHull.reduce((n, s) => n + s.stats.shotsFired, 0);
+    const shotsBefore = shots();
     sim.issueOrders(fleet.spec.id, { order: 'regroup' });
     const startProgress = regroupProgress(fleet, sim.ships);
     let progress = startProgress, resumedAt = -1;
@@ -61,14 +61,14 @@ describe('the regroup order', () => {
       sim.step();
       if (fleet.orders.order !== 'regroup') { resumedAt = sim.time; break; }
     }
-    // Measured: no hull on its new station at the order; 80 % formed and attacking again 29.5 s later, having fired
-    // 114 shots meanwhile.
+    // Measured: no hull on its new station at the order; 81 % formed and attacking again 38.9 s later, having fired
+    // 167 shots meanwhile.
     expect(startProgress).toBeLessThan(0.2);
     expect(resumedAt - 80).toBeGreaterThan(10);
     expect(resumedAt - 80).toBeLessThan(REGROUP_TIME_LIMIT - 10);
     expect(progress).toBeGreaterThanOrEqual(REGROUP_FORMED_SHARE);
     expect(fleet.orders.order).toBe('attack');
-    expect(hulls(sim, fleet).reduce((n, s) => n + s.stats.shotsFired, 0)).toBeGreaterThan(shotsBefore + 50);
+    expect(shots()).toBeGreaterThan(shotsBefore + 50);
   });
 
   it('no two hulls touch at any tick while a fleet regroups', () => {
