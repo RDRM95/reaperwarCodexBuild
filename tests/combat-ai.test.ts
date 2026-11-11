@@ -112,7 +112,10 @@ describe('disciplined fleet combat regressions', () => {
     const positions = line.map(s => ({ ...s.pos }));
     advance(sim, 60);
     for (const [i, ship] of line.entries()) {
-      expect(distance(ship.pos, slotToWorld(fleet.anchor, fleet.heading, ship.slot))).toBeLessThan(1.2);
+      // A dreadnought now steps its firing station round the target by up to 14° (three-dimensional attack
+      // bearings), so it holds up to the chord of that swing from its deployment slot: 2 × 17 km × sin 7° = 4.1 km.
+      // Measured 1.87 to 3.70 km; this was 1.2 km while the line was a rigid row. It still stops there and fires.
+      expect(distance(ship.pos, slotToWorld(fleet.anchor, fleet.heading, ship.slot))).toBeLessThan(4.2);
       expect(distance(ship.pos, positions[i])).toBeLessThan(0.5);
       expect(length(ship.vel)).toBeLessThan(ship.maxSpeed * 0.04);
       expect(ship.stats.shotsFired).toBeGreaterThan(0);
@@ -121,6 +124,10 @@ describe('disciplined fleet combat regressions', () => {
     for (let i = 0; i < line.length; i++) for (let j = i + 1; j < line.length; j++) {
       expect(length(sub(line[i].pos, line[j].pos))).toBeGreaterThan(line[i].radiusKm + line[j].radiusKm);
     }
+    // The firing line is stepped above and below the target's level, not one row (measured +1.85 to -2.01 km).
+    const heights = line.map(s => s.pos.y - target.pos.y);
+    expect(Math.max(...heights)).toBeGreaterThan(1);
+    expect(Math.min(...heights)).toBeLessThan(-1);
   });
 
   it('target commitment survives a new fleet preference, while an explicit ship command takes effect immediately', () => {
