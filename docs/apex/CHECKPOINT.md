@@ -2,9 +2,21 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 11 Nov 2026, 02:45 UTC — worker merged, altitude lanes
+## State on 11 Nov 2026, 03:40 UTC — fleet intents
 
 Read this section first. Everything below it is older.
+
+**Merged since the section below:** Codex #54 (`f3f72ab`, altitude lanes, with the worker browser test made independent of renderer speed) and its sandbox port #44 (`db15536`).
+
+**In this change (3D combat slice 3):** two fleet orders, **Flank** and **Break through**, in the simulation and as HUD buttons. Flank takes a fleet 65° round the enemy at its own range; break through drives it past the enemy to the far side, hulls keeping their places in the line until it is through. Measurements, the hull-track plot and what the orders are worth over twelve seeds are in `docs/apex/COMBAT_3D_ENGAGEMENT_QA_2026-11-11.md`, "Slice 3". The sandbox port needs the simulation and type changes only: its interface is its own.
+
+**The owner's directive of 11 Nov arrived cut off** in the middle of section 2 ("Do not simply change visual banking while leaving tactical"). Anything after that sentence, and any later sections, never reached the build agent.
+
+**3D combat still missing, in order:** screen and regroup orders and AI fleets choosing an intent; flat deployment within a fleet (audit FS6; the composer branch is stale); Reaper capitals penetrating a formation; bearings that react to barrier state and local threat; carriers and fighters.
+
+## State on 11 Nov 2026, 02:45 UTC — worker merged, altitude lanes
+
+Everything below this line is older than the section above.
 
 **Merged since the section below was written:** #53 (`640c8fa`), the worker simulation behind the Simulation thread setting. The line below that calls it open is out of date; everything else there stands.
 

@@ -146,6 +146,61 @@ lanes shift whole fleets inside that. Nobody has watched it in motion.
 Final Battle of Earth's Alliance fleets end more than 10 km apart in altitude, each on its own side of its
 starting level, at least 1.5 km from the next, with no overlapping hulls; the same seed gives the same anchors.
 
+## Slice 3: fleet intents — flank and break through
+
+**Defect.** A fleet's orders could only close it straight at its enemy and stop (attack, advance), hold it, or
+take it away. There was no way to say where to attack from.
+
+**Change.** Two new fleet orders, in the simulation (`OrderType`, `manoeuvreGoal` in `src/simulation/ai.ts`) and
+as HUD buttons:
+
+- **Flank**: the fleet goes round to one side of the enemy, 65° from the bearing it stood on when the order was
+  given, at its own engagement range, and fights from there. It turns the way its approach lane lies, so the same
+  fleet turns the same way in a replay.
+- **Break through**: the fleet drives past the enemy to a station 0.6 of its engagement range beyond it. Until it
+  is through, every hull keeps its place in the line and goes with it, guns on its target, instead of holding a
+  range band (which would stop the line short).
+
+Either is a destination for the fleet's anchor, so it is a manoeuvre with an end, not an orbit. Once there the
+fleet fights like any attacking fleet; a different order drops the manoeuvre, and the same order given again
+starts from where the fleet then stands. Hulls still choose targets, attack bearings and fire for themselves.
+Both orders work in worker mode (they are ordinary `issueOrders` patches).
+
+**Measured**, in a control battle where weapons do no damage (20 Alliance hulls against 11 Reapers holding
+formation, seed 42):
+
+| Order | On station | Anchor's bearing round the enemy | Anchor's distance | Hulls that fired | Overlap samples |
+|---|---:|---:|---:|---:|---:|
+| Attack | holds at range | 0.3° | 14.3 km of a 17.6 km range | 20/20 | 0 |
+| Flank | 103 s | 62.1° (hulls' centre 57.8°) | 14.3 km | 20/20 | 0 |
+| Break through | 219 s | 12.5 km past the enemy's centre, 15 of 20 hulls past it | | 20/20 | 0 |
+
+During the breakthrough the closest pair of opposing hulls had bounding spheres overlapping by 30 m at one
+sample (spheres of half a hull's length; hulls are far slimmer than that).
+
+`qa/combat-3d-20261111/fleet-intent-tracks.png` plots 300 s of hull tracks from above for each order (a plot of
+the simulation's own positions, not a render).
+
+**What the orders are worth**, `scripts/engagement-batch.ts`, twelve seeds, 54 Alliance hulls against 38 Reapers,
+the order standing from the start, in a battle the Alliance loses either way:
+
+| Alliance order | Battle length | Reaper hull destroyed | Reapers destroyed | Hits by frigates |
+|---|---:|---:|---:|---:|
+| Attack | 111.9 s | 0.216 | 7.42 | 414 |
+| Flank | 118.4 s | 0.207 | 7.58 | 385 |
+| Break through | 100.4 s | 0.199 | 6.75 | 448 |
+
+Flanking is about even with a straight attack here (the fleet lasts six seconds longer and does much the same
+damage). Breaking through an enemy that outguns you gets the fleet killed eleven seconds sooner. These are
+orders for a commander to choose; the AI does not give them to itself, and nothing here was tuned.
+
+`tests/fleet-intent.test.ts` (5 tests): attack is unchanged; flank reaches its station within the bounds above
+and fights from it; breakthrough carries the line past the enemy; a new order drops the manoeuvre and a repeat
+starts from the fleet's present bearing; the same seed and order give the same positions.
+
+**Not done:** screen and regroup orders; AI fleets choosing to flank or break through; Reaper capitals
+penetrating a formation on their own initiative.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the
