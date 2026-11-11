@@ -46,6 +46,10 @@ async function sample(page: Page) {
 }
 
 test('large battles render fleet counts with bounded inspected details and much less projection work', async ({ page }, testInfo) => {
+  // The heaviest interface test: 192 ships, three overlay modes and a cinematic under software rendering. On a slow
+  // runner it has twice run out of the default 120 s while passing in the twin run of the same commit. It asserts
+  // counts and state, not speed, so it takes the slow budget.
+  test.slow();
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await launchLarge(page);
   await expect(page.locator('.ship-list .fleet-summary')).toHaveCount(2);

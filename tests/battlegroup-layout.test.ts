@@ -30,12 +30,15 @@ function nearestVariation(ships: SlotShip[]) {
 }
 
 describe('cinematic battlegroup deployment', () => {
-  it('deploys broad, shallow mixed fleets with clear hulls and escorts ahead of their gun line', () => {
+  it('deploys broad mixed fleets in altitude bands with clear hulls and escorts ahead of their gun line', () => {
     const sim = deployment();
     const fleet = sim.ships.filter(s => s.side === 'A');
     const points = fleet.map(s => s.pos);
-    expect(extent(points, 'x')).toBeGreaterThan(extent(points, 'y') * 8);
-    expect(extent(points, 'y')).toBeLessThan(7);
+    // Broad, and banded in altitude: 50.4 wide and 11.9 tall. The flat deployment this replaced was under 7 tall and
+    // more than eight times as wide as tall.
+    expect(extent(points, 'x')).toBeGreaterThan(extent(points, 'y') * 3.5);
+    expect(extent(points, 'y')).toBeGreaterThan(9);
+    expect(extent(points, 'y')).toBeLessThan(15);
     expect(extent(points, 'z')).toBeGreaterThan(5);
     expect(extent(points, 'x')).toBeLessThan(55);
     const averageZ = (role: ShipState['role']) => {
@@ -71,7 +74,11 @@ describe('cinematic battlegroup deployment', () => {
     const column = [...assignSlots(ships, 'capital_column').values()];
     expect(extent(line, 'x')).toBeGreaterThan(extent(line, 'z') * 3);
     expect(extent(column, 'z')).toBeGreaterThan(extent(column, 'x') * 5);
-    expect(extent(line, 'y')).toBeLessThan(8);
+    // The line stands in altitude bands 13.1 tall (under 8 when deployments were flat), an eighth of its width. The
+    // bands are a share of the frontage, so the column, 9 wide, stays 6.0 tall.
+    expect(extent(line, 'y')).toBeGreaterThan(10);
+    expect(extent(line, 'y')).toBeLessThan(16);
+    expect(extent(line, 'x')).toBeGreaterThan(extent(line, 'y') * 5);
     expect(extent(column, 'y')).toBeLessThan(8);
   });
 });

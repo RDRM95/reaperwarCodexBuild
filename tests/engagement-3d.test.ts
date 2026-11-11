@@ -142,8 +142,13 @@ describe('a battle in three dimensions', () => {
     // earlier on converging courses, with these two seeds at 0.26 and 0.19), so each seed is held well clear of the
     // old figure and not to one seed's value.
     expect(mean(samples, 'A', 'abaftShare')).toBeGreaterThan(0.12);
-    // It starts as a formation: the first sample is still a sheet.
-    expect(samples.find(s => s.side === 'A')!.thickness).toBeLessThan(0.1);
+    // It starts as a formation, and since fleets deploy in altitude bands the formation has depth of its own: the
+    // first sample measured 0.045 when deployments were flat and 0.135 (seed 42) and 0.14 (seed 7) with the bands.
+    // Fighting still adds depth beyond that.
+    const first = samples.find(s => s.side === 'A')!.thickness;
+    expect(first).toBeGreaterThan(0.1);
+    expect(first).toBeLessThan(0.2);
+    expect(mean(samples, 'A', 'thickness')).toBeGreaterThan(first * 1.5);
     // Guns still take part: every dreadnought and Reaper capital fired, and nearly every cruiser and destroyer.
     const fired = (role: string) => sim.ships.filter(s => s.role === role && s.stats.shotsFired > 0).length / sim.ships.filter(s => s.role === role).length;
     expect(fired('dreadnought')).toBe(1);
