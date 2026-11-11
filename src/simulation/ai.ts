@@ -449,7 +449,8 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
 
   // Once the line is on station, freeze its basis. Individual hulls still
   // track targets; rotating a world-space line every tick causes orbital pursuit.
-  const canTurn = withdrawing || fleet.engagementMode === 'approach' || o.order === 'escort' || o.order === 'screen';
+  // A screening fleet's capitals keep the line they hold: the screen turns to face the enemy, the formation does not.
+  const canTurn = withdrawing || (fleet.engagementMode === 'approach' && o.order !== 'screen') || o.order === 'escort';
   const faceDir = withdrawing && desired ? sub(desired, fleet.anchor) : enemyPosition ? sub(enemyPosition, fleet.anchor) : undefined;
   if (canTurn && faceDir && faceDir.x * faceDir.x + faceDir.z * faceDir.z > 1e-6) {
     const target = normalize(v3(faceDir.x, 0, faceDir.z));
