@@ -181,3 +181,12 @@ The Pages deploy workflow succeeded on `ed39556`; check the run for `fb61d91`. T
 ## Rules in force
 
 Deterministic simulation (seeded Rng only; no `Math.random`, `Date.now`, `performance.now` or `process.env` under `src/simulation`, `src/data`, `src/scenarios`, `src/timelines`, `src/core`); no fake combat (ranges, arcs, barriers, charge, propulsion and collision decide outcomes; forced scene events are recorded as such); tests are the contract (a pinned value changes only with a measured new value and the reason in the commit); provenance on catalogue values; canon by default, AU labelled; HADES is a penetrator with a nuclear warhead; no ripped assets; GitHub's software WebGL is not hardware proof, so performance claims name what was measured and where.
+
+
+## SR-2 release handover — 11 Nov 2026, 18:46 UTC
+
+[Codex #51](https://github.com/RDRM95/reaperwarCodexBuild/pull/51) contains the original SR-2 geometry and rendered QA evidence. [Sandbox #47](https://github.com/RDRM95/reaper-war-sandbox/pull/47) merged as `20d6a39`; its Pages deployment and live six-view inspector check passed. Private references remain outside both repositories. The owner explicitly approved PR publication, coordination and safe merges. Final release status is recorded on [issue #16](https://github.com/RDRM95/reaperwarCodexBuild/issues/16).
+
+Codex now integrates `3e96c2e` (regroup/screen, carrier station, deployment depth and CI fallback), retaining the upstream checkpoint and overlay-test slow budget. SR-2 geometry is unchanged. On the preceding integrated head `b54418b`, all 448 unit tests, build and four targeted browser tests passed locally; both full CI runs and reference/large-fleet CI passed. The current head must pass CI before merging.
+
+Rounded fuselage, thin swept supports, separate stepped nacelles and paired fins reduce beam/length from 0.7943 to 0.4733. Gameplay length and gun datum stay fixed; exhaust nodes are verified against nozzle faces. Five material batches remain; full/reduced triangles are 1,752/1,460. See `docs/apex/NORMANDY_SR2_QA_2026-11-11.md` and its linked original-render evidence. SwiftShader checks establish draw counts and correctness, not RTX performance. Issue #16 remains unapproved: exact canon dimensions, underside detail and owner likeness review are outstanding.
