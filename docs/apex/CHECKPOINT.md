@@ -18,12 +18,9 @@ Two owner requests since the Reaper work below: a faster game at high ship count
 | #46 (`4d5917b`) | Sparks and debris fragments in instanced batches. Draw calls for the same paused frames 806 → 101 (208 ships) and 1,376 → 174 (988 ships); staged close-up frames match the previous build to within 7 of 921,600 pixels | `docs/apex/PERFORMANCE_EFFECT_BATCHING_2026-11-10.md`, `tests/effect-batches.test.ts`, `scripts/effects-batch-qa.mjs` |
 | #47 (`3336140`) | Alliance frigate as a swept-wing dart with a chisel bow (372 → 736 triangles; nodes unchanged) | `docs/apex/ALLIANCE_HULLS_QA_2026-11-10.md` (second slice) |
 
-**Merged (sandbox, base `main`):** #39 (`ef462d5`, death audio, port of Codex #41) and #40 (`8d67f8f`, port of Codex #45).
+**Merged (sandbox, base `main`, head `86d0598`):** #39 (`ef462d5`, death audio, port of Codex #41), #40 (`8d67f8f`, port of Codex #45), #41 (`9338b74`, port of Codex #46, keeping the sandbox's own budgets of 1,200 sparks and 800 fragments and ship pieces together; measured on the effects system alone in its own scene: 121 → 12 draw calls, frames equal to the previous `main` within 1/255 per pixel; a full sandbox battle was not measured) and #42 (`86d0598`, port of Codex #47). No renders of the new hulls were captured in the sandbox itself.
 
-**Open at the time of writing — check their state first, merge each when its checks pass:**
-
-- Sandbox #41 `port/effects-batching-20261110`: port of Codex #46, keeping the sandbox's own budgets (1,200 sparks; 800 fragments and ship pieces together). Measured on the effects system alone in its own scene: 121 → 12 draw calls, frames equal to `main` within 1/255 per pixel. A full sandbox battle was not measured.
-- Sandbox #42 `port/alliance-frigate-20261110`: port of Codex #47.
+**Nothing of this work is open.** Check the Pages deploy runs for Codex `3336140` and sandbox `86d0598`; the deployed sites cannot be fetched from the build environment.
 
 **Performance: what is measured and what is left.**
 
