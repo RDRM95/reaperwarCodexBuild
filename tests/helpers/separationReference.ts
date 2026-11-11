@@ -1,6 +1,8 @@
-// The vector implementation that src/simulation/separation.ts replaced, kept unchanged as the reference for
-// tests/separation-exact.test.ts: the optimised field must return bit-identical thrust requests.
+// The vector implementation that src/simulation/separation.ts replaced, kept as the reference for
+// tests/separation-exact.test.ts: the optimised field must return bit-identical thrust requests. It changes only
+// when the rule itself changes (the evasion term was added to both together).
 import { add, dot, length, lengthSq, normalize, scale, sub, v3, type Vec3 } from '@/core/vec3';
+import { SAFE_PASSING_MARGIN } from '@/simulation/separation';
 import type { ShipState } from '@/simulation/types';
 
 interface Neighbour {
@@ -126,8 +128,13 @@ export class ReferenceSeparationField {
     const closest = add(delta, scale(relative, closestAt));
     const closestDistance = length(closest);
     const pressure = dist < influence ? (influence - dist) / Math.max(clearance * 0.08, dist - clearance) : 0;
-    const anticipation = closestAt > 0 && closestDistance < clearance
+    const warning = closestAt > 0 && closestDistance < clearance
       ? (1 - closestDistance / clearance) * (horizon - closestAt) / Math.max(0.5, horizon * 0.3) : 0;
+    const safe = clearance * SAFE_PASSING_MARGIN;
+    const timeLeft = Math.max(0.5, closestAt);
+    const evasion = closestAt > 0 && closestDistance < safe
+      ? 2 * (safe - closestDistance) / (timeLeft * timeLeft * self.acceleration) : 0;
+    const anticipation = Math.max(warning, evasion);
     const strength = Math.max(pressure, anticipation);
     if (strength <= 0) continue;
     const direction = this.passingDirection(self, other, pressure >= anticipation ? delta : closest);
