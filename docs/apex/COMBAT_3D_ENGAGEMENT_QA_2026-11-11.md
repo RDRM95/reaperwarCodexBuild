@@ -428,6 +428,47 @@ and determinism.
 
 **Not done:** AI fleets ordering either for themselves; line-of-fire masking.
 
+## Slice 8: hulls close to gun range
+
+**Defect** (owner's report: "no one shoots and it looks boring"). Ships did fire, from 7 to 10 s in, but in a large
+fleet about half the escorts were not firing at any moment. The default Custom Battle at four times its size (224
+Alliance hulls against 48 Reapers, canon_me3, three seeds, sampled every 20 s between 60 and 140 s):
+
+| Class | Firing before | Firing after | Mean distance to target, before → after | Longest gun |
+|---|---:|---:|---:|---:|
+| Alliance frigate | 54 % | 91 % | 12.2 → 8.6 km | 9.6 km |
+| Alliance cruiser | 61 % | 86 % | 16.7 → 14.9 km | 14.4 km |
+| Alliance dreadnought | 80 % | 91 % | 20.9 → 20.8 km | 20.0 km |
+| Reaper destroyer | 89 % | 98 % | 14.7 → 13.1 km | 14.4 km |
+| Reaper capital | 98 % | 99 % | 23.3 → 21.6 km | 21.6 km |
+
+At the default size frigates went from 75 % to 100 % and dreadnoughts from 85 % to 96 %.
+
+**Cause.** Each class's line moves forward as one block, keeping every hull's lateral, vertical and depth offset
+from the class's reference station. In a wide or deep fleet a hull's own place could leave its target well beyond
+its guns, and the correction for that was bounded at 15 % of its range. Hulls parked at about 1.2 times range.
+
+**Change** (`src/simulation/ai.ts`). A hull whose station leaves its target outside its range closes until the
+target is at 0.94 of its range; the bound is gone. Its attack bearing still swings that station round the target.
+
+**Checked.** Worker mode was ruled out as a cause: with the simulation on its own thread the drawing side holds the
+same projectiles, missiles and beams (76 projectiles and 68 hulls having fired at 40 s in a real browser).
+Hull contacts at every tick: none in the control battle (12 seeds), Battle of Earth or the Final Battle of Earth
+(3 seeds each).
+
+**Balance**, measured and not tuned: the same side wins all six scenario sets (eight seeds each), and battles are
+shorter because more hulls take part. Battle of Earth 172.2 → 125.7 s under prime_apex and Reaper hull lost
+0.059 → 0.100 under canon_me3; Final Battle of Earth 153.3 → 112.8 s; Defence of Palaven 136.6 → 122.7 s.
+Control battle, twelve seeds: frigate hits 376 → 490.
+
+**Not fixed here.** In the four-times battle the fleets deploy at 2.9 times gun range, so for the first 30 to 40 s
+they are closing and almost nobody on the Alliance side can fire. Carriers fire little (their guns are short and
+they stand off).
+
+**Tests.** `tests/gun-range.test.ts` (2); both fail under the old rule. `tests/altitude-lanes.test.ts`: the closest
+pair of allied lanes at 100 s is 1.3 km apart (was 2.2 km) because one fleet is still descending to its lane; the
+floor is now 1 km, with the reason in the test.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the

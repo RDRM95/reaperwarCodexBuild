@@ -259,6 +259,9 @@ function manoeuvreGoal(fleet: FleetState, enemy: Vec3 | undefined, desiredRange:
   return goal;
 }
 
+/** A hull whose station is out of range closes to this share of its engagement range from its target. */
+export const CLOSING_RANGE = 0.94;
+
 /**
  * Screening. The fleet's capitals hold their formation and its escorts stand between them and the enemy, wherever the
  * enemy is: the screen is a dish centred on the line from the capitals to the enemy's centre, part of the way out,
@@ -711,7 +714,10 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const stationDistance = Math.sqrt(lengthSq(toTarget));
   const trimLimit = range * 0.15;
   if (stationDistance > range * 0.97) {
-    position = add(position, scale(normalize(toTarget), Math.min(trimLimit, stationDistance - range * 0.94)));
+    // A station that leaves the target outside this hull's guns is no station. The class line moves as a block, so
+    // in a wide or deep fleet a hull's own place could put it well beyond its range; the old bound of 15 % of range
+    // on this correction left such hulls parked just out of reach, not firing. It now closes until it can shoot.
+    position = add(position, scale(normalize(toTarget), stationDistance - range * CLOSING_RANGE));
   } else if (!noRetreat && stationDistance < band.min) {
     position = add(position, scale(normalize(toTarget), -Math.min(trimLimit, band.min - stationDistance)));
   }
