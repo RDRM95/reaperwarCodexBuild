@@ -44,6 +44,10 @@ export function renderSettings(app: App): HTMLElement {
           p.graphics.bloom = value === 'auto' ? undefined : value === 'on';
           void app.savePrefs();
         } }, [el('option', { value: 'auto', selected: p.graphics.bloom === undefined }, 'Auto: on with high quality'), el('option', { value: 'on', selected: p.graphics.bloom === true }, 'On: light sources glow softly'), el('option', { value: 'off', selected: p.graphics.bloom === false }, 'Off')])]),
+        el('label', { class: 'field' }, ['Simulation thread', el('select', { 'data-action': 'simulation-thread', onchange: (e: Event) => {
+          p.simulationThread = (e.target as HTMLSelectElement).value === 'worker' ? 'worker' : 'main';
+          void app.savePrefs();
+        } }, [el('option', { value: 'main', selected: p.simulationThread !== 'worker' }, 'Main: simulate on the drawing thread'), el('option', { value: 'worker', selected: p.simulationThread === 'worker' }, 'Worker (experimental): simulate off it; applies to the next battle')])]),
         el('label', { class: 'field' }, ['Level of detail', el('select', { onchange: (e: Event) => {
           p.graphics.lod = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();

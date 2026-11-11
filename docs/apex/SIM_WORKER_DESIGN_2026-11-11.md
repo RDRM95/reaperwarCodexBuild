@@ -45,19 +45,58 @@ as `postMessage` would, the mirror equals the simulation field for field every 2
 weapons, projectiles, missiles, flashes, fleets, events and the result. Any field the simulation starts to
 change that the codec does not carry fails that test.
 
-## Remaining slices, in order
+## Second slice: the worker and the controller mode
 
-1. **Worker and controller.** A worker entry that builds the simulation from a `BattleConfig`, steps to the time
-   the drawing thread asks for and posts snapshots; a controller mode that drives the view and HUD from the
-   mirror; a setting to choose it, off by default until measured in a browser.
-2. **Queries.** `primaryBatteryStatus` and `fleetBatteryStatus` read the simulation's private volley state:
-   compute them in the worker at HUD cadence and send them with the snapshot. `assessReapers(sim)` takes the
-   whole simulation: check it against the mirror or move it to the worker too.
-3. **Event timing.** Inline, a listener runs in the middle of a tick and sees the state at that instant; from a
-   snapshot it sees the state at the end of the tick. Handlers that read live weapon state at event time
-   (`weapon.beamHit` in `battleView.processEvents`) need checking.
-4. **Results.** `finishBattle` and the results screen keep the whole simulation after a battle; give them the
-   mirror, or have the worker post what they need.
-5. **Cost.** Encoding re-sends every dynamic field every tick; if the worker's 3 to 5 ms matters, send only
-   what the interface reads each frame at full rate and the rest at HUD cadence.
-6. **Sandbox.** Port once the Codex build runs on it by default.
+- `src/simulation/simWorkerCore.ts` is the worker's side of the protocol without the worker (so tests drive it
+  directly): `start` builds the simulation; `advance` steps it; `issueOrders`, `releasePrimaryVolley` and
+  `orderShipsAttack` are the commands. Every message after `start` is answered with a snapshot, every fleet's
+  battery status and the watched ship's main-battery status. `src/simulation/simWorker.ts` is the thin
+  `self.onmessage` wrapper, with the typed arrays transferred.
+- `src/simulation/remoteBattle.ts`: `RemoteBattle` is the mirror plus those commands and queries, so it can be
+  given to the view, the HUD and the overlay in place of a simulation (`BattleLike` in
+  `src/simulation/battleLike.ts` is the type both satisfy). It deploys the battle itself once, without stepping,
+  so there are ships on the first frame. Each frame the controller tells it how much simulated time has passed;
+  it applies the snapshots that are due and keeps the worker one tick ahead, so the picture does not wait on the
+  worker. If the worker falls behind, the picture holds and then resumes at real time; it does not try to repay.
+- The controller (`src/ui/app.ts`) uses it when the new setting **Simulation thread** is "Worker
+  (experimental)". The default is the main thread, and everything that steps a simulation itself (tests, the QA
+  scripts, the campaign's headless battles) is unchanged.
+
+**Measured in the real app** (`scripts/sim-thread-benchmark.mjs`: production build, a real Web Worker, the app's
+own frame loop, 40 s of wall time, 320×180 at low quality so the software renderer draws more frames):
+
+| Ships | Mode | Drawing thread, per simulated tick | Worst single frame's share | Mean script time per frame | Simulated time reached |
+|---:|---|---:|---:|---:|---:|
+| 1,104 | main | 9.63 ms | 25.4 ms | 18.6 ms | 13.8 s |
+| 1,104 | worker | 0.74 ms | 9.8 ms | 8.2 ms | 17.7 s |
+| 2,208 | main | 21.25 ms | 65.4 ms | 29.1 ms | 6.1 s |
+| 2,208 | worker | 1.19 ms | 13.0 ms | 17.2 ms | 9.0 s |
+
+The software renderer here draws about six frames a second, so these say what the drawing thread's script
+costs, not what frame rate a hardware GPU reaches. No page errors in either mode.
+
+`tests/remote-battle.test.ts` (4 tests) joins `RemoteBattle` to `SimWorkerCore` with every message cloned as
+`postMessage` would: ships on the first frame; driven at 60 frames a second, the battle is identical to an
+inline one with the same order issued, the order landing within two ticks of the frame it was given on; battery
+queries equal the inline simulation's; a silent worker holds the picture without a catch-up spiral.
+`e2e/sim-worker.spec.ts` runs a small battle through the real worker in the browser suite.
+
+**Known differences in worker mode** (why it is experimental and off by default):
+
+- An order takes effect up to two ticks (0.1 s) later than inline.
+- An event listener sees the state at the end of its tick, not the instant inside it.
+- While paused, an order shows in the HUD at once but its comms line and event arrive on resume.
+- `primaryBatteryStatus` for a newly selected ship is empty until the next answer from the worker.
+- The speed-up shows only where the simulation, not the renderer, limits the frame: with few ships it does
+  nothing useful.
+- Not measured on the owner's hardware.
+
+## Remaining, in order
+
+1. **Judge it on hardware.** Turn the setting on with a large fleet on the owner's machine; if it holds, make it
+   the default for large battles.
+2. **Event timing.** Check the handlers that read live weapon state at event time (`weapon.beamHit` in
+   `battleView.processEvents`) against end-of-tick state.
+3. **Cost.** Encoding re-sends every dynamic field every tick (2.9 ms at 1,104 ships in the worker); send only
+   what the interface reads each frame at full rate and the rest at HUD cadence if that matters.
+4. **Sandbox.** Port once the Codex build runs on it by default.

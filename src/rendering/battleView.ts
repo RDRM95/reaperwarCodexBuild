@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Rng } from '@/core/rng';
 import { cinematicPair, cinematicWing } from './director';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import type { BattleSimulation } from '@/simulation/battle';
+import type { BattleLike } from '@/simulation/battleLike';
 import { SIM_DT } from '@/simulation/battle';
 import type { BattleEvent, ShipState } from '@/simulation/types';
 import { getFaction } from '@/data/factions';
@@ -74,7 +74,7 @@ export class BattleView {
   private readonly sphere = new THREE.Sphere();
   readonly visuals = new Map<string, ShipVisual>();
   env!: EnvironmentBuild;
-  sim: BattleSimulation;
+  sim: BattleLike;
   /** Interpolation alpha within the current fixed step (0..1). */
   alpha = 0;
   selectedIds = new Set<string>();
@@ -117,7 +117,7 @@ export class BattleView {
   private bloom?: BloomPipeline;
   lodCounts = { full: 0, reduced: 0, point: 0 };
 
-  constructor(canvas: HTMLCanvasElement, sim: BattleSimulation, settings: GraphicsSettings) {
+  constructor(canvas: HTMLCanvasElement, sim: BattleLike, settings: GraphicsSettings) {
     this.settings = settings;
     this.instances.configure(settings.quality);
     const bloom = bloomFor(settings);
@@ -171,7 +171,7 @@ export class BattleView {
   }
 
   /** Attach to a (new) simulation, rebuilding the scene content. */
-  bind(sim: BattleSimulation): void {
+  bind(sim: BattleLike): void {
     this.sim = sim;
     for (const v of this.visuals.values()) this.scene.remove(v.built.group);
     this.visuals.clear();
