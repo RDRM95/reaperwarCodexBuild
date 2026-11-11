@@ -14,7 +14,7 @@ import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
 import { InstancedFleet } from './instancedFleet';
 import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
 import { detailReach } from '@/core/hardwareProfile';
-import { farPointBrightness } from './visualWeight';
+import { engineGlowSize, farPointBrightness } from './visualWeight';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -235,7 +235,7 @@ export class BattleView {
       built.engineNodes.forEach((node, i) => {
         const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 }));
         sp.position.copy(node);
-        const s = Math.max(0.3, built.lengthUnits * (ship.faction === 'reaper' ? 0.12 : 0.11)) * (built.glowScales?.[i] ?? 1);
+        const s = engineGlowSize(built.lengthUnits, ship.role, ship.faction === 'reaper') * (built.glowScales?.[i] ?? 1);
         sp.scale.set(s, s, 1);
         built.group.add(sp);
         glows.push(sp);

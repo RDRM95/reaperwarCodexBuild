@@ -23,3 +23,13 @@ export const pointDefenceBrightness = (reaper: boolean): number => (reaper ? 0.4
 
 /** Brightness of the glow a craft is drawn as when it is too far away to be a model. */
 export const farPointBrightness = (role: ShipRole): number => (role === 'fighter' ? 0.3 : 1);
+
+/**
+ * Size of an engine's glow sprite (render units). A hull's glow is a ninth of its length and never under 30 m, so
+ * that a frigate's drives still show. That floor made a fighter's glow 30 m on a 36 m craft: a ball of light the
+ * size of the fighter at each of its two engines. A fighter's glow is a fifth of its length, and never under 5 m.
+ */
+export function engineGlowSize(lengthUnits: number, role: ShipRole, reaper: boolean): number {
+  if (role === 'fighter') return Math.max(0.05, lengthUnits * 0.2);
+  return Math.max(0.3, lengthUnits * (reaper ? 0.12 : 0.11));
+}
