@@ -331,6 +331,35 @@ dispersed, column under 8 as before) and `tests/engagement-3d.test.ts` (the firs
 looks like and how it closes, not who can shoot. Small fleets and columns are as flat as they were. The
 composer branch `feat/fleet-composer-silhouette-20261109` is untouched and still stale.
 
+## Slice 6: carriers hold their station
+
+**Defect**, found while testing the screen order: two carriers of a fleet that was holding its line grazed each
+other. They should not have been moving at all. The clearance field treated a fighter like any other hull, so a
+carrier gave way to its own wing as it formed up and came back to land. Holding formation in the Battle of Earth
+(prime_apex, 150 s, wings in the air):
+
+| Seed | Carrier, furthest off station before | After | Dreadnought, before | After |
+|---|---:|---:|---:|---:|
+| 1 | 5.11 km | 0.01 km | 0.79 km | 0.14 km |
+| 2 | 5.43 km | 0.11 km | 0.20 km | 0.20 km |
+| 3 | 6.01 km | 0.00 km | 0.18 km | 0.16 km |
+
+This predates the collision work above (the same figures on `80ea61a`).
+
+**Change** (`src/simulation/separation.ts` and the reference it is compared with bit for bit): a hull ignores
+fighters in the clearance field. The fighter is the one that can turn; fighters still avoid hulls and each other.
+
+**Measured.** No fighter ends up deep inside a hull that is not its own carrier, before or after (sampled twice a
+second, 48 fighters aloft). Hull contacts at every tick: none in Battle of Earth, Final Battle of Earth and Defence
+of Palaven over four seeds each, nor in the control battle over twelve. Battles without fighters are bit for bit
+what they were (the twelve-seed control battle and Palaven reproduce exactly). With carriers, eight seeds each:
+the same side wins every time; Battle of Earth runs 157.0 → 172.2 s under prime_apex (Alliance hull lost 0.272 →
+0.296) and 167.6 → 194.0 s under canon_me3 (Reaper hull lost 0.065 → 0.059); Final Battle of Earth 150.5 → 153.3 s
+and 298.7 → 308.5 s. Measured, not tuned.
+
+**Tests.** `tests/carrier-station.test.ts` (3): on each of three seeds a carrier holding formation stays within
+0.5 km of its station with its wing flying, and no fighter is inside a foreign hull. They fail on the base.
+
 ## Evidence
 
 - `qa/combat-3d-20261111/edge-before-after.jpg`: the same battle at 10, 45 and 70 s, camera level with the
