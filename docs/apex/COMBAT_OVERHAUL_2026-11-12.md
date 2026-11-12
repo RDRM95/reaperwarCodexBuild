@@ -263,6 +263,23 @@ One carrier's wings on the way in, the same battle at 13 s, before and after (so
 
 Winners are the same in all twenty-eight battles, and every Reaper hull still arrives. `tests/battle-end.test.ts` has the cases: the second wave is on the field five seconds after the first wave's last hull; a side that has not yet deployed keeps its timetable; the scenario is not altered.
 
+## Eighth pass, same day: choosing a target without fetching every enemy
+
+**What was wrong.** The overhaul made the simulation dearer at two thousand ships, and part of that was not fighting. Counted in the 2,208-ship benchmark battle: about 87 hulls choose a target each tick and between them walk 100,000 enemy hulls; 94 % of those are out of sensor range in the first ten seconds and 62 % still are at a minute. Finding that out fetched each ship and then its position from memory. And since the first pass, a hull with nothing in sight walked the whole enemy a second time to find the nearest.
+
+**What changed.** The battle keeps this tick's enemy positions as packed numbers, in the order of the side lists, written through as each hull moves, and the choice rejects out-of-sight hulls from those without fetching them. The nearest hull is found in the same walk. A hull's engagement range is worked out once per movement goal, not twice. Nothing about what is chosen changes: seven battles (the two Earth battles under both rule sets, three Custom Battles at 208 to 552 ships) end in identical states, and `tests/target-choice-packed.test.ts` holds it (the packed numbers equal the hulls' positions at every one of 4,431 reads in a Battle of Earth with fighters launching and hulls dying mid-tick; a battle fought without them is the same battle; both fail if the write-through is taken out).
+
+| 2,208 ships, software timing on a shared machine | Before the overhaul | Before this pass | Now |
+|---|---:|---:|---:|
+| Target choice, 600 ticks under the profiler | 1.8 s | 3.6 s | 1.5 s |
+| Whole simulation, the same 600 ticks | 13.4 s | 20.8 s | 16.4 s |
+| Mean tick, first 20 s (the approach) | 20 to 21 ms | 26 to 35 ms | 20 to 24 ms |
+| Mean tick, whole 80 s | 25 ms (one run) | 36 to 41 ms (four runs) | 34 to 36 ms (two runs) |
+
+The approach costs what it did before the overhaul. Once the fleets are fighting the gain is small and within the run-to-run spread, because what costs there is the fighting: at 80 s twice as many hulls have fired as before the overhaul (1,032 against 512) and three times as many things happen a tick. What is left at the top of the profile is hull separation (17 %), weapons (17 %) and the movement goal (13 %).
+
+An earlier note here said a spatial query for target choice had been tried and gave nothing "because the cost is scoring candidates, not scanning". The count above shows that was wrong: scoring is a seventh of it; the cost was fetching ships that were then rejected. A spatial query did not help because sensor ranges are wide next to the fleets.
+
 ## What this pass does not do
 
 Against the directive's seven acceptance points:
@@ -273,6 +290,6 @@ Against the directive's seven acceptance points:
 4. *Friendly battle groups cross without deadlock.* Yes, measured in the second pass above: no delay, deadlock or contact when a fleet attacks through an allied fleet.
 5. *No clipping, frozen ships or glitches.* No hull contacts in the battles measured. Not looked at in motion.
 6. *Reapers and allies behave distinctly.* Kept: Reapers do not sprint, do not turn beam-on, press to individual distances and never back away.
-7. *Large battles remain playable.* The simulation is about a quarter dearer at 2,208 ships. Not run on real hardware.
+7. *Large battles remain playable.* At 2,208 ships the approach costs what it did before the overhaul; once fighting, a tick costs 30 to 50 % more than before it, because about three times as much happens in it (eighth pass). Not run on real hardware.
 
-Also not done: fighters still spend a third to a half of their time on the way out to a fight 55 to 77 km from their carrier (the third pass removed most of the time spent going home, not the distance); the simulation is about a quarter dearer at 2,208 ships than before the overhaul. A Reaper capital with a target in range is silent 15 % of the time, and every such second its target is outside its 70-degree bow arc (61 degrees off the bow at the median) while it turns at three degrees a second: escorts swinging round capitals, as the first pass made them do, get off the big guns' bows. That is left as it is. Dreadnoughts firing little in lopsided battles was traced and is distance, not behaviour: in the prime_apex Battle of Earth 91 Alliance hulls start 100 km from 10 Reapers and a second wave arrives 87 km away at about 55 s. Nothing here was judged by eye in motion.
+Also not done: fighters still spend a third to a half of their time on the way out to a fight 55 to 77 km from their carrier (the third pass removed most of the time spent going home, not the distance); a fighting tick at 2,208 ships is still 30 to 50 % dearer than before the overhaul (eighth pass). A Reaper capital with a target in range is silent 15 % of the time, and every such second its target is outside its 70-degree bow arc (61 degrees off the bow at the median) while it turns at three degrees a second: escorts swinging round capitals, as the first pass made them do, get off the big guns' bows. That is left as it is. Dreadnoughts firing little in lopsided battles was traced and is distance, not behaviour: in the prime_apex Battle of Earth 91 Alliance hulls start 100 km from 10 Reapers and a second wave arrives 87 km away at about 55 s. Nothing here was judged by eye in motion.

@@ -378,6 +378,31 @@ export class BattleSimulation implements AiContext {
     this.refreshSideCache();
     return side === 'A' ? this.sideCache.A : this.sideCache.B;
   }
+
+  /**
+   * Positions of this tick's side lists as packed numbers: x, y, z of hull k of a side at 3k, 3k+1, 3k+2. Choosing
+   * a target walks every enemy hull, and at two thousand ships most of them are out of sensor range; rejecting
+   * those from a packed array costs a few sequential reads where the ship object costs two memory fetches. Filled
+   * when a step's ship pass starts and written through as each hull moves, so it is current only during that pass.
+   */
+  private packed: Record<Side, Float64Array> = { A: new Float64Array(0), B: new Float64Array(0) };
+  private packedLive = false;
+
+  private packPositions(): void {
+    this.refreshSideCache();
+    for (const side of ['A', 'B'] as const) {
+      const list = this.sideCache[side];
+      if (this.packed[side].length < list.length * 3) this.packed[side] = new Float64Array(list.length * 3 + 96);
+      const out = this.packed[side];
+      for (let k = 0; k < list.length; k++) { const pos = list[k].pos; out[3 * k] = pos.x; out[3 * k + 1] = pos.y; out[3 * k + 2] = pos.z; }
+    }
+    this.packedLive = true;
+  }
+
+  /** Packed positions of `enemiesOf(side)`, in the same order, or undefined outside a step's ship pass. */
+  enemyPositions(side: Side): Float64Array | undefined {
+    return this.packedLive ? this.packed[side === 'A' ? 'B' : 'A'] : undefined;
+  }
   /** Point value aiming at each ship. Rebuilt every half second and kept current in between as hulls change target. */
   private readonly targetLoads = new Map<string, number>();
   private targetLoadsAt = -Infinity;
@@ -606,7 +631,15 @@ export class BattleSimulation implements AiContext {
     // Snapshot targets before the per-ship move/fire loop, with a movement
     // allowance so targets entering range mid-tick remain eligible.
     this.weaponTargetField = new WeaponTargetField(this.ships, dt, CLOSING_SPRINT);
+    this.packPositions();
+    // The side lists are this.ships in order, less the hulls that were gone when the tick began, so one cursor a
+    // side finds each hull's place in its list as the pass reaches it.
+    const listA = this.sideCache.A, listB = this.sideCache.B;
+    let cursorA = 0, cursorB = 0;
     for (const ship of this.ships) {
+      let place = -1;
+      if (ship.side === 'A') { if (listA[cursorA] === ship) place = cursorA++; }
+      else if (listB[cursorB] === ship) place = cursorB++;
       if (!ship.alive || ship.escaped) continue;
       ship.prevPos = clone(ship.pos);
       ship.prevHeading = clone(ship.heading);
@@ -622,10 +655,12 @@ export class BattleSimulation implements AiContext {
         if (ship.withdrawing && !wasWithdrawing) this.emit({ t: this.time, type: 'ship_withdrawing', shipId: ship.id });
       }
       this.updateMovement(ship, fleet, dt);
+      if (place >= 0) { const out = this.packed[ship.side]; out[3 * place] = ship.pos.x; out[3 * place + 1] = ship.pos.y; out[3 * place + 2] = ship.pos.z; }
       this.updateHousekeeping(ship, dt);
       this.updateCarrier(ship, fleet, dt);
       this.updateWeapons(ship, fleet, dt);
     }
+    this.packedLive = false;
 
     // Build after ship movement: every projectile sees current target positions.
     const projectileField = this.projectiles.length ? new ProjectileBroadphase(this.ships) : undefined;
