@@ -10,7 +10,9 @@ Read this section first. Everything below it is older.
 
 **In this change** (`docs/apex/COMBAT_OVERHAUL_2026-11-12.md`): hulls fight what is in reach, a fleet spreads its fire, a hull re-decides at once when its target dies, cruisers and carriers turn their side batteries to their target, hulls sprint to close, frigates and Reaper destroyers swing wider. Share of hull-time firing: 77 to 85 % under canon rules, 57 to 69 % under prime_apex (was 43 to 63 %); dreadnoughts fire about twice as often. Fleet commands audited by measurement: the HUD keeps Attack, Hold position, Withdraw and Retreat; Advance, Flank, Break through, Regroup, Screen and Defend position are removed. Measure with `scripts/combat-activity.ts`.
 
-**Not done from that directive, in the order to take them:** friendly formations crossing each other (nothing changed or measured yet); fighters (firing 14 to 20 % of the time, no squadron behaviour); dreadnoughts in lopsided battles (too slow to arrive); the simulation is a quarter dearer at 2,208 ships. Then: the three hull redesigns; the `reaperwar` port; the sandbox port of this change.
+**Second pass (same note):** fighters strafe the hull they attack and fly in wings of four that share their leader's target (firing 18 to 20 % → 33 to 41 % of the time); a fleet attacking through an allied fleet was measured and needs no fix (no delay, deadlock or contact; `tests/friendly-crossing.test.ts`). The first pass is merged as Codex #73 (`3981f49`).
+
+**Not done from that directive, in the order to take them:** fighters still spend half their time in transit and rearming, and a wing does not hold a formation; dreadnoughts in lopsided battles (too slow to arrive); the simulation is a quarter dearer at 2,208 ships; nothing has been judged in motion. Then: the sandbox port of the combat changes; the three hull redesigns; the `reaperwar` port.
 
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 
