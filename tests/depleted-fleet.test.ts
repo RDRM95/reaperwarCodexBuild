@@ -41,9 +41,9 @@ describe('a depleted fleet', () => {
       if (firstInRange >= 0) { ticks++; if (left.some(s => Math.hypot(s.vel.x, s.vel.y, s.vel.z) > s.maxSpeed * 0.3)) moving++; }
       if (modeAt100 === undefined && sim.time >= 100) modeAt100 = fleet.engagementMode;
     }
-    // Measured: in range at 22 s; from then the two hulls fly 5.7 units between them (7 km each) and are under way
-    // 5 % of the time; the fleet is holding at 100 s; they fire 382 shots each. Before: 139.9 units (175 km each),
-    // under way the whole time, the fleet "approaching" throughout, 384 and 379 shots.
+    // Measured: in range at 22 s; from then the two hulls fly 14.1 units between them (18 km each) and are under
+    // way 12 % of the time; the fleet is holding at 100 s; they fire 380 and 381 shots. Before: 139.9 units (175 km
+    // each), under way the whole time, the fleet "approaching" throughout, 384 and 379 shots.
     expect(firstInRange).toBeGreaterThan(0);
     expect(firstInRange).toBeLessThan(40);
     expect(flown).toBeLessThan(20);

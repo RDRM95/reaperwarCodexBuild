@@ -174,10 +174,10 @@ Reproduced without the rest of the battle (`tests/depleted-fleet.test.ts`): a fu
 
 | | Before | Now |
 |---|---:|---:|
-| Distance each dreadnought flies after first getting in range | 175 km | 7 km |
-| Share of that time under way | 100 % | 5 % |
+| Distance each dreadnought flies after first getting in range | 175 km | 18 km |
+| Share of that time under way | 100 % | 12 % |
 | Fleet's state at 100 s | approaching | holding |
-| Shots each | 384, 379 | 382, 382 |
+| Shots each | 384, 379 | 380, 381 |
 
 **What changed.** A fleet measures and steers from where its line stands: the anchor, moved by as much as the middle of the places still filled has moved from the middle of all the places the line started with. While the line is whole that is exactly the anchor, so a fleet at full strength behaves as it did. The line is the capitals, or the cruisers once there are no capitals, or every hull once there are neither, as before.
 
