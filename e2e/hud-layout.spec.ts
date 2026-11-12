@@ -13,24 +13,26 @@ for (const [width, height] of [[1280, 720], [1920, 1080]] as const) {
     await page.click('[data-action="launch"]');
     await expect(page.locator('[data-action="pause"]')).toBeVisible();
     await expect(page.locator('.hud-left')).toBeVisible();
-    const measured = await page.evaluate(async () => {
-      const w = window as unknown as { reaperwar: { battle: { hud: { toast(text: string): void } } } };
-      w.reaperwar.battle.hud.toast('REINFORCEMENTS DETECTED');
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    // The columns are placed when the HUD is first laid out (a resize observer), with nothing asked of it.
+    await page.waitForFunction(() => document.querySelector<HTMLElement>('.hud')!.style.getPropertyValue('--hud-left-top') !== '');
+    const measured = await page.evaluate(() => {
       const box = (e: Element) => e.getBoundingClientRect();
       const panels = [...document.querySelectorAll('.hud-top > *')].filter((e) => !e.classList.contains('spacer')).map(box).filter((r) => r.width > 0 && r.height > 0);
       // How far a top-bar panel reaches into something below it that it shares width with.
       const covered = (r: DOMRect) => Math.max(0, ...panels.filter((p) => p.right > r.left && p.left < r.right).map((p) => p.bottom - r.top));
-      return {
-        left: covered(box(document.querySelector('.hud-left')!)),
-        right: covered(box(document.querySelector('.hud-right')!)),
-        notice: covered(box(document.querySelector('.toast')!)),
-        panels: panels.length,
-      };
+      const left = covered(box(document.querySelector('.hud-left')!)), right = covered(box(document.querySelector('.hud-right')!));
+      // The notice is on screen for two seconds, and a frame can take longer than that under software rendering:
+      // it is measured in the same turn that shows it.
+      const w = window as unknown as { reaperwar: { battle: { hud: { toast(text: string): void } } } };
+      w.reaperwar.battle.hud.toast('REINFORCEMENTS DETECTED');
+      const notice = box(document.querySelector('.toast')!);
+      return { left, right, notice: covered(notice), offCentre: Math.abs((notice.left + notice.right) / 2 - window.innerWidth / 2), panels: panels.length };
     });
     expect(measured.panels).toBeGreaterThanOrEqual(5);
     expect(measured.left).toBe(0);
     expect(measured.right).toBe(0);
     expect(measured.notice).toBe(0);
+    // Centred from its first frame (it used to start half its width to the right).
+    expect(measured.offCentre).toBeLessThan(2);
   });
 }
