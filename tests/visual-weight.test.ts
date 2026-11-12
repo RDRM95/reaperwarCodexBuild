@@ -117,7 +117,7 @@ describe('visual weight of flashes', () => {
     expect(explosionSmoke(5)).toBe(10);
   });
 
-  it('in the Battle of Earth main guns make nine tenths of the muzzle flash where they made a third', () => {
+  it('in the Battle of Earth main guns make most of the muzzle flash where they made a fifth', () => {
     const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
     while (!sim.finished && sim.time < 120) sim.step();
     const square = (n: number) => n * n;
@@ -135,11 +135,12 @@ describe('visual weight of flashes', () => {
         if (!(event.barrierDamage > event.hullDamage && event.barrierDamage > 3)) { sparksBefore += before.sparks(event.hullDamage); sparksNow += impactSparks(event.hullDamage); }
       }
     }
-    // Measured (58 main shots, 2,708 lighter): main guns 35.5 % of muzzle-flash area before, 90.8 % now; light
-    // guns' flashes cover 5.6 % of what they did; hits under 100 damage 59 %, and they threw 494 sparks and now
-    // throw none (none of them does 40 damage to a hull). Heavier hits throw the 421 they always did.
+    // Measured (51 main shots, 5,509 lighter, most of them fighters strafing): main guns 19 % of muzzle-flash area
+    // before, 86 % now; light guns' flashes cover 4 % of what they did; hits under 100 damage 51 %, and they threw
+    // 940 sparks and now throw none (none of them does 40 damage to a hull). Before fighters strafed there were
+    // 2,708 lighter shots and main guns had 91 %; the floor for their share was 0.85 then and is 0.8 now.
     expect(main / (main + lightBefore)).toBeLessThan(0.45);
-    expect(main / (main + lightNow)).toBeGreaterThan(0.85);
+    expect(main / (main + lightNow)).toBeGreaterThan(0.8);
     expect(lightNow / lightBefore).toBeLessThan(0.1);
     expect(hitNow / hitBefore).toBeLessThan(0.7);
     expect(sparksBefore).toBeGreaterThan(300);
