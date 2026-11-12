@@ -2,7 +2,7 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 12 Nov 2026, 23:15 UTC — combat overhaul, eight passes
+## State on 12 Nov 2026, 23:35 UTC — combat overhaul, eight passes
 
 Read this section first. Everything below it is older.
 
@@ -35,6 +35,8 @@ Read this section first. Everything below it is older.
 **Since then (22:40 UTC).** The sixth pass is merged as Codex #81 (`125660f`). The original `reaperwar` engine was checked for the end-of-battle defect of #79 and does not have it (its end check already counts forces still to arrive). **Seventh pass, in this change:** a fleet on its way arrives five seconds after its side's last hull on the field is lost, if that is sooner than its timetable. In the Final Battle of Earth under prime_apex the Reapers were absent for 22 to 31 s between waves and are now absent for 5; the battle runs 113 to 130 s (143 to 154 s). Canon battles and the Battle of Earth are unchanged.
 
 **Since then (23:15 UTC).** The seventh pass is merged as Codex #82 (`352b8e0`). The original `reaperwar` engine was checked for the depleted-fleet defect of #78 and does not have it (controlled case there: the survivors fly 4 km and hold). **Eighth pass, in this change:** target choice no longer fetches every enemy ship. The battle keeps the tick's enemy positions as packed numbers and hulls out of sensor range (62 to 94 % of the 100,000 walked each tick at 2,208 ships) are rejected from those; the nearest-enemy fallback is found in the same walk. Results are identical (seven battles, and `tests/target-choice-packed.test.ts`). Target choice 3.6 → 1.5 s per 600 ticks under the profiler; the whole simulation 20.8 → 16.4 s; the approach now costs what it did before the overhaul (20 to 24 ms a tick); a fighting tick is still 30 to 50 % dearer than before the overhaul because about three times as much happens in it. **Correction:** the line above that says the cost of target choice "is scoring candidates, not scanning" is wrong; it was fetching ships that were then rejected.
+
+**Since then (23:35 UTC).** The eighth pass is merged as Codex #83 (`7c0fd83`).
 
 **HUD, in this change (found in the frames of the visual pass):** the battle HUD's side columns started at a fixed 118 px, and the top bar is that tall only on a wide screen. Measured in the browser: at 1920 px wide the status panel ended at 128 px and covered the head of the allied fleet list by 10 px; at 1600 and 1280 px by 23 px, hiding the last status line; clear at 2560 px. The centre notice ("REINFORCEMENTS DETECTED") sat at 90 px across the camera buttons, and was drawn starting at the middle of the screen for its first 0.3 s before jumping to its centred place (the shared fade-in replaced its centring transform). The columns and the notice now start below whichever top-bar panels are above them (`src/ui/hudLayout.ts`, measured on resize), and the notice keeps its centring while it rises. `e2e/hud-layout.spec.ts` checks it at 1280 and 1920 px and fails on the old layout (33 and 12 px of overlap); `tests/hud-layout.test.ts` holds the rule. Before and after at 1280 x 720: `docs/apex/qa/hud-layout-20261112/`. Software rendering only. Noticed and not fixed: in the Reaper intelligence panel "THREAT: ELEVATED" is drawn over the end of the line beside it.
 
