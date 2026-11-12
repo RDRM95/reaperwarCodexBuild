@@ -226,7 +226,7 @@ export function scoreTarget(ctx: AiContext, shooter: ShipState, fleet: FleetStat
  */
 /** Fighters fly in wings of this many. */
 export const WING_SIZE = 4;
-const wingOf = new WeakMap<ShipState, { prefix: string; first: number } | null>();
+const wingOf = new WeakMap<ShipState, { prefix: string; first: number; number: number } | null>();
 
 /**
  * The fighter that leads this one's wing: the lowest-numbered craft of its block of WING_SIZE consecutive hull
@@ -237,7 +237,7 @@ export function wingLeader(ctx: AiContext, ship: ShipState): ShipState | undefin
   let wing = wingOf.get(ship);
   if (wing === undefined) {
     const dash = ship.id.lastIndexOf('-'), n = Number(ship.id.slice(dash + 1));
-    wing = dash > 0 && Number.isInteger(n) && n > 0 ? { prefix: ship.id.slice(0, dash + 1), first: Math.floor((n - 1) / WING_SIZE) * WING_SIZE + 1 } : null;
+    wing = dash > 0 && Number.isInteger(n) && n > 0 ? { prefix: ship.id.slice(0, dash + 1), first: Math.floor((n - 1) / WING_SIZE) * WING_SIZE + 1, number: n } : null;
     wingOf.set(ship, wing);
   }
   if (!wing) return undefined;
@@ -246,6 +246,33 @@ export function wingLeader(ctx: AiContext, ship: ShipState): ShipState | undefin
     if (mate && mate.alive && !mate.escaped && !mate.rearming && mate.role === 'fighter') return mate;
   }
   return undefined;
+}
+
+/**
+ * Wing formation. A wing-mate flies on its leader: the second craft off the leader's right quarter, the third off
+ * the left, the fourth further out on the right, each a rank behind the last. Before this a wing shared a target
+ * and nothing else: each craft flew its own pass, and a wing-mate was within a kilometre of its leader a fifth of
+ * the time it was attacking. Distances in simulation units (0.4 to the kilometre).
+ */
+export const WING_SPACING = 0.16;
+/** A wing-mate further than this from its place flies its own attack until the wing comes together again. */
+export const WING_REJOIN = 6;
+/** A wing-mate out of place may fly this much faster than its combat speed to regain it. */
+export const WING_CATCH_UP = 1.3;
+
+/** Where this craft belongs in its leader's formation right now, or undefined if it leads or has no leader. */
+export function wingStation(ctx: AiContext, ship: ShipState): { leader: ShipState; station: Vec3 } | undefined {
+  const leader = wingLeader(ctx, ship);
+  if (!leader || leader === ship) return undefined;
+  const mine = wingOf.get(ship), theirs = wingOf.get(leader);
+  if (!mine || !theirs) return undefined;
+  // Places are counted from the leader, so a wing that has lost craft closes up.
+  const place = mine.number - theirs.number;
+  if (place < 1) return undefined;
+  const side = place % 2 === 1 ? 1 : -1, rank = Math.ceil(place / 2);
+  const right = normalize(v3(leader.heading.z, 0, -leader.heading.x));
+  const station = add(add(leader.pos, scale(right, side * rank * WING_SPACING)), scale(leader.heading, -rank * WING_SPACING * 0.8));
+  return { leader, station };
 }
 
 export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState): string | undefined {
@@ -701,6 +728,24 @@ function fighterAttackGoal(ctx: AiContext, ship: ShipState, target: ShipState, r
   const dist = Math.sqrt(lengthSq(to));
   const leadSeconds = Math.min(1.8, dist / Math.max(0.2, ship.maxSpeed + Math.sqrt(lengthSq(target.vel))));
   const lead = add(target.pos, scale(target.vel, leadSeconds));
+  // A wing-mate flies on its leader, and so makes the leader's passes with it.
+  const wing = wingStation(ctx, ship);
+  if (wing && wing.leader.targetId === target.id) {
+    const off = distance(ship.pos, wing.station);
+    if (off <= WING_REJOIN) {
+      const pass = fighterPasses.get(wing.leader);
+      const breaking = pass !== undefined && pass.targetId === target.id && ctx.time < pass.until;
+      // The motion controller steers for a place as if to stop there, and so trails a moving one by its response
+      // time (top speed over thrust). Steering for where the place will be that long from now cancels the lag.
+      const response = Math.max(0.4, ship.maxSpeed / Math.max(1e-6, ship.acceleration));
+      // Guns stay on the target while this craft is still closing on it, even after its leader has turned away
+      // a moment ahead of it; once it is opening too, it faces where the wing is going, as its leader does.
+      const ahead = add(wing.station, scale(wing.leader.vel, response));
+      const opening = breaking && dot(ship.vel, to) <= 0;
+      return { position: ahead, speedFraction: 1, face: opening ? add(ship.pos, wing.leader.heading) : lead,
+        sprint: 1 + (WING_CATCH_UP - 1) * Math.min(1, off / (WING_SPACING * 4)) };
+    }
+  }
   const right = normalize(v3(ship.heading.z, 0, -ship.heading.x));
   const lane = Math.max(-1, Math.min(1, ship.slot.x / Math.max(1, 3 * S)));
   const ongoing = fighterPasses.get(ship);

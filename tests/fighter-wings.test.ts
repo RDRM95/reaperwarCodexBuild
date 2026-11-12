@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildCustomBattle, buildScenario } from '@/scenarios';
 import { BattleSimulation, STATION_SECONDS } from '@/simulation/battle';
-import { WING_SIZE, wingLeader } from '@/simulation/ai';
+import { WING_SIZE, WING_SPACING, wingLeader, wingStation } from '@/simulation/ai';
 import { measureActivity } from '@/simulation/combatActivity';
 
 /**
@@ -53,10 +53,64 @@ describe('fighter wings', () => {
         if (fighter.targetId === leader.targetId) together++;
       }
     }
-    // Measured: 189 of 208 looks, 91 %. A wing-mate is on another target only between its leader's decision and its
-    // own next one.
+    // Measured: 268 of 272 looks, 99 % (189 of 208 when first measured, before fighters stayed over their target
+    // or flew in formation). A wing-mate is on another target only between its leader's decision and its own
+    // next one.
     expect(looks).toBeGreaterThan(100);
     expect(together / looks).toBeGreaterThan(0.85);
+  });
+
+  it('on the way in a wing flies in formation, each craft in its place off its leader\'s quarter', () => {
+    // One carrier's six wings crossing 90 km to a destroyer; at 14 s all are launched and none has arrived.
+    const sim = new BattleSimulation(buildCustomBattle({ seed: 3, rulesId: 'canon_me3', environment: 'deep_space', startingDistanceKm: 90, maxDuration: 200,
+      sideA: { faction: 'alliance', name: 'A', formation: 'line_abreast', counts: { alliance_carrier: 1 } },
+      sideB: { faction: 'reaper', name: 'B', formation: 'line_abreast', counts: { reaper_destroyer: 1 } } }));
+    while (sim.time < 14) sim.step();
+    const number = (id: string) => Number(id.slice(id.lastIndexOf('-') + 1));
+    let mates = 0;
+    for (const fighter of sim.ships) {
+      if (fighter.role !== 'fighter' || !fighter.alive) continue;
+      const wing = wingStation(sim, fighter);
+      if (!wing) { expect(wingLeader(sim, fighter)).toBe(fighter); continue; }
+      mates++;
+      // Measured: every wing-mate is 175 to 250 m (0.07 to 0.10 simulation units) from its place; the places are
+      // 400 m apart. Before, a wing-mate flew its own line to the target.
+      expect(Math.hypot(wing.station.x - fighter.pos.x, wing.station.y - fighter.pos.y, wing.station.z - fighter.pos.z), fighter.id).toBeLessThan(WING_SPACING * 0.75);
+      // Second craft on the leader's right, third on its left, fourth on the right again and a rank further back.
+      const place = number(fighter.id) - number(wing.leader.id), leader = wing.leader;
+      const across = (fighter.pos.x - leader.pos.x) * leader.heading.z - (fighter.pos.z - leader.pos.z) * leader.heading.x;
+      const behind = -((fighter.pos.x - leader.pos.x) * leader.heading.x + (fighter.pos.z - leader.pos.z) * leader.heading.z);
+      expect(place).toBeGreaterThanOrEqual(1);
+      expect(place).toBeLessThan(WING_SIZE);
+      expect(Math.sign(across), fighter.id).toBe(place % 2 === 1 ? 1 : -1);
+      expect(behind, fighter.id).toBeGreaterThan(0);
+    }
+    expect(mates).toBe(18);
+  });
+
+  it('a wing stays together while it attacks', () => {
+    for (const [rulesId, floor] of [['canon_me3', 0.9], ['prime_apex', 0.9]] as const) {
+      const sim = earth(rulesId);
+      let looks = 0, near = 0, next = 1;
+      while (!sim.finished && sim.time < 240) {
+        sim.step();
+        if (sim.time < next) continue;
+        next += 1;
+        for (const fighter of sim.ships) {
+          if (fighter.role !== 'fighter' || !fighter.alive || fighter.escaped || fighter.rearming || fighter.side !== 'A') continue;
+          const leader = wingLeader(sim, fighter), target = fighter.targetId ? sim.getShip(fighter.targetId) : undefined;
+          if (!leader || leader === fighter || !target) continue;
+          // Only while attacking: within 20 km of its target.
+          if (Math.hypot(target.pos.x - fighter.pos.x, target.pos.y - fighter.pos.y, target.pos.z - fighter.pos.z) > 8) continue;
+          looks++;
+          if (Math.hypot(leader.pos.x - fighter.pos.x, leader.pos.y - fighter.pos.y, leader.pos.z - fighter.pos.z) <= 1) near++;
+        }
+      }
+      // Measured: a wing-mate is within 2.5 km of its leader in 98 % of looks under canon rules (649 looks) and
+      // 97 % under prime_apex (1,150). Before wings flew in formation: 78 % and 62 %.
+      expect(looks, rulesId).toBeGreaterThan(500);
+      expect(near / looks, rulesId).toBeGreaterThan(floor);
+    }
   });
 
   it('a fighter with no small craft to shoot at strafes the hull it is attacking', () => {
@@ -116,9 +170,10 @@ describe('fighter wings', () => {
   it('fighters spend four tenths of a battle firing and make more than four attack runs a minute', () => {
     const report = measureActivity(earth(), 300);
     const row = report.rows.get('A fighter')!;
-    // Measured, seed 1: firing 49 %, idle 0.4 %, 5.9 attack runs a minute each (prime_apex: 41 % and 3.9). When a
-    // fighter turned for its carrier the moment its torpedoes were gone this battle measured 37 % and 3.5; before
-    // fighters strafed at all, 20 % (three seeds).
+    // Measured, seed 1: firing 55 %, idle 0.4 %, 5.8 attack runs a minute each (prime_apex: 42 % and 2.8). Before
+    // wings flew in formation, 49 % and 5.9 (41 % and 3.9): a wing now makes its passes together, and under
+    // prime_apex there are fewer of them. When a fighter turned for its carrier the moment its torpedoes were gone this battle measured
+    // 37 % and 3.5; before fighters strafed at all, 20 % (three seeds).
     expect(row.seconds.firing / row.hullSeconds).toBeGreaterThan(0.42);
     expect(row.seconds.idle / row.hullSeconds).toBeLessThan(0.05);
     expect(row.runs / (row.hullSeconds / 60)).toBeGreaterThan(4.5);
