@@ -98,6 +98,42 @@ The battle HUD now offers Attack, Hold position, Withdraw and Retreat. Flank, Br
 - Restated with measured values and reasons in place: `tests/altitude-lanes.test.ts` (now run under canon rules, where the battle is still being fought at 100 s; lane limit judged against a fleet's longest range), `tests/visual-weight.test.ts` (main guns 26 % to 75 % of tracer area, was 12 % to 53 %: more main rounds are in the air), `tests/reaper-advance.test.ts` (a Reaper capital fires in 82 % of ten-second looks, was 91 %: frigates now get astern of it and it turns slowly).
 - Unit suite: 83 files, 496 tests pass. Production build passes.
 
+## Second pass, same day: fighter wings and friendly formations
+
+### Fighters
+
+An Alliance fighter facing Reapers that have no Oculus out had two torpedoes a sortie and nothing else to fire: its gun engaged only small craft and missiles. Each fighter also chose its own target.
+
+- **Strafing** (`battle.ts`): a fighter with no small craft or missile to shoot at fires its gun at the hull it is attacking.
+- **Wings** (`wingLeader` in `ai.ts`): fighters are numbered as they launch, so each block of four consecutive numbers is a wing that left its carrier together. Every fighter but the wing's leader takes the leader's target. The leader is the lowest-numbered craft of the wing still in the fight. No state is kept.
+
+| | Before | After |
+|---|---:|---:|
+| Fighters firing, canon Custom Battle (3 seeds) | 18 % | 38 % |
+| Fighters firing, canon Battle of Earth (3 seeds) | 20 % | 41 % |
+| Fighters firing, prime_apex Battle of Earth (3 seeds) | 17 % | 33 % |
+| Attack runs per fighter-minute, canon Battle of Earth | 3.3 | 4.0 |
+| Wing-mates on their leader's target (prime_apex Battle of Earth, 30 to 120 s) | not a rule | 91 % of looks |
+| Eight fighters against one destroyer, 90 s | 16 torpedoes | 16 torpedoes and 4,694 gun rounds |
+
+Winners are unchanged. The canon Custom Battle is shorter again (184 s to 164 s): the strafing is damage that was not there before.
+
+**A trade-off the owner should know about.** Yesterday's report was that fighter gunfire "draws too much visual attention". Its tracers, flashes and hits were made small (`VISUAL_WEIGHT_2026-11-11.md`), and that is unchanged. But fighters now fire their guns far more often, at hulls. If the result is noisy again, the remedy is in the drawing rules, not here.
+
+### Friendly formations
+
+Measured, not changed. A fleet of 36 hulls attacks an enemy lying directly behind an allied fleet of 46 hulls that holds its position (`tests/friendly-crossing.test.ts`; weapons do no damage). Compared with the same battle without the allied fleet:
+
+| | Seed 1 | Seed 2 | Seed 3 | Seed 4 |
+|---|---:|---:|---:|---:|
+| Nine tenths of the attackers in range, nothing in the way | 80 s | 76 s | 72 s | 78 s |
+| Through the allied fleet | 79 s | 76 s | 73 s | 82 s |
+| Attackers that came out the far side | 36 of 36 | 36 of 36 | 36 of 36 | 36 of 36 |
+| Hull contacts at any tick | 0 | 0 | 0 | 0 |
+| Allied hull pushed furthest | 0.16 km | 0.06 km | 0.18 km | 0.12 km |
+
+So friendly fleets do not behave as walls and there is no deadlock to fix: the clearance rules already let hulls pass between, above and below each other. One closer-packed variant of the same experiment (fleets 6 km apart instead of 22) showed 11 contact pair-ticks in one of two seeds, at most 5 % deep, as attackers slowed to engage in the middle of the allied line.
+
 ## What this pass does not do
 
 Against the directive's seven acceptance points:
@@ -105,9 +141,9 @@ Against the directive's seven acceptance points:
 1. *Ships consistently acquire and attack targets.* Yes: idle time is under 1 % for hulls and fighters in every setup measured (it was up to 4 % for hulls and 24 % for fighters in the four-times battle).
 2. *Most active combat time is fighting.* Yes under canon rules (77 to 85 %). Under prime_apex, where the Alliance has seven hulls to one and wins in 70 to 100 s, 57 to 69 %: the rest is the approach. Dreadnoughts there fire 26 to 50 % of the time; they are too slow to arrive before the escorts have finished.
 3. *Effective engagement distances.* Partly. Hulls close to their guns and cruisers and carriers now use theirs; the range bands themselves are unchanged.
-4. *Friendly battle groups cross without deadlock.* **Not addressed.** No deadlock was seen and there are no contacts, but nothing was changed or measured for formations crossing.
+4. *Friendly battle groups cross without deadlock.* Yes, measured in the second pass above: no delay, deadlock or contact when a fleet attacks through an allied fleet.
 5. *No clipping, frozen ships or glitches.* No hull contacts in the battles measured. Not looked at in motion.
 6. *Reapers and allies behave distinctly.* Kept: Reapers do not sprint, do not turn beam-on, press to individual distances and never back away.
 7. *Large battles remain playable.* The simulation is about a quarter dearer at 2,208 ships. Not run on real hardware.
 
-Also not done: fighters (still firing 14 to 20 % of the time, with 2 to 4 attack runs a minute each; no squadron behaviour); carriers standing off; anything about how it looks. Nothing here was judged by eye in motion.
+Also not done: fighters still spend about half their time in transit, much of it flying back to a distant carrier to rearm, and a wing shares a target but does not hold a formation; carriers standing off; anything about how it looks. Nothing here was judged by eye in motion.
