@@ -38,7 +38,7 @@ describe('visual weight of weapon fire', () => {
     }
   });
 
-  it('in the Battle of Earth the main guns take half of the tracer picture instead of an eighth of it', () => {
+  it('in the Battle of Earth the main guns take most of the tracer picture instead of a quarter of it', () => {
     const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
     let mainBefore = 0, allBefore = 0, mainNow = 0, allNow = 0, next = 30;
     while (!sim.finished && sim.time < 120) {
@@ -52,12 +52,14 @@ describe('visual weight of weapon fire', () => {
         if (calibre >= MAIN_CALIBRE) { mainBefore += was; mainNow += now; }
       }
     }
-    // Measured (7 main rounds and 507 lighter ones over the looks): main guns were 12 % of the area tracers cover
-    // and are 53 %; all tracers together cover 22 % of what they did. The Final Battle of Earth measures 13 % and
-    // 52 %.
-    expect(mainBefore / allBefore).toBeLessThan(0.2);
+    // Measured (15 main rounds and 403 lighter ones over the looks): main guns were 26 % of the area tracers cover
+    // and are 75 %; all tracers together cover 35 % of what they did. The Final Battle of Earth measures 15 % and
+    // 57 %. (Before hulls spread their fire and cruisers fought on the beam, with fewer main rounds in the air
+    // at these looks, this battle measured 12 % and 53 %, and 22 % for all tracers.)
+    expect(mainBefore / allBefore).toBeLessThan(0.35);
     expect(mainNow / allNow).toBeGreaterThan(0.45);
-    expect(allNow / allBefore).toBeLessThan(0.3);
+    expect(mainNow / allNow).toBeGreaterThan(2 * mainBefore / allBefore);
+    expect(allNow / allBefore).toBeLessThan(0.45);
     expect(mainNow).toBeCloseTo(mainBefore, 6);
   });
 

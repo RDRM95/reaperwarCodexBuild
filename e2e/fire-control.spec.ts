@@ -119,11 +119,11 @@ test('scoped hold and manual release use real battery readiness and leave genera
   await hold.click();
   await expect(shipStatus).toContainText('Ready');
   await expect(fleetStatus).toContainText('FREE FIRE');
-  await page.click('[data-order="advance"]');
+  await page.click('[data-order="attack"]');
   expect(await page.evaluate(() => {
     const sim = (window as unknown as { reaperwar: App }).reaperwar.battle!.sim;
     return [sim.fleets.get('battery-a')!.orders.order, sim.fleets.get('battery-b')!.orders.order];
-  })).toEqual(['advance', 'advance']);
+  })).toEqual(['attack', 'attack']);
   await page.screenshot({ path: testInfo.outputPath('fire-control.png') });
   expect(errors).toEqual([]);
 });
