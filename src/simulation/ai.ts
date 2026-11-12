@@ -422,6 +422,13 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   const focus = fleet.focusTargetId ? ctx.getShip(fleet.focusTargetId) : undefined;
   const enemyPosition = validEnemy(representative, focus) ? focus.pos : fleet.enemyCentre;
   const myCentre = centroid(core) ?? fleet.anchor;
+  // Where the line stands: the middle of the places of the core hulls it still has. The anchor is the middle of the
+  // formation the fleet started with, and a fleet reduced to a few hulls on one wing has its line a long way from
+  // it. Such a fleet used to judge its distance to the enemy, and steer, from the anchor: its survivors, already
+  // in range, were marched sideways after a target that was manoeuvring round them, for minutes.
+  let line = v3();
+  for (const s of core) line = add(line, slotToWorld(v3(), fleet.heading, s.slot));
+  line = add(fleet.anchor, scale(line, 1 / core.length));
   const range = fleet.engagementRange ?? fleetEngagementRange(mine);
   const preferredFactor = core.reduce((sum, s) => sum + engagementBand(s).preferred / shipEngagementRange(s), 0) / core.length;
   // Protect the dreadnought gun line even under Advance/Intercept. Those orders
@@ -435,7 +442,7 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   if (attackOrder(fleet) || (noRetreat && (o.order === 'withdraw' || o.order === 'retreat'))) {
     const enemy = o.order === 'intercept' && validEnemy(representative, commanded) ? commanded.pos : enemyPosition;
     if (enemy) {
-      const delta = sub(enemy, fleet.anchor);
+      const delta = sub(enemy, line);
       const dist = Math.sqrt(lengthSq(delta));
       const resumeRange = desiredRange + range * 0.07;
       // A Reaper fleet can win by establishing a firing line. Once contact
@@ -495,7 +502,7 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   // Once the line is on station, freeze its basis. Individual hulls still
   // track targets; rotating a world-space line every tick causes orbital pursuit.
   const canTurn = withdrawing || fleet.engagementMode === 'approach' || o.order === 'escort';
-  const faceDir = withdrawing && desired ? sub(desired, fleet.anchor) : enemyPosition ? sub(enemyPosition, fleet.anchor) : undefined;
+  const faceDir = withdrawing && desired ? sub(desired, fleet.anchor) : enemyPosition ? sub(enemyPosition, line) : undefined;
   if (canTurn && faceDir && faceDir.x * faceDir.x + faceDir.z * faceDir.z > 1e-6) {
     const target = normalize(v3(faceDir.x, 0, faceDir.z));
     const cur = fleet.heading;
