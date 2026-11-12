@@ -56,7 +56,12 @@ export class WeaponTargetField {
   private nextSlot = 0;
   candidateChecks = 0;
 
-  constructor(private readonly ships: readonly ShipState[], dt: number) {
+  /**
+   * `sprint`: the most a hull's speed may exceed its `maxSpeed` (the closing sprint). Without it a side with no
+   * fighters had a travel bound of its fastest hull's combat speed, and a hull sprinting at twice that could move
+   * into a weapon's range within the tick without being visited.
+   */
+  constructor(private readonly ships: readonly ShipState[], dt: number, sprint = 1) {
     this.initialLength = ships.length;
     this.snapX = new Float64Array(ships.length);
     this.snapY = new Float64Array(ships.length);
@@ -74,7 +79,7 @@ export class WeaponTargetField {
       if (ship.pos.z > box.maxZ) box.maxZ = ship.pos.z;
       const entry = { ship, index };
       this.indexed[side].push(entry);
-      this.maxTravel[side] = Math.max(this.maxTravel[side], ship.maxSpeed * dt);
+      this.maxTravel[side] = Math.max(this.maxTravel[side], ship.maxSpeed * sprint * dt);
       const cx = Math.floor(ship.pos.x / this.cellSize);
       const cz = Math.floor(ship.pos.z / this.cellSize);
       let row = this.cells[side].get(cx);
