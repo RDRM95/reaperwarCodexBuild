@@ -17,6 +17,9 @@ export interface AiContext {
   ships: ShipState[];
   fleets: Map<string, FleetState>;
   enemiesOf(side: 'A' | 'B'): ShipState[];
+  /** x, y, z of each hull of `enemiesOf(side)`, in its order and current to this moment, where the context keeps
+   * them (the battle does, during a step's ship pass). Absent otherwise, and in bare test contexts. */
+  enemyPositions?(side: 'A' | 'B'): Float64Array | undefined;
   alliesOf(side: 'A' | 'B'): ShipState[];
   getShip(id: string): ShipState | undefined;
   /** Point value of the hulls already aiming at this ship (see OVERKILL_SHARE). Absent in bare test contexts. */
@@ -125,8 +128,8 @@ export function shipEngagementRange(ship: ShipState): number {
   return anySpinal ? spinal : anyAvailable ? available : usable;
 }
 
-export function engagementBand(ship: ShipState): { min: number; preferred: number; max: number } {
-  const range = shipEngagementRange(ship);
+/** `range` is the hull's engagement range, for a caller that already has it. */
+export function engagementBand(ship: ShipState, range = shipEngagementRange(ship)): { min: number; preferred: number; max: number } {
   switch (ship.role) {
     case 'dreadnought': return { min: range * 0.72, preferred: range * 0.84, max: range * 0.93 };
     case 'carrier': return { min: range * 0.80, preferred: range * 0.90, max: range * 0.96 };
@@ -307,10 +310,32 @@ export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState)
   let best = currentValid ? current : undefined;
   let bestScore = best ? scoreTarget(ctx, ship, fleet, best, range) : -Infinity;
   let bestInReach = currentInReach;
-  for (const e of ctx.enemiesOf(ship.side)) {
-    if (!validEnemy(ship, e) || e === current) continue;
-    const separation = distance(ship.pos, e.pos);
-    if (separation > sensor * 1.5) continue;
+  // Nothing within its own sensors: an attacking fleet shares its picture, so the hull makes for the nearest
+  // enemy hull anywhere. Hulls on the far wing of a large fleet used to have no target until the fleet's slow
+  // advance brought one into sensor range, and crept forward at the pace of its slowest capital meanwhile.
+  // The nearest is found in the same pass as the choice: a second walk over the enemy for every hull with nothing
+  // in sight doubled the cost of choosing while two large fleets were still closing.
+  const sharing = attackOrder(fleet);
+  let nearest: ShipState | undefined;
+  let nearestAt = Infinity;
+  const enemies = ctx.enemiesOf(ship.side);
+  const packed = ctx.enemyPositions?.(ship.side);
+  const sx = ship.pos.x, sy = ship.pos.y, sz = ship.pos.z, sight = sensor * 1.5;
+  for (let i = 0; i < enemies.length; i++) {
+    let separation = 0;
+    if (packed) {
+      // The same subtraction, squares and root as `distance`, from packed numbers. A hull out of sight that is
+      // not the nearest so far (wanted only while nothing has been chosen) is passed over without being fetched.
+      const dx = sx - packed[3 * i], dy = sy - packed[3 * i + 1], dz = sz - packed[3 * i + 2];
+      separation = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (separation > sight && !(sharing && !best && separation < nearestAt)) continue;
+    }
+    const e = enemies[i];
+    if (!validEnemy(ship, e)) continue;
+    if (!packed) separation = distance(ship.pos, e.pos);
+    if (sharing && !best && separation < nearestAt && counts(e)) { nearestAt = separation; nearest = e; }
+    if (e === current) continue;
+    if (separation > sight) continue;
     if (unarmedAgainstFighters && e.role === 'fighter') continue;
     const inReach = separation <= reach && counts(e);
     // A target in reach always replaces one that is not; one out of reach never replaces one that is.
@@ -321,17 +346,7 @@ export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState)
     const threshold = promotes ? -Infinity : currentValid && best?.id === current.id ? bestScore * 1.25 : bestScore;
     if (candidate > threshold) { best = e; bestScore = candidate; bestInReach = inReach; }
   }
-  if (!best && attackOrder(fleet)) {
-    // Nothing within its own sensors: an attacking fleet shares its picture, so the hull makes for the nearest
-    // enemy hull anywhere. Hulls on the far wing of a large fleet used to have no target until the fleet's slow
-    // advance brought one into sensor range, and crept forward at the pace of its slowest capital meanwhile.
-    let nearest = Infinity;
-    for (const e of ctx.enemiesOf(ship.side)) {
-      if (!validEnemy(ship, e) || !counts(e)) continue;
-      const separation = distance(ship.pos, e.pos);
-      if (separation < nearest) { nearest = separation; best = e; }
-    }
-  }
+  if (!best && sharing) best = nearest;
   if (best?.id !== ship.targetId) ship.targetLockUntil = ctx.time + 5;
   return best?.id;
 }
@@ -486,7 +501,7 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   // already in range, were marched sideways after a target that was manoeuvring round them, for minutes.
   const line = add(fleet.anchor, slotToWorld(v3(), fleet.heading, lineShift(ctx, fleet, core)));
   const range = fleet.engagementRange ?? fleetEngagementRange(mine);
-  const preferredFactor = core.reduce((sum, s) => sum + engagementBand(s).preferred / shipEngagementRange(s), 0) / core.length;
+  const preferredFactor = core.reduce((sum, s) => { const r = shipEngagementRange(s); return sum + engagementBand(s, r).preferred / r; }, 0) / core.length;
   // Protect the dreadnought gun line even under Advance/Intercept. Those orders
   // close the formation, not the physical hulls into torpedo range.
   const desiredRange = range * preferredFactor;
@@ -794,8 +809,8 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const engaging = attackOrder(fleet) || (noRetreat && ['withdraw', 'retreat'].includes(fleet.orders.order));
   if (!target || (!engaging && ship.role !== 'fighter')) return { position: slotPos, speedFraction: 1, face: target ? combatFacing(ship, target, slotPos) : undefined };
 
-  const band = engagementBand(ship);
   const range = shipEngagementRange(ship);
+  const band = engagementBand(ship, range);
   const dist = distance(ship.pos, target.pos);
   if (ship.role === 'fighter') return fighterAttackGoal(ctx, ship, target, range);
   const screen = ship.role === 'frigate' || ship.role === 'reaper_destroyer';
