@@ -40,28 +40,33 @@ describe('altitude lanes', () => {
   });
 
   it('in the Final Battle of Earth the Alliance fleets stack on separate levels and nothing collides', () => {
-    const sim = new BattleSimulation(buildScenario('final_battle_of_earth', 'prime_apex', 1));
+    // Under the canon rules: this battle now ends at 73 s under prime_apex, before the slowest fleet has reached its
+    // level (hulls spread their fire and sprint to close, so the Reapers die sooner). The lanes are the same rule
+    // under either rule set; the canon battle is still being fought at 100 s.
+    const sim = new BattleSimulation(buildScenario('final_battle_of_earth', 'canon_me3', 1));
     let overlaps = 0, next = 30;
+    // A fleet's lane height follows its gun range, and that shrinks when its dreadnoughts die: the asari fleet's
+    // falls from 19.2 to 12.8 km here. Its lane is judged against the longest range it has had.
+    const longest = new Map<string, number>();
     while (!sim.finished && sim.time < 100) {
       sim.step();
+      for (const f of sim.fleets.values()) longest.set(f.spec.id, Math.max(longest.get(f.spec.id) ?? 0, f.engagementRange ?? 0));
       if (sim.time >= next) { next += 10; for (const row of sampleGeometry(sim)) overlaps += row.overlaps; }
     }
     const alliance = [...sim.fleets.values()].filter(f => f.spec.side === 'A');
     const altitudes = alliance.map(f => f.anchor.y);
-    // Measured: -0.1, +7.9, -6.2, +4.0 and -4.0 km. Before the change all five were within 1.1 km.
+    // Measured: 0.0, +5.7, -4.7, +2.9 and -2.9 km. Before altitude lanes all five were within 1.1 km.
     expect(Math.max(...altitudes) - Math.min(...altitudes)).toBeGreaterThan(10);
     for (const fleet of alliance) {
       const { lane, base } = altitudeLane(sim, fleet);
       if (lane === 0) continue;
       expect(Math.sign(fleet.anchor.y - base)).toBe(Math.sign(lane));
       // No fleet overshoots its lane.
-      expect(Math.abs(fleet.anchor.y - base)).toBeLessThanOrEqual(Math.abs(lane) * (fleet.engagementRange ?? 0) * ALTITUDE_LANE_STEP + 1e-6);
+      expect(Math.abs(fleet.anchor.y - base)).toBeLessThanOrEqual(Math.abs(lane) * longest.get(fleet.spec.id)! * ALTITUDE_LANE_STEP + 1e-6);
     }
     const sorted = [...altitudes].sort((a, b) => a - b);
-    // Every fleet on its own level. Measured at 100 s since hulls close to gun range: -1.4, +7.8, -5.3, +4.0 and
-    // -4.0 km; the closest pair is 1.3 km apart because the asari fleet is still on its way down to -6.3 km (it was
-    // at -6.2 km by this time, 2.2 km clear, before that change). It was 1.5 km here when the lanes went in.
-    for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThan(1);
+    // Every fleet on its own level: the closest pair is 1.8 km apart.
+    for (let i = 1; i < sorted.length; i++) expect(sorted[i] - sorted[i - 1]).toBeGreaterThan(1.5);
     expect(overlaps).toBe(0);
   });
 

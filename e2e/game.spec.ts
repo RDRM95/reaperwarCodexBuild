@@ -55,8 +55,8 @@ test.describe('Reaper War Simulator', () => {
       await page.click(`[data-camera="${cam}"]`);
       await expect(page.locator(`[data-camera="${cam}"]`)).toHaveClass(/active/);
     }
-    await page.click('[data-order="advance"]');
-    await expect(page.locator('[data-order="advance"]')).toHaveClass(/active/);
+    await page.click('[data-order="hold_formation"]');
+    await expect(page.locator('[data-order="hold_formation"]')).toHaveClass(/active/);
     await page.selectOption('select >> nth=0', 'strike_wedge');
 
     // Select a ship from the list, then order the fleet to attack a Reaper destroyer.

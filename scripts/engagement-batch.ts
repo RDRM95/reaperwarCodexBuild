@@ -4,7 +4,7 @@
  * A single seeded battle is chaotic: two builds that differ by almost nothing diverge by about a fifth in who
  * hits what. Use this, not one seed, to judge whether a movement change makes a fleet fight better or worse.
  * 54 Alliance hulls against 38 Reapers for up to 150 s per seed; prints the means. Deterministic.
- * `order` gives the Alliance fleet a standing order at the start (for example flank or breakthrough).
+ * `order` gives the Alliance fleet a standing order at the start (for example hold_formation or withdraw).
  */
 import { BattleSimulation } from '../src/simulation/battle';
 import { buildCustomBattle } from '../src/scenarios';
