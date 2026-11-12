@@ -2,7 +2,7 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 12 Nov 2026, 23:15 UTC — combat overhaul, eight passes
+## State on 12 Nov 2026, 23:35 UTC — combat overhaul, eight passes
 
 Read this section first. Everything below it is older.
 
@@ -36,7 +36,13 @@ Read this section first. Everything below it is older.
 
 **Since then (23:15 UTC).** The seventh pass is merged as Codex #82 (`352b8e0`). The original `reaperwar` engine was checked for the depleted-fleet defect of #78 and does not have it (controlled case there: the survivors fly 4 km and hold). **Eighth pass, in this change:** target choice no longer fetches every enemy ship. The battle keeps the tick's enemy positions as packed numbers and hulls out of sensor range (62 to 94 % of the 100,000 walked each tick at 2,208 ships) are rejected from those; the nearest-enemy fallback is found in the same walk. Results are identical (seven battles, and `tests/target-choice-packed.test.ts`). Target choice 3.6 → 1.5 s per 600 ticks under the profiler; the whole simulation 20.8 → 16.4 s; the approach now costs what it did before the overhaul (20 to 24 ms a tick); a fighting tick is still 30 to 50 % dearer than before the overhaul because about three times as much happens in it. **Correction:** the line above that says the cost of target choice "is scoring candidates, not scanning" is wrong; it was fetching ships that were then rejected.
 
-**Not done from that directive, in the order to take them:** fighters still fly 55 to 77 km out from their carrier; the rest of the tick cost at 2,208 ships (hull separation, weapons and the movement goal lead the profile); nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
+**Since then (23:35 UTC).** The eighth pass is merged as Codex #83 (`7c0fd83`).
+
+**HUD, in this change (found in the frames of the visual pass):** the battle HUD's side columns started at a fixed 118 px, and the top bar is that tall only on a wide screen. Measured in the browser: at 1920 px wide the status panel ended at 128 px and covered the head of the allied fleet list by 10 px; at 1600 and 1280 px by 23 px, hiding the last status line; clear at 2560 px. The centre notice ("REINFORCEMENTS DETECTED") sat at 90 px across the camera buttons, and was drawn starting at the middle of the screen for its first 0.3 s before jumping to its centred place (the shared fade-in replaced its centring transform). The columns and the notice now start below whichever top-bar panels are above them (`src/ui/hudLayout.ts`, measured on resize), and the notice keeps its centring while it rises. `e2e/hud-layout.spec.ts` checks it at 1280 and 1920 px and fails on the old layout (33 and 12 px of overlap); `tests/hud-layout.test.ts` holds the rule. Before and after at 1280 x 720: `docs/apex/qa/hud-layout-20261112/`. Software rendering only. Noticed and not fixed: in the Reaper intelligence panel "THREAT: ELEVATED" is drawn over the end of the line beside it.
+
+**Measured and left:** hull separation, now the largest single cost at 2,208 ships (17 %), does two to three times the pair checks it did before the overhaul (15 a hull each tick then, 24 to 48 now). The cause is the closing sprint: a hull at twice its speed needs four times the distance to stop, the largest stopping distance in the battle went from 1.4 to 5.4 units, and every hull's search is sized by it. Narrowing the search to each pair's own stopping distances is not exact (it changes which hulls give way to which), so it would have to be measured against hull contacts like any behaviour change; it was not attempted.
+
+**Not done from that directive, in the order to take them:** fighters still fly 55 to 77 km out from their carrier (traced: carriers are the slowest hulls and start 100 km out; a transit sprint was tried and removed); the rest of the tick cost at 2,208 ships (see above); nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
 
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 
