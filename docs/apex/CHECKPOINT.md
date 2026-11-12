@@ -12,7 +12,9 @@ Read this section first. Everything below it is older.
 
 **Second pass (same note):** fighters strafe the hull they attack and fly in wings of four that share their leader's target (firing 18 to 20 % → 33 to 41 % of the time); a fleet attacking through an allied fleet was measured and needs no fix (no delay, deadlock or contact; `tests/friendly-crossing.test.ts`). The first pass is merged as Codex #73 (`3981f49`).
 
-**Not done from that directive, in the order to take them:** fighters still spend half their time in transit and rearming, and a wing does not hold a formation; dreadnoughts in lopsided battles (too slow to arrive); the simulation is a quarter dearer at 2,208 ships; nothing has been judged in motion. Then: the sandbox port of the combat changes; the three hull redesigns; the `reaperwar` port.
+**Since then:** the second pass is merged as Codex #74 (`ecfc02e`); the sandbox has the first pass (its #55, `e5fd500`) and the fighter changes are its #56. The geth cruiser, geth dreadnought and quarian heavy cruiser are redesigned in this change (`docs/apex/GETH_QUARIAN_CAPITALS_2026-11-12.md`), which the owner asked for.
+
+**Not done from that directive, in the order to take them:** fighters still spend half their time in transit and rearming, and a wing does not hold a formation; dreadnoughts in lopsided battles (too slow to arrive); the simulation is a quarter dearer at 2,208 ships; nothing has been judged in motion. Then: the sandbox port of the three hulls; the `reaperwar` port.
 
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 
