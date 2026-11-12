@@ -2,7 +2,7 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 12 Nov 2026, 15:30 UTC — combat overhaul, first pass
+## State on 12 Nov 2026, 19:40 UTC — combat overhaul, three passes
 
 Read this section first. Everything below it is older.
 
@@ -12,9 +12,13 @@ Read this section first. Everything below it is older.
 
 **Second pass (same note):** fighters strafe the hull they attack and fly in wings of four that share their leader's target (firing 18 to 20 % → 33 to 41 % of the time); a fleet attacking through an allied fleet was measured and needs no fix (no delay, deadlock or contact; `tests/friendly-crossing.test.ts`). The first pass is merged as Codex #73 (`3981f49`).
 
-**Since then:** the second pass is merged as Codex #74 (`ecfc02e`); the sandbox has the first pass (its #55, `e5fd500`) and the fighter changes are its #56. The geth cruiser, geth dreadnought and quarian heavy cruiser are redesigned in this change (`docs/apex/GETH_QUARIAN_CAPITALS_2026-11-12.md`), which the owner asked for.
+**Since then (19:40 UTC):** the second pass is merged as Codex #74 (`ecfc02e`); the sandbox has both passes (its #55 `e5fd500`, #56 `6c569e5`). The geth cruiser, geth dreadnought and quarian heavy cruiser, which the owner asked for, are redesigned and merged: Codex #75 (`aa30285`), sandbox #57 (`296c1e9`), both deployed (`docs/apex/GETH_QUARIAN_CAPITALS_2026-11-12.md`).
 
-**Not done from that directive, in the order to take them:** fighters still spend half their time in transit and rearming, and a wing does not hold a formation; dreadnoughts in lopsided battles (too slow to arrive); the simulation is a quarter dearer at 2,208 ships; nothing has been judged in motion. Then: the sandbox port of the three hulls; the `reaperwar` port.
+**The `reaperwar` port (owner said yes), on its branch `claude/mass-effect-reaper-war-simulator-fidrz2`, commits `9f4b5f9` and `5c4ed71`, not on its `main` and not released.** Brought across: the six fighter models, the fighter engine-glow rule, and the tracer, muzzle-flash, hit, explosion, point-defence and distant-fighter rules (there, main guns' share of tracer area 19 → 69 %; sparks from light hits 5,658 → 48). 550 unit tests and its 14 end-to-end tests pass. Tried there and not kept: the fire-spreading target choice, which spread targets but did not raise the share of hulls firing (45 % before and after under prime_apex; 87 → 82 % under canon). Not brought: any other simulation change; that engine is different and each would need measuring there first. Its prime_apex Battle of Earth has hulls firing 45 % of the time with the first shot at 44 s, which is the thing to look at next there.
+
+**Third pass, in this change:** a fighter out of torpedoes stays 15 s over its target with its guns before turning for its carrier (it used to turn at once). Fighters firing 43 → 53 % (canon) and 33 → 44 % (prime_apex); attack runs a minute 4.3 → 6.2 and 2.3 → 3.9. Winners unchanged in twenty battles. Cost: in the Custom Battle under prime_apex fighter losses go from 39 to 91 %. A transit sprint for fighters was tried and removed.
+
+**Not done from that directive, in the order to take them:** the sandbox port of the third pass; dreadnoughts in lopsided battles (too slow to arrive); a wing does not hold a formation, and fighters still fly 55 to 77 km out from their carrier; the simulation is a quarter dearer at 2,208 ships; nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
 
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 

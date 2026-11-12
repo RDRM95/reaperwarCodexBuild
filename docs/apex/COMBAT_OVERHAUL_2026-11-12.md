@@ -134,6 +134,34 @@ Measured, not changed. A fleet of 36 hulls attacks an enemy lying directly behin
 
 So friendly fleets do not behave as walls and there is no deadlock to fix: the clearance rules already let hulls pass between, above and below each other. One closer-packed variant of the same experiment (fleets 6 km apart instead of 22) showed 11 contact pair-ticks in one of two seeds, at most 5 % deep, as attackers slowed to engage in the middle of the allied line.
 
+## Third pass, same day: fighters stay over their target
+
+**What was wrong.** A fighter carries two torpedoes and a gun. It turned for its carrier in the tick its second torpedo left, although the gun (which since the second pass it fires at hulls) needs no reloading. Counting every fighter each second (`in gun range`: within the gun's reach of its target's hull):
+
+| Where a fighter's time went, before | Battle of Earth, canon | Battle of Earth, prime_apex | Custom, prime_apex | Final Battle, canon |
+|---|---:|---:|---:|---:|
+| In gun range of its target | 30 % | 14 % | 13 % | 25 % |
+| On the way out | 33 % | 46 % | 46 % | 36 % |
+| Flying home and in the hangar | 31 % | 31 % | 33 % | 30 % |
+
+A sortie was about 30 s armed followed by 20 to 25 s away, with the carrier 55 to 77 km behind the fight.
+
+**What changed.** A fighter that has fired its last torpedo stays over its target for 15 s (`STATION_SECONDS`), strafing, and then turns for its carrier as before. The carrier, the 12 s in the hangar and the torpedo load are unchanged.
+
+| Fighters, before → now (two seeds) | Firing | Attack runs a minute | Rounds a minute | In gun range |
+|---|---:|---:|---:|---:|
+| Battle of Earth, canon | 43 → 53 % | 4.3 → 6.2 | 107 → 161 | 30 → 46 % |
+| Battle of Earth, prime_apex | 33 → 44 % | 2.3 → 3.9 | 50 → 116 | 14 → 27 % |
+| Custom Battle, canon | 40 → 46 % | 3.6 → 4.7 | 85 → 122 | 25 → 36 % |
+| Custom Battle, prime_apex | 32 → 47 % | 2.4 → 4.5 | 54 → 126 | 13 → 30 % |
+| Final Battle of Earth, canon | 41 → 57 % | 3.5 → 5.4 | 96 → 149 | 25 → 41 % |
+
+**What it costs.** Fighters over a Reaper fleet die at a steady rate, so more time there means more losses. Over four seeds of each battle the winner is the same in all twenty. Hulls lost over the four seeds, in the table's order: Alliance 184 → 184, 35 → 37, 224 → 224, 63 → 70, 500 → 500; Reaper 0 → 0, 52 → 52, 5 → 4, 48 → 48, 25 → 22. Fighter damage dealt rises 17 to 86 %. Fighter losses: the three canon battles lose every fighter before and after (their side loses every hull); Battle of Earth under prime_apex 16 → 17 %; Custom Battle under prime_apex **39 → 91 %**, in a battle the Alliance still wins. That last figure is the price of the change and the owner may prefer a shorter stay: at 10 s it measured 76 % lost with nearly the same damage, at 30 s every fighter lost.
+
+**Tried and not kept.** A sprint for fighters in transit (the hulls' closing sprint, to and from the carrier). It cut the outbound share only from 47 to 35 % in one battle, and fighters reached the Reapers and died sooner: losses in the Battle of Earth under prime_apex rose from 17 to 46 % with less damage dealt. Removed.
+
+No hull contacts at any tick in six seeds of the canon Battle of Earth. `tests/fighter-wings.test.ts` has the new case (24 fighters each turn for home exactly 15 s after their last torpedo, having fired 2,049 gun rounds between them meanwhile, and still reload three times each in 150 s).
+
 ## What this pass does not do
 
 Against the directive's seven acceptance points:
@@ -146,4 +174,4 @@ Against the directive's seven acceptance points:
 6. *Reapers and allies behave distinctly.* Kept: Reapers do not sprint, do not turn beam-on, press to individual distances and never back away.
 7. *Large battles remain playable.* The simulation is about a quarter dearer at 2,208 ships. Not run on real hardware.
 
-Also not done: fighters still spend about half their time in transit, much of it flying back to a distant carrier to rearm, and a wing shares a target but does not hold a formation; carriers standing off; anything about how it looks. Nothing here was judged by eye in motion.
+Also not done: fighters still spend a third to a half of their time on the way out to a fight 55 to 77 km from their carrier (the third pass removed most of the time spent going home, not the distance); a wing shares a target but does not hold a formation; anything about how it looks. Nothing here was judged by eye in motion.

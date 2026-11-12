@@ -77,6 +77,8 @@ stands out in the lower one is the frigate's main gun and the destroyer's beam.
 
 Fighters now fire their guns at the hull they are attacking (`COMBAT_OVERHAUL_2026-11-12.md`), so there are about twice as many light shots in the same battle: 5,509 against 2,708. With the sizes above, main guns make 86 % of the muzzle-flash area (they made 91 % before fighters strafed, and would make 19 % with the old flash sizes). The sizes themselves are unchanged.
 
+Since fighters also stay over their target after their torpedoes are gone (third pass of the same note), there are 9,792 light shots in that battle and main guns make 83 % of the muzzle-flash area. The test's floor is 80 %, so there is little room left: if fighters are given more to fire, or if this already looks noisy on the owner's machine, the next step is to thin or shrink fighter flashes further, not to raise their fire.
+
 ## Not done, from the same report
 
 - "Correct colour for actual organic fighters": nothing was recoloured. The owner was asked which colour is meant.

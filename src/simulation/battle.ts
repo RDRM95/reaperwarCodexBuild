@@ -47,7 +47,7 @@ const REARM_SECONDS = 12;
  * Seconds a fighter stays over its target with its guns after its last torpedo has gone, before it turns for its
  * carrier. It used to turn at once, and spent more of a battle flying to and from the hangar than fighting.
  */
-export const STATION_SECONDS = 18;
+export const STATION_SECONDS = 15;
 /** Seconds between rebuilds of the table of how much fire is aimed at each ship. */
 const TARGET_LOAD_REFRESH = 0.5;
 import type {

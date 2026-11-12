@@ -135,10 +135,11 @@ describe('visual weight of flashes', () => {
         if (!(event.barrierDamage > event.hullDamage && event.barrierDamage > 3)) { sparksBefore += before.sparks(event.hullDamage); sparksNow += impactSparks(event.hullDamage); }
       }
     }
-    // Measured (51 main shots, 5,509 lighter, most of them fighters strafing): main guns 19 % of muzzle-flash area
-    // before, 86 % now; light guns' flashes cover 4 % of what they did; hits under 100 damage 51 %, and they threw
-    // 940 sparks and now throw none (none of them does 40 damage to a hull). Before fighters strafed there were
-    // 2,708 lighter shots and main guns had 91 %; the floor for their share was 0.85 then and is 0.8 now.
+    // Measured (53 main shots, 9,792 lighter, most of them fighters strafing): main guns 12 % of muzzle-flash area
+    // before, 83 % now; light guns' flashes cover 3 % of what they did; hits under 100 damage 39 %, and they threw
+    // 1,028 sparks and now throw none (none of them does 40 damage to a hull). Before fighters strafed there were
+    // 2,708 lighter shots and main guns had 91 %; when fighters strafed but went home with their last torpedo,
+    // 5,509 and 86 %. The floor for their share was 0.85 at first and is 0.8 now.
     expect(main / (main + lightBefore)).toBeLessThan(0.45);
     expect(main / (main + lightNow)).toBeGreaterThan(0.8);
     expect(lightNow / lightBefore).toBeLessThan(0.1);
