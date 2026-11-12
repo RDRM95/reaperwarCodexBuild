@@ -51,6 +51,16 @@ describe('collision avoidance at every tick', () => {
     expect(sim.ships.filter(s => !s.alive).length).toBeGreaterThan(20);
   });
 
+  it('frigates sprinting in a crowd toward a second wave do not graze each other (Battle of Earth, seed 25)', () => {
+    // 49 frigates sprint at twice their combat speed toward a Reaper wave that arrives at about 55 s. Easing the
+    // sprint of a hull that was giving way took half its thrust away with the speed limit, while it still carried
+    // the speed. Before: 42 pair-ticks in contact from 74.6 s, the deepest 56.9 % of the two radii. Over thirty
+    // seeds of this battle: 5 seeds with a contact and 85 pair-ticks before; see the combat note for now.
+    const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 25));
+    expect(contacts(sim, 100)).toEqual({ pairTicks: 0, deepest: 0, atDeployment: 0 });
+    expect(sim.time).toBeGreaterThan(75);
+  });
+
   it('allied fleets stationed side by side do not deploy inside each other', () => {
     // The Final Battle of Earth puts five allied fleets abreast. Before, seed 1 deployed three pairs of hulls from
     // different fleets overlapping, the worst a quarian heavy 35.1 % into an Alliance dreadnought.

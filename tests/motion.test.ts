@@ -28,6 +28,25 @@ describe('acceleration-limited three-dimensional arrival', () => {
     expect(length(ship.vel)).toBeLessThan(0.001);
   });
 
+  it('a hull above its combat speed keeps the thrust that took it there while it gives way', () => {
+    // A frigate at twice its combat speed (the closing sprint), told to sprint on, with a neighbour to avoid that
+    // asks for all its thrust. The sprint is eased while it gives way; its thrust must not be.
+    const braking = (speedFactor: number): number => {
+      const ship = hull('alliance_frigate');
+      ship.pos = v3();
+      ship.vel = v3(0, 0, ship.maxSpeed * speedFactor);
+      const before = { ...ship.vel };
+      advanceMotion(ship, { position: v3(0, 0, 40), speedFraction: 1, sprint: 2, avoidanceAcceleration: v3(0, 0, -ship.acceleration * 4) }, SIM_DT);
+      return length(sub(ship.vel, before)) / (ship.acceleration * SIM_DT);
+    };
+    // At twice combat speed it has twice its combat thrust to slow with (it had once: half what it needed).
+    expect(braking(2)).toBeCloseTo(2, 6);
+    expect(braking(1.5)).toBeCloseTo(1.5, 6);
+    // At or below combat speed nothing changes: a hull giving way has its combat thrust and no more.
+    expect(braking(1)).toBeCloseTo(1, 6);
+    expect(braking(0.5)).toBeCloseTo(1, 6);
+  });
+
   it('brakes through an engine failure without deleting momentum or exceeding available thrust', () => {
     const ship = hull('alliance_dreadnought');
     ship.pos = v3(0, 0, -5);

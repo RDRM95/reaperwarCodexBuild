@@ -2,7 +2,7 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 12 Nov 2026, 20:55 UTC — combat overhaul, four passes
+## State on 12 Nov 2026, 21:55 UTC — combat overhaul, five passes
 
 Read this section first. Everything below it is older.
 
@@ -18,13 +18,19 @@ Read this section first. Everything below it is older.
 
 **Third pass, in this change:** a fighter out of torpedoes stays 15 s over its target with its guns before turning for its carrier (it used to turn at once). Fighters firing 43 → 53 % (canon) and 33 → 44 % (prime_apex); attack runs a minute 4.3 → 6.2 and 2.3 → 3.9. Winners unchanged in twenty battles. Cost: in the Custom Battle under prime_apex fighter losses go from 39 to 91 %. A transit sprint for fighters was tried and removed. Because fighters now fire far more, their cannon is drawn one round in four (a tracer belt): 3 to 6 % of the tracer picture instead of 13 to 22 %.
 
-**Since then (20:55 UTC).** Third pass merged as Codex #76 (`bec1d8f`); its sandbox port is #58, whose first commit failed the tracer browser test (that is how the tracer belt came about); its second commit passes the whole browser suite locally. Open as Codex #77: the weapon broad-phase allows for sprinting hulls. **Fourth pass, in this change:** a fleet reduced to a few hulls on one wing judged its distance and steered from the middle of the formation it started with, and so marched survivors that were already in range sideways round their target for minutes (one battle ran to its 300 s limit). It now steers from where its surviving line stands; exact for a fleet at full strength. Controlled case: 175 km flown in circles → 18 km, then holding. Longest battle in eight seeds: 224 → 167 s (Battle of Earth, canon), 269 → 232 s (Final Battle). Winners unchanged in forty battles.
-
-**Parked, not pushed:** wings flying in formation on their leader (patch at the session's scratchpad, `combat/wing-formation-full.patch`; measured: a wing-mate within 2.5 km of its leader 95 to 98 % of the time against 56 to 73 %, attack runs a tenth to a quarter fewer, firing down one to four points; frigate contacts in 3 of 12 prime_apex seeds against 1 of 12, not explained). To be re-measured on top of this change.
+**Since then (20:55 UTC).** Third pass merged as Codex #76 (`bec1d8f`); its sandbox port is #58, whose first commit failed the tracer browser test (that is how the tracer belt came about); its second commit passes the whole browser suite locally. **Fourth pass (Codex #78):** a fleet reduced to a few hulls on one wing judged its distance and steered from the middle of the formation it started with, and so marched survivors that were already in range sideways round their target for minutes (one battle ran to its 300 s limit). It now steers from where its surviving line stands; exact for a fleet at full strength. Controlled case: 175 km flown in circles → 18 km, then holding. Longest battle in eight seeds: 224 → 167 s (Battle of Earth, canon), 269 → 232 s (Final Battle). Winners unchanged in forty battles.
 
 **Measured and closed:** dreadnoughts firing little in lopsided battles is distance, not behaviour (91 Alliance hulls start 100 km from 10 Reapers; a second wave arrives 87 km away at about 55 s). **Tried and dropped:** narrowing target choice to a spatial query (identical results, no gain: the cost is scoring candidates, not scanning). The simulation is still about a quarter dearer at 2,208 ships than before the overhaul.
 
-**Not done from that directive, in the order to take them:** merge sandbox #58 and Codex #77; sandbox ports of #77 and of this change; finish wing formation; Reaper capitals silent a tenth of the time with a target in range; frigates touching while sprinting in a crowd; fighters still fly 55 to 77 km out from their carrier; tick cost at 2,208 ships; nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
+**Since then (21:55 UTC).** The fourth pass is merged: Codex #78 (`aa93b11`), sandbox #59 (`76a8848`). Codex #77 (weapon broad-phase and sprinting hulls) is merged as `3155546`; the sandbox needs no port of it (its spatial index already allows twice top speed).
+
+**Fifth pass, in this change:** a sprinting hull keeps its thrust to give way. Hull contacts in the Battle of Earth under prime_apex over thirty seeds: five seeds, 85 pair-ticks, deepest 57 % → one seed, 12 pair-ticks, 1.7 %. Winners unchanged in forty battles. Three pinned figures were moved from one seed to several (see the note).
+
+**Open as Codex #79:** a battle is not over while a fleet is still on its way. Under prime_apex the Final Battle of Earth ended at 60 to 78 s in every seed, before its Reaper reinforcement was due at 90 s; it now runs 142 to 152 s with all 32 Reaper hulls. It leaves a lull of 12 to 29 s between the waves in that scenario.
+
+**Parked, not pushed:** wings flying in formation on their leader (local branch `feat/wing-formation-b-20261112`; patch also at the session's scratchpad, `combat/wing-formation-full.patch`). A wing-mate is within 2.5 km of its leader 95 to 98 % of the time while attacking, against 54 to 73 %; attack runs a twentieth to a quarter fewer. It showed frigate contacts in 3 of 12 seeds against 1 of 12, which the fifth pass should remove; to be re-measured on top of it.
+
+**Not done from that directive, in the order to take them:** sandbox ports of the fifth pass and of #79; finish wing formation on top of them; fighters still fly 55 to 77 km out from their carrier; tick cost at 2,208 ships (about a quarter dearer than before the overhaul); the lull between waves in the Final Battle under prime_apex; nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
 
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 
