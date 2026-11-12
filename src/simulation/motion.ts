@@ -26,11 +26,13 @@ export function advanceMotion(ship: ShipState, goal: MovementGoal, dt: number): 
   const asked = Math.max(1, goal.sprint ?? 1);
   const sprint = 1 + (asked - 1) * Math.max(0, 1 - avoiding * 2);
   const maxSpeed = ship.maxSpeed * engine * Math.max(0, Math.min(1, goal.speedFraction)) * sprint;
-  // The thrust that took a hull above its combat speed is still there to slow or turn it. Easing the sprint used
-  // to take the thrust away with the speed limit, at the moment a hull doing twice its combat speed began to give
-  // way: it had half the thrust to shed twice the speed, and sprinting frigates grazed each other.
+  const acceleration = ship.acceleration * engine * sprint;
+  // The thrust that took a hull above its combat speed is still there to give way and to slow with. Easing the
+  // sprint used to take the thrust away with the speed limit, at the moment a hull doing twice its combat speed
+  // began to give way: it had half the thrust to shed twice the speed, and sprinting frigates grazed each other.
+  // Steering for the goal keeps the eased figure, so the extra goes to giving way and not to pressing on.
   const carried = Math.min(asked, length(ship.vel) / Math.max(1e-9, ship.maxSpeed * engine));
-  const acceleration = ship.acceleration * engine * Math.max(sprint, carried);
+  const thrust = ship.acceleration * engine * Math.max(sprint, carried);
   const error = sub(goal.position, ship.pos);
   const dist = length(error);
 
@@ -45,7 +47,7 @@ export function advanceMotion(ship: ShipState, goal: MovementGoal, dt: number): 
   if (goal.avoidanceAcceleration) {
     force = add(force, goal.avoidanceAcceleration);
     const combined = length(force);
-    if (combined > acceleration) force = scale(force, acceleration / combined);
+    if (combined > thrust) force = scale(force, thrust / combined);
   }
   // Visual and physical honesty: capital hulls cannot magically translate
   // sideways as fast as their powerful rear main engines accelerate forward.
@@ -74,7 +76,7 @@ export function advanceMotion(ship: ShipState, goal: MovementGoal, dt: number): 
   // acceleration lights the dominant aft engine; inertia alone does not.
   force = add(forward,scale(lateral,lateralFraction));
   const actual = length(force);
-  if(actual > acceleration) force = scale(force,acceleration/actual);
+  if(actual > thrust) force = scale(force,thrust/actual);
   ship.engineThrust = Math.max(0,Math.min(1,Math.max(0,dot(force,facing))/acceleration));
   ship.inertialCoast = ship.engineThrust < 0.065 && length(ship.vel) > ship.maxSpeed * 0.04;
   const before = ship.vel;
@@ -87,7 +89,7 @@ export function advanceMotion(ship: ShipState, goal: MovementGoal, dt: number): 
   }
   const dv = sub(velocity, before);
   const dvLength = length(dv);
-  if (dvLength > acceleration * dt) velocity = addScaled(before, dv, acceleration * dt / dvLength);
+  if (dvLength > thrust * dt) velocity = addScaled(before, dv, thrust * dt / dvLength);
   if (dist < 0.002 && length(before) <= acceleration * dt &&
       length(velocity) <= acceleration * dt &&
       (!goal.avoidanceAcceleration || length(goal.avoidanceAcceleration) < acceleration * 0.01)) {
