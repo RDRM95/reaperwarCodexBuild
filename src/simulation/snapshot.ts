@@ -41,7 +41,7 @@ export interface SimSnapshot {
   fleets: FleetState[];
 }
 
-export const SHIP_STRIDE = 53;
+export const SHIP_STRIDE = 54;
 export const WEAPON_STRIDE = 18;
 export const PROJECTILE_STRIDE = 15;
 export const MISSILE_STRIDE = 17;
@@ -95,7 +95,7 @@ export class SnapshotEncoder {
       ships[o++] = this.ref(s.targetId); ships[o++] = optional(s.targetLockUntil); ships[o++] = MODES.indexOf(s.engagementMode);
       ships[o++] = this.ref(s.firingTargetId); ships[o++] = this.ref(s.forcedTargetId); ships[o++] = this.ref(s.escortId);
       ships[o++] = Number(s.withdrawing); ships[o++] = Number(s.escaped); ships[o++] = s.lastHitAt; ships[o++] = optional(s.firstShotAt);
-      ships[o++] = optional(s.rearming); ships[o++] = optional(s.rearmTimer); ships[o++] = s.aiTimer;
+      ships[o++] = optional(s.rearming); ships[o++] = optional(s.rearmTimer); ships[o++] = optional(s.stationTimer); ships[o++] = s.aiTimer;
       ships[o++] = s.hangar ? s.hangar.remaining : NaN; ships[o++] = s.hangar ? s.hangar.launchTimer : NaN;
       ships[o++] = s.stats.damageDealt; ships[o++] = s.stats.damageTaken; ships[o++] = s.stats.shotsFired; ships[o++] = s.stats.hits; ships[o++] = s.stats.kills;
       for (const weapon of s.weapons) {
@@ -199,7 +199,7 @@ export class SimMirror {
       s.targetId = this.id(a[o++]); s.targetLockUntil = number(a[o++]); s.engagementMode = MODES[a[o++]];
       s.firingTargetId = this.id(a[o++]); s.forcedTargetId = this.id(a[o++]); s.escortId = this.id(a[o++]);
       s.withdrawing = a[o++] !== 0; s.escaped = a[o++] !== 0; s.lastHitAt = a[o++]; s.firstShotAt = number(a[o++]);
-      s.rearming = flag(a[o++]); s.rearmTimer = number(a[o++]); s.aiTimer = a[o++];
+      s.rearming = flag(a[o++]); s.rearmTimer = number(a[o++]); s.stationTimer = number(a[o++]); s.aiTimer = a[o++];
       const remaining = a[o++], launchTimer = a[o++];
       if (s.hangar) { s.hangar.remaining = remaining; s.hangar.launchTimer = launchTimer; }
       s.stats.damageDealt = a[o++]; s.stats.damageTaken = a[o++]; s.stats.shotsFired = a[o++]; s.stats.hits = a[o++]; s.stats.kills = a[o++];

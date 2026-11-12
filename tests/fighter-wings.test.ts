@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildCustomBattle, buildScenario } from '@/scenarios';
-import { BattleSimulation } from '@/simulation/battle';
+import { BattleSimulation, STATION_SECONDS } from '@/simulation/battle';
 import { WING_SIZE, wingLeader } from '@/simulation/ai';
 import { measureActivity } from '@/simulation/combatActivity';
 
@@ -77,13 +77,50 @@ describe('fighter wings', () => {
     expect(guns).toBeGreaterThan(3000);
   });
 
-  it('fighters spend a third of a battle firing and make three attack runs a minute', () => {
+  it('a fighter out of torpedoes stays over its target with its guns before it turns for its carrier', () => {
+    // One carrier's wings against a destroyer that cannot be hurt and does no damage; the carrier holds its fire.
+    const sim = new BattleSimulation(buildCustomBattle({ seed: 3, rulesId: 'canon_me3', environment: 'deep_space', startingDistanceKm: 40, maxDuration: 200,
+      sideA: { faction: 'alliance', name: 'A', formation: 'line_abreast', counts: { alliance_carrier: 1 } },
+      sideB: { faction: 'reaper', name: 'B', formation: 'line_abreast', counts: { reaper_destroyer: 1 } } }));
+    const destroyer = sim.ships.find(s => s.role === 'reaper_destroyer')!;
+    destroyer.maxHull = destroyer.hull = 1e12;
+    for (const s of sim.ships) if (s.side === 'B' || s.role === 'carrier') for (const w of s.weapons) w.def = { ...w.def, damage: 0, range: s.role === 'carrier' ? 0 : w.def.range };
+    const spent = new Map<string, number>(), turned = new Map<string, number>();
+    let seen = 0;
+    while (!sim.finished && sim.time < 150) {
+      sim.step();
+      for (; seen < sim.events.length; seen++) {
+        const event = sim.events[seen];
+        if (event.type === 'ammunition_depleted' && !spent.has(event.shipId) && sim.getShip(event.shipId)?.role === 'fighter') spent.set(event.shipId, event.t);
+      }
+      for (const fighter of sim.ships) if (fighter.role === 'fighter' && fighter.rearming && !turned.has(fighter.id)) turned.set(fighter.id, sim.time);
+    }
+    // Measured: all 24 fighters spend their torpedoes, and each turns for the carrier exactly STATION_SECONDS later,
+    // having fired 2,049 gun rounds between them in that time. Before, each turned in the tick its last torpedo left.
+    expect(spent.size).toBe(24);
+    expect(turned.size).toBe(24);
+    let rounds = 0;
+    for (const [id, at] of turned) {
+      expect(at - spent.get(id)!).toBeGreaterThan(STATION_SECONDS - 0.1);
+      expect(at - spent.get(id)!).toBeLessThan(STATION_SECONDS + 0.1);
+    }
+    for (const event of sim.events) {
+      if (event.type !== 'weapon_fired' || event.weaponId !== 'fighter_gun' || !spent.has(event.shipId)) continue;
+      if (event.t > spent.get(event.shipId)! && event.t <= turned.get(event.shipId)!) rounds++;
+    }
+    expect(rounds).toBeGreaterThan(1500);
+    // They still go home, reload and come back: measured, three reloads each in 150 s.
+    expect(sim.events.filter(e => e.type === 'fighter_rearmed').length).toBeGreaterThanOrEqual(48);
+  });
+
+  it('fighters spend four tenths of a battle firing and make more than four attack runs a minute', () => {
     const report = measureActivity(earth(), 300);
     const row = report.rows.get('A fighter')!;
-    // Measured, seed 1: firing 37 %, idle 0.4 %, 3.5 attack runs a minute each. Before this change fighters in this
-    // battle were firing 20 % of the time (three seeds).
-    expect(row.seconds.firing / row.hullSeconds).toBeGreaterThan(0.3);
+    // Measured, seed 1: firing 49 %, idle 0.4 %, 5.9 attack runs a minute each (prime_apex: 41 % and 3.9). When a
+    // fighter turned for its carrier the moment its torpedoes were gone this battle measured 37 % and 3.5; before
+    // fighters strafed at all, 20 % (three seeds).
+    expect(row.seconds.firing / row.hullSeconds).toBeGreaterThan(0.42);
     expect(row.seconds.idle / row.hullSeconds).toBeLessThan(0.05);
-    expect(row.runs / (row.hullSeconds / 60)).toBeGreaterThan(3);
+    expect(row.runs / (row.hullSeconds / 60)).toBeGreaterThan(4.5);
   });
 });

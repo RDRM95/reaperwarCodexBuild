@@ -77,6 +77,29 @@ stands out in the lower one is the frigate's main gun and the destroyer's beam.
 
 Fighters now fire their guns at the hull they are attacking (`COMBAT_OVERHAUL_2026-11-12.md`), so there are about twice as many light shots in the same battle: 5,509 against 2,708. With the sizes above, main guns make 86 % of the muzzle-flash area (they made 91 % before fighters strafed, and would make 19 % with the old flash sizes). The sizes themselves are unchanged.
 
+Since fighters also stay over their target after their torpedoes are gone (third pass of the same note), there are 9,792 light shots in that battle and main guns make 83 % of the muzzle-flash area. The test's floor is 80 %, so there is little room left: if fighters are given more to fire, or if this already looks noisy on the owner's machine, the next step is to thin or shrink fighter flashes further, not to raise their fire.
+
+### A fighter's cannon is drawn as a belt of tracer (12 November)
+
+With fighters strafing and staying, several hundred cannon rounds are in the air at once. Drawn one for one, fighter cannon took 13 to 22 % of everything tracers cover (2 to 18 % before fighters stayed), which is the thing the owner's report was about. A gun doing less than 20 damage a round (only the fighter cannon, at 6) is now drawn one round in four, as tracer ammunition is loaded one round in four or five. Every round still flies and hits in the simulation; hull guns are drawn round for round.
+
+| Battle of Earth, ten looks | Fighter cannon, every round drawn | One in four |
+|---|---:|---:|
+| prime_apex, seed 1 | 14.7 % of tracer area | 4.2 % |
+| prime_apex, seed 2 | 13.8 % | 3.8 % |
+| canon, seed 1 | 12.8 % | 3.4 % |
+| canon, seed 2 | 21.5 % | 6.2 % |
+
+Main guns' share in the same four battles: 53, 74, 49 and 27 %. That share depends mostly on how many main rounds are in the air at the ten looks (three to nine of them), so it moves by tens of points between seeds; it is not a stable measure, and the fighter cannon's share is the one this rule controls.
+
+Thirty-two fighters strafing two Reaper destroyers, the same battle at the same moment (144 cannon rounds in the air), software renderer:
+
+![Every round drawn](qa/visual-weight-20261111/strafing-every-round.jpg)
+
+![One round in four drawn](qa/visual-weight-20261111/strafing-tracer-belt.jpg)
+
+Whether a wing's fire now reads as too thin is for the owner to judge in motion.
+
 ## Not done, from the same report
 
 - "Correct colour for actual organic fighters": nothing was recoloured. The owner was asked which colour is meant.

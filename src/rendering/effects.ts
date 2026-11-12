@@ -1,4 +1,4 @@
-import { explosionSize, explosionSmoke, impactSize, impactSparks, pointDefenceBrightness, tracerSize } from './visualWeight';
+import { explosionSize, explosionSmoke, impactSize, impactSparks, pointDefenceBrightness, tracerShown, tracerSize } from './visualWeight';
 import * as THREE from 'three';
 import { Rng } from '@/core/rng';
 import { KM } from './geometry';
@@ -288,7 +288,7 @@ export class EffectsSystem {
   // --------------------------------------------------------- per-frame sync
 
   /** Update tracers from simulation projectiles (positions in km). */
-  setTracers(items: readonly { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; big?: boolean; weapon?: { damage: number } }[], alpha: number, dt: number): void {
+  setTracers(items: readonly { id?: number; pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; big?: boolean; weapon?: { damage: number } }[], alpha: number, dt: number): void {
     let n = 0;
     const dir = new THREE.Vector3();
     const stride=Math.max(1,Math.ceil(items.length/this.tracerMax));
@@ -297,6 +297,8 @@ export class EffectsSystem {
       const calibre=it.weapon?.damage??(it.big?900:50);
       const big=calibre>=600;
       if (n >= this.tracerMax) break;
+      // A light cannon's rounds are drawn one in four, as tracer is loaded (see visualWeight.ts).
+      if (!tracerShown(calibre, it.id ?? 0)) continue;
       const px = (it.pos.x + it.vel.x * alpha * dt) * KM;
       const py = (it.pos.y + it.vel.y * alpha * dt) * KM;
       const pz = (it.pos.z + it.vel.z * alpha * dt) * KM;

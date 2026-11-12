@@ -3,7 +3,7 @@ import { buildScenario } from '@/scenarios';
 import { BattleSimulation } from '@/simulation/battle';
 import {
   explosionSize, explosionSmoke, farPointBrightness, HEAVY_HIT, impactSize, impactSparks, MAIN_CALIBRE, muzzleFlashSize,
-  pointDefenceBrightness, SMALL_CRAFT_LENGTH, tracerSize,
+  BELT_CALIBRE, BELT_INTERVAL, pointDefenceBrightness, SMALL_CRAFT_LENGTH, tracerShown, tracerSize,
 } from '@/rendering/visualWeight';
 import { getShipTemplate } from '@/rendering/ships';
 import { WEAPONS } from '@/data/weapons';
@@ -38,29 +38,44 @@ describe('visual weight of weapon fire', () => {
     }
   });
 
-  it('in the Battle of Earth the main guns take most of the tracer picture instead of a quarter of it', () => {
+  it('a light cannon is drawn as a belt of tracer, one round in four; every other round is drawn', () => {
+    expect(BELT_INTERVAL).toBe(4);
+    expect(WEAPONS.fighter_gun.damage).toBeLessThan(BELT_CALIBRE);
+    let shown = 0;
+    for (let serial = 0; serial < 400; serial++) if (tracerShown(WEAPONS.fighter_gun.damage, serial)) shown++;
+    expect(shown).toBe(100);
+    // Hull guns, from a frigate's 70-damage battery up, are drawn round for round.
+    for (const calibre of [BELT_CALIBRE, 65, 70, 199, MAIN_CALIBRE, 40000]) for (let serial = 0; serial < 8; serial++) expect(tracerShown(calibre, serial)).toBe(true);
+  });
+
+  it('in the Battle of Earth the main guns take half of the tracer picture instead of a tenth of it, and fighter cannon a twentieth', () => {
     const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
-    let mainBefore = 0, allBefore = 0, mainNow = 0, allNow = 0, next = 30;
+    let mainBefore = 0, allBefore = 0, mainNow = 0, allNow = 0, fighterNow = 0, fighterUnthinned = 0, next = 30;
     while (!sim.finished && sim.time < 120) {
       sim.step();
       if (sim.time < next) continue;
       next += 10;
       for (const p of sim.projectiles) {
         const calibre = p.weapon.damage, speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z);
-        const was = area(calibre, speed, before(calibre)), now = area(calibre, speed, tracerSize(calibre));
+        const was = area(calibre, speed, before(calibre)), drawn = area(calibre, speed, tracerSize(calibre));
+        const now = tracerShown(calibre, p.id) ? drawn : 0;
         allBefore += was; allNow += now;
         if (calibre >= MAIN_CALIBRE) { mainBefore += was; mainNow += now; }
+        if (p.weapon.id === 'fighter_gun') { fighterNow += now; fighterUnthinned += drawn; }
       }
     }
-    // Measured (15 main rounds and 403 lighter ones over the looks): main guns were 26 % of the area tracers cover
-    // and are 75 %; all tracers together cover 35 % of what they did. The Final Battle of Earth measures 15 % and
-    // 57 %. (Before hulls spread their fire and cruisers fought on the beam, with fewer main rounds in the air
-    // at these looks, this battle measured 12 % and 53 %, and 22 % for all tracers.)
+    // Measured (6 main rounds and 896 lighter ones over the looks, 492 of them fighter cannon): main guns were
+    // 7.5 % of the area tracers cover and are 53 %; fighter cannon are 4 %, and would be 15 % if every round were
+    // drawn; all tracers together cover 14 % of what they did. This share moves with how many main rounds happen
+    // to be in the air at the ten looks: with 15 of them (before fighters strafed) it was 75 %, with 9 (when
+    // fighters strafed but went home with their last torpedo) 63 %. The light rounds of hulls are 404 throughout.
     expect(mainBefore / allBefore).toBeLessThan(0.35);
     expect(mainNow / allNow).toBeGreaterThan(0.45);
     expect(mainNow / allNow).toBeGreaterThan(2 * mainBefore / allBefore);
     expect(allNow / allBefore).toBeLessThan(0.45);
     expect(mainNow).toBeCloseTo(mainBefore, 6);
+    expect(fighterNow / allNow).toBeLessThan(0.08);
+    expect(fighterUnthinned / (allNow - fighterNow + fighterUnthinned)).toBeGreaterThan(0.1);
   });
 
   it('point-defence lasers are faint and a distant fighter is a faint mote', () => {
@@ -135,10 +150,11 @@ describe('visual weight of flashes', () => {
         if (!(event.barrierDamage > event.hullDamage && event.barrierDamage > 3)) { sparksBefore += before.sparks(event.hullDamage); sparksNow += impactSparks(event.hullDamage); }
       }
     }
-    // Measured (51 main shots, 5,509 lighter, most of them fighters strafing): main guns 19 % of muzzle-flash area
-    // before, 86 % now; light guns' flashes cover 4 % of what they did; hits under 100 damage 51 %, and they threw
-    // 940 sparks and now throw none (none of them does 40 damage to a hull). Before fighters strafed there were
-    // 2,708 lighter shots and main guns had 91 %; the floor for their share was 0.85 then and is 0.8 now.
+    // Measured (53 main shots, 9,792 lighter, most of them fighters strafing): main guns 12 % of muzzle-flash area
+    // before, 83 % now; light guns' flashes cover 3 % of what they did; hits under 100 damage 39 %, and they threw
+    // 1,028 sparks and now throw none (none of them does 40 damage to a hull). Before fighters strafed there were
+    // 2,708 lighter shots and main guns had 91 %; when fighters strafed but went home with their last torpedo,
+    // 5,509 and 86 %. The floor for their share was 0.85 at first and is 0.8 now.
     expect(main / (main + lightBefore)).toBeLessThan(0.45);
     expect(main / (main + lightNow)).toBeGreaterThan(0.8);
     expect(lightNow / lightBefore).toBeLessThan(0.1);
