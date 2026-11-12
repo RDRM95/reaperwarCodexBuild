@@ -68,19 +68,44 @@ const newFleet = (fac: CustomFaction): CustomFleetInput => ({ faction: fac, name
 export function renderCustom(app: App, params?: { template?: CustomBattleInput }): HTMLElement {
   let input: CustomBattleInput = JSON.parse(JSON.stringify(params?.template ?? DEFAULT_INPUT));
   let rosterNotice = '';
+  let userEdited = false;
+  let launchStarted = false;
   if (!params?.template) input.rulesId = app.prefs.lastTimelineId;
   if (!params?.template) void storage.get<CustomBattleInput | undefined>('customBattle', undefined).then((saved) => {
-    if (saved && saved.sideA && saved.sideB) {
-      const copy: CustomBattleInput = JSON.parse(JSON.stringify(saved));
-      input = { ...DEFAULT_INPUT, ...copy, sideA: { ...DEFAULT_INPUT.sideA, ...copy.sideA }, sideB: { ...DEFAULT_INPUT.sideB, ...copy.sideB }, extraA: copy.extraA ?? [], extraB: copy.extraB ?? [] };
-      // Older saves carried a Reaper-keyed reinforcement roster regardless of side B's faction.
-      if (!saved.reinforcementFaction) input.reinforcementFaction = input.sideB.faction;
-      if (!saved.rosterMode) input.rosterMode = hasCrossoverFleet() ? 'multiverse' : 'mass_effect';
-      render();
-    }
+    // A delayed IndexedDB read must not overwrite fleets changed by the user,
+    // or revive a builder after Launch navigated to the battle.
+    if (userEdited || launchStarted || !body.isConnected || !saved?.sideA || !saved?.sideB) return;
+    const copy: CustomBattleInput = JSON.parse(JSON.stringify(saved));
+    const validCounts = (counts: unknown): Record<string, number> =>
+      counts && typeof counts === 'object' && !Array.isArray(counts) ? counts as Record<string, number> : {};
+    input = {
+      ...DEFAULT_INPUT, ...copy,
+      sideA: { ...DEFAULT_INPUT.sideA, ...copy.sideA, counts: validCounts(copy.sideA.counts) },
+      sideB: { ...DEFAULT_INPUT.sideB, ...copy.sideB, counts: validCounts(copy.sideB.counts) },
+      extraA: Array.isArray(copy.extraA) ? copy.extraA.filter(Boolean) : [],
+      extraB: Array.isArray(copy.extraB) ? copy.extraB.filter(Boolean) : [],
+    };
+    // Older saves carried a Reaper-keyed reinforcement roster regardless of side B's faction.
+    if (!saved.reinforcementFaction) input.reinforcementFaction = input.sideB.faction;
+    if (!saved.rosterMode) input.rosterMode = hasCrossoverFleet() ? 'multiverse' : 'mass_effect';
+    render();
+  }).catch(() => {
+    // Keep the editable default roster if local storage cannot be read.
   });
 
   const body = el('div', { class: 'screen-body' });
+  const markEdited = () => { userEdited = true; };
+  for (const event of ['input', 'change', 'click']) body.addEventListener(event, markEdited, true);
+  const reportLaunchError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : 'Unknown initialization error';
+    body.querySelector('[data-action="custom-launch-error"]')?.remove();
+    const warning = el('div', {
+      class: 'entry-block', role: 'alert', 'data-action': 'custom-launch-error',
+      style: { color: 'var(--orange)', border: '1px solid var(--orange)', marginTop: '12px' },
+    }, `BATTLE COULD NOT START: ${message}. Your custom setup has been kept; adjust it and retry.`);
+    body.append(warning);
+    warning.scrollIntoView({ block: 'nearest' });
+  };
   const currentRules = () => app.getTimeline(input.rulesId);
   const allowedFactions = (): CustomFaction[] => currentRules().category === 'canon' || currentRules().strictLore ? [...MASS_EFFECT_FACTION_IDS]
     : input.rosterMode === 'multiverse' ? CUSTOM_FACTIONS : CUSTOM_FACTIONS.filter(faction => !isCrossoverFaction(faction));
@@ -315,16 +340,31 @@ export function renderCustom(app: App, params?: { template?: CustomBattleInput }
       el('button', { class: 'btn', onclick: () => app.show('menu') }, '← Main menu'),
       el('div', { class: 'spacer' }),
       el('button', { class: 'btn', 'data-action': 'save-custom', onclick: () => {
+        userEdited = true;
         normaliseRoster();
         void storage.set('customBattle', JSON.parse(JSON.stringify(input)) as CustomBattleInput);
         app.toast('CUSTOM BATTLE SAVED');
       } }, 'Save setup'),
       el('button', { class: 'btn primary', 'data-action': 'launch-custom', onclick: () => {
-        normaliseRoster();
-        if (sideHulls('A') === 0 || sideHulls('B') === 0) return app.toast('BOTH SIDES NEED AT LEAST ONE SHIP');
-        void storage.set('customBattle', JSON.parse(JSON.stringify(input)) as CustomBattleInput);
-        app.selectTimeline(input.rulesId);
-        app.startBattle(buildCustomBattle(input, app.getTimeline(input.rulesId)));
+        userEdited = true;
+        body.querySelector('[data-action="custom-launch-error"]')?.remove();
+        try {
+          normaliseRoster();
+          if (sideHulls('A') === 0 || sideHulls('B') === 0) {
+            return app.toast('BOTH SIDES NEED AT LEAST ONE SHIP');
+          }
+          const snapshot = JSON.parse(JSON.stringify(input)) as CustomBattleInput;
+          // Validate/build before changing screens, timeline preferences or saved setup.
+          const config = buildCustomBattle(snapshot, app.getTimeline(snapshot.rulesId));
+          app.startBattle(config);
+          launchStarted = true;
+          app.selectTimeline(snapshot.rulesId);
+          void storage.set('customBattle', snapshot);
+        } catch (error) {
+          // A bad saved roster or WebGL failure is no longer a blank screen.
+          reportLaunchError(error);
+          app.toast('CUSTOM BATTLE LAUNCH FAILED');
+        }
       } }, 'Launch →'),
     ]),
   ]);

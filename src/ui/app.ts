@@ -891,11 +891,25 @@ export class App {
   }
 
   startBattle(config: BattleConfig, opts: { replay?: boolean; comparison?: ComparisonReport; comparisonSide?: 'a' | 'b'; campaign?: CampaignBattleLink; civilization?: CivilizationBattleLink } = {}): void {
-    if (this.battle) this.battle.dispose();
+    // Battle construction can fail for an invalid custom setup or renderer.
+    // Do not destroy the builder UI or switch screen until initialization succeeds.
+    const wasBattle = this.screen === 'battle';
+    if (this.battle) {
+      this.battle.dispose();
+      this.battle = undefined;
+    }
+    const previousVisibility = this.canvas.style.visibility;
+    this.canvas.style.visibility = 'visible';
+    let controller: BattleController;
+    try {
+      controller = new BattleController(this, config, this.canvas, this.overlayCanvas, !!opts.replay);
+    } catch (error) {
+      this.canvas.style.visibility = previousVisibility;
+      if (wasBattle) this.show('menu'); // Previous controller was already disposed.
+      throw error; // The initiating screen displays an actionable error.
+    }
     clear(this.ui);
     this.screen = 'battle';
-    this.canvas.style.visibility = 'visible';
-    const controller = new BattleController(this, config, this.canvas, this.overlayCanvas, !!opts.replay);
     this.battle = controller;
     this.ui.appendChild(controller.hud.root);
     controller.hud.setComparison(opts.comparison, opts.comparisonSide);
