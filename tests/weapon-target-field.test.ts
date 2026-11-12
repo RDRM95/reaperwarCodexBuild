@@ -42,6 +42,26 @@ describe('weapon targeting index', () => {
     expect(ids).toContain(fighter.id);
   });
 
+  it('allows for a hull closing at the sprint when its side has nothing faster', () => {
+    // One enemy hull, no fighters on its side: 0.09 km outside a 10 km weapon at the snapshot. Sprinting at twice
+    // its combat speed of 1 km/s it covers 0.1 km in the tick and ends inside the weapon's range.
+    const make = (): { ships: ShipState[]; enemy: ShipState } => {
+      const shooter = { ...ship(1), pos: v3(0, 0, 0) } as ShipState, enemy = { ...ship(0), pos: v3(10.09, 0, 0), maxSpeed: 1 } as ShipState;
+      return { ships: [shooter, enemy], enemy };
+    };
+    const visited = (sprint: number): boolean => {
+      const { ships, enemy } = make();
+      const field = new WeaponTargetField(ships, 0.05, sprint);
+      enemy.pos = v3(9.99, 0, 0);
+      let seen = false;
+      field.forRange('A', v3(0, 0, 0), 10, (s) => { if (s === enemy && distance(v3(0, 0, 0), s.pos) <= 10) seen = true; });
+      return seen;
+    };
+    expect(visited(2)).toBe(true);
+    // The bound without the sprint, as it was: the hull is in range and is not visited.
+    expect(visited(1)).toBe(false);
+  });
+
   it('limits the candidate scan for tight-range defensive mounts', () => {
     const ships = Array.from({ length: 1100 }, (_, i) => ship(i));
     const field = new WeaponTargetField(ships, 0.05);

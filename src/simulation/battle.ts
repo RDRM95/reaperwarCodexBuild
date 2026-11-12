@@ -22,7 +22,7 @@ import type { FactionId } from '@/data/types';
 import { WEAPONS, getWeapon } from '@/data/weapons';
 import { applyRulesToShip, applyRulesToWeapon, cloneRules, type EffectiveWeapon, type RuleSet } from '@/timelines/rules';
 import { assertLoreCompatible } from '@/timelines/lore';
-import { fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
+import { CLOSING_SPRINT, fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
 import { hardcoreReaperBeamDamage } from './reaperHardcore';
 import { applyDamage, applyProjectileDamage, hitProbability } from './damage';
 import { assignSlots } from './formations';
@@ -587,7 +587,7 @@ export class BattleSimulation implements AiContext {
     this.separationField = new SeparationField(this.ships);
     // Snapshot targets before the per-ship move/fire loop, with a movement
     // allowance so targets entering range mid-tick remain eligible.
-    this.weaponTargetField = new WeaponTargetField(this.ships, dt);
+    this.weaponTargetField = new WeaponTargetField(this.ships, dt, CLOSING_SPRINT);
     for (const ship of this.ships) {
       if (!ship.alive || ship.escaped) continue;
       ship.prevPos = clone(ship.pos);
