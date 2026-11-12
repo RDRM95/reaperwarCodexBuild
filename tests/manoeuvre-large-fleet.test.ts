@@ -20,7 +20,7 @@ describe('large-fleet attack bearings', () => {
     }
     // Member order cannot change assignment: each hull's ID and deployment offset are stable.
     const reversed = assignAttackBearings('frigate', [...members].reverse());
-    expect([...reversed.entries()].sort(([a], [b]) => a.localeCompare(b)))
-      .toEqual([...bearings.entries()].sort(([a], [b]) => a.localeCompare(b)));
+    expect(reversed.size).toBe(bearings.size);
+    for (const [id, bearing] of bearings) expect(reversed.get(id)).toEqual(bearing);
   });
 });
