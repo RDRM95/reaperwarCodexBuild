@@ -94,7 +94,7 @@ export function renderBriefing(app: App, params?: { scenarioId?: string }): HTML
         .filter((f) => f.side === side)
         .map((f) =>
           el('div', { class: 'entry-block' }, [
-            el('b', {}, f.name + (f.arrivalTime ? ` (arrives T+${f.arrivalTime}s)` : '')),
+            el('b', {}, f.name + (f.arrivalTime ? ` (arrives by T+${f.arrivalTime}s)` : '')),
             el('div', { class: 'dim mono', style: { fontSize: '11px', marginTop: '4px' } }, f.ships.map((s) => `${s.count}× ${getShipClass(s.classId).name}`).join(' · ')),
           ]),
         );

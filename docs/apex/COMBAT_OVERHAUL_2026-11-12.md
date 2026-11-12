@@ -248,6 +248,21 @@ One carrier's wings on the way in, the same battle at 13 s, before and after (so
 
 ![Wings in formation](qa/combat-overhaul-20261112/wings-in-formation.jpg)
 
+## Seventh pass, same day: reinforcements come when they are needed
+
+**What was wrong.** Once a battle no longer ended while a fleet was still on its way (Codex #79), the victors of a first wave waited out the timetable with nothing to shoot at. In the Final Battle of Earth under prime_apex the first Reaper wave is gone at about 61 s and the second was due at 90 s: over eight seeds the Reapers were absent from the field for 22 to 31 s.
+
+**What changed.** A fleet on its way arrives five seconds after its side's last hull on the field is lost, if that is sooner than its timetable (`EARLY_ARRIVAL_SECONDS`). A side that has not yet taken the field at all keeps its timetable, so an ambush still arrives when the scenario says. The scenario's own data is not altered, so a replay sees the same timetable. The briefing now reads "arrives by T+90s".
+
+| Eight seeds (four for the last three rows) | Seconds with one side absent | Battle length |
+|---|---:|---:|
+| Final Battle of Earth, prime_apex | 22 to 31 → 5 | 143 to 154 → 113 to 130 s |
+| Defence of Palaven, prime_apex | 6 to 11 → 5 | 106 to 112 → 102 to 107 s |
+| Battle of Earth, prime_apex | unchanged (0, one seed 2) | unchanged |
+| Battle of Earth and Final Battle, canon | unchanged (0) | unchanged |
+
+Winners are the same in all twenty-eight battles, and every Reaper hull still arrives. `tests/battle-end.test.ts` has the cases: the second wave is on the field five seconds after the first wave's last hull; a side that has not yet deployed keeps its timetable; the scenario is not altered.
+
 ## What this pass does not do
 
 Against the directive's seven acceptance points:
@@ -260,4 +275,4 @@ Against the directive's seven acceptance points:
 6. *Reapers and allies behave distinctly.* Kept: Reapers do not sprint, do not turn beam-on, press to individual distances and never back away.
 7. *Large battles remain playable.* The simulation is about a quarter dearer at 2,208 ships. Not run on real hardware.
 
-Also not done: fighters still spend a third to a half of their time on the way out to a fight 55 to 77 km from their carrier (the third pass removed most of the time spent going home, not the distance); the lull between waves in the Final Battle under prime_apex, now that it waits for its second wave; the simulation is about a quarter dearer at 2,208 ships than before the overhaul. A Reaper capital with a target in range is silent 15 % of the time, and every such second its target is outside its 70-degree bow arc (61 degrees off the bow at the median) while it turns at three degrees a second: escorts swinging round capitals, as the first pass made them do, get off the big guns' bows. That is left as it is. Dreadnoughts firing little in lopsided battles was traced and is distance, not behaviour: in the prime_apex Battle of Earth 91 Alliance hulls start 100 km from 10 Reapers and a second wave arrives 87 km away at about 55 s. Nothing here was judged by eye in motion.
+Also not done: fighters still spend a third to a half of their time on the way out to a fight 55 to 77 km from their carrier (the third pass removed most of the time spent going home, not the distance); the simulation is about a quarter dearer at 2,208 ships than before the overhaul. A Reaper capital with a target in range is silent 15 % of the time, and every such second its target is outside its 70-degree bow arc (61 degrees off the bow at the median) while it turns at three degrees a second: escorts swinging round capitals, as the first pass made them do, get off the big guns' bows. That is left as it is. Dreadnoughts firing little in lopsided battles was traced and is distance, not behaviour: in the prime_apex Battle of Earth 91 Alliance hulls start 100 km from 10 Reapers and a second wave arrives 87 km away at about 55 s. Nothing here was judged by eye in motion.
