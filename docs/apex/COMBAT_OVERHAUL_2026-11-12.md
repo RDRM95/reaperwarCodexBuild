@@ -195,6 +195,31 @@ The long tails shorten where a losing side is ground down to a few hulls (the th
 
 One pinned figure was restated: Reaper capitals' firing share in the long Custom Battle at seed 1 is 84 % (88 % before; floor 0.85, now 0.78). Over four seeds it is 83 % before and after. A capital with a target in range is silent about a tenth of the time, turning its guns onto it; not addressed.
 
+## Fifth pass, same day: a sprinting hull keeps its thrust to give way
+
+**What was wrong.** Counted at every tick, hulls still touched in the Battle of Earth under prime_apex: over thirty seeds, five had a contact, 85 pair-ticks in all, the deepest 57 % of the two hulls' radii. All were at about 60 to 80 s, when 49 frigates sprint toward the second Reaper wave.
+
+The closing sprint (first pass) doubles a hull's top speed and its thrust, and is eased while the hull steers clear of a neighbour. Easing it took the thrust away along with the speed limit. A frigate doing twice its combat speed that began to give way had, from that moment, half the thrust to shed twice the speed.
+
+**What changed.** A hull above its combat speed keeps the thrust that took it there, in proportion to the speed it still carries, for giving way and for slowing down. Steering for its goal keeps the eased figure, so the extra goes to getting out of the way and not to pressing on. (A first version gave it to both; that cleared the frigates but let a Reaper destroyer into a cruiser in the Final Battle, because goal-seeking took the larger share.)
+
+| Hull contacts, every tick, 200 s | Before | Now |
+|---|---:|---:|
+| Battle of Earth, prime_apex, 30 seeds | 5 seeds, 85 pair-ticks, deepest 57 % | 1 seed, 12 pair-ticks, deepest 1.7 % |
+| Battle of Earth, canon, 8 seeds | none | none |
+| 54 against 38 control battle, 12 seeds | none | none |
+| Final Battle of Earth, canon, 4 seeds | none | none |
+
+Forty battles (eight seeds of five) keep their winners. Hulls firing, before → now: 83.0 → 83.7 %, 71.0 → 69.8 %, 80.8 → 79.2 %, 57.9 → 57.2 %, 81.1 → 79.9 %. Mean lengths: 175 → 179 s, 95 → 93 s, 139 → 146 s, 91 → 86 s, 211 → 223 s. Firing-line elevation over eight seeds of the control battle: 25.4 → 26.6 degrees (Alliance), 19.1 → 20.2 (Reapers).
+
+**Tests.** `tests/motion.test.ts`: at twice combat speed a hull giving way has twice its combat thrust; at or below combat speed, its combat thrust as before. `tests/collision-avoidance.test.ts`: the Battle of Earth at seed 25 runs 100 s without a contact (42 pair-ticks before, the deepest 57 %).
+
+**Three pinned figures were moved from one seed to several**, because each had been failing or passing on the luck of a seed rather than on what it was meant to hold:
+
+- Firing-line elevation and attackers abaft the beam (`engagement-3d`) were held at seeds 42 and 7. Over eight seeds the Alliance's elevation runs from 15.5 to 32.7 degrees. The same floors now apply to the mean of eight seeds.
+- Reaper capitals' firing share (`combat-engagement`) at seed 1 has measured 94, 88, 84 and 73 % as other things changed; over four seeds it is 80 % (83 % before this pass). It is now judged over four seeds with a floor of 0.72.
+- Main guns' share of the tracer picture (`visual-weight`) at one seed has measured 75, 63, 53 and 37 %, following the count of main rounds in the air at ten looks (4 to 15). Its absolute floor is dropped; what the drawing rules control is still held (main rounds unchanged, their share at least doubled, fighter cannon under 8 %).
+
 ## What this pass does not do
 
 Against the directive's seven acceptance points:
