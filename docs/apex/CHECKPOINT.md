@@ -2,9 +2,11 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 12 Nov 2026, 21:55 UTC — combat overhaul, five passes
+## State on 12 Nov 2026, 22:10 UTC — combat overhaul, six passes
 
 Read this section first. Everything below it is older.
+
+**HARD RULE FROM THE OWNER, 12 Nov 2026, about 22:15 UTC: the sandbox (`RDRM95/reaper-war-sandbox`) is retired. No further development there: no ports, no pushes, no merges.** Its last merged state is `76a8848` (sandbox #59, the fourth pass). Sandbox #60 (a port of Codex #79 and #80) was open and passing when the rule came; it has been left open and unmerged for the owner to close. Every mention below of a sandbox port still to do is void.
 
 **Owner's directive of 12 Nov** ("Combat AI and Fleet Movement Overhaul"): make combat functional, cinematic, aggressive and fun; ships fight instead of chasing; fix or remove fleet commands; battle groups pass through friendly formations; lightweight collision handling; keep large battles playable. The same message answered the open questions: bring the fixes to `reaperwar` (yes), redesign the geth cruiser, geth dreadnought and quarian heavy cruiser (yes). It did not say which fighter colour was meant or whether fighters are now too hard to see.
 
@@ -26,11 +28,11 @@ Read this section first. Everything below it is older.
 
 **Fifth pass, in this change:** a sprinting hull keeps its thrust to give way. Hull contacts in the Battle of Earth under prime_apex over thirty seeds: five seeds, 85 pair-ticks, deepest 57 % → one seed, 12 pair-ticks, 1.7 %. Winners unchanged in forty battles. Three pinned figures were moved from one seed to several (see the note).
 
-**Open as Codex #79:** a battle is not over while a fleet is still on its way. Under prime_apex the Final Battle of Earth ended at 60 to 78 s in every seed, before its Reaper reinforcement was due at 90 s; it now runs 142 to 152 s with all 32 Reaper hulls. It leaves a lull of 12 to 29 s between the waves in that scenario.
+**Since then (22:10 UTC).** Merged: Codex #79 (`11bbbe2`, a battle is not over while a fleet is still on its way: under prime_apex the Final Battle of Earth ended at 60 to 78 s in every seed, before its Reaper reinforcement was due at 90 s; it now runs 142 to 152 s with all 32 Reaper hulls) and Codex #80 (`1f6c13b`, the fifth pass). Their sandbox port was sandbox #60, left unmerged (see the rule above).
 
-**Parked, not pushed:** wings flying in formation on their leader (local branch `feat/wing-formation-b-20261112`; patch also at the session's scratchpad, `combat/wing-formation-full.patch`). A wing-mate is within 2.5 km of its leader 95 to 98 % of the time while attacking, against 54 to 73 %; attack runs a twentieth to a quarter fewer. It showed frigate contacts in 3 of 12 seeds against 1 of 12, which the fifth pass should remove; to be re-measured on top of it.
+**Sixth pass, in this change:** a wing flies in formation on its leader (400 m apart, echelon), goes in with it, finishes its own firing run and rejoins on the way out. Over six seeds a wing-mate is within 2.5 km of its leader 84 to 90 % of the time while attacking (49 to 75 % before) and within 1 km 42 to 46 % (16 to 27 %); fighter damage is 1 to 10 % lower. Strict formation (turning away with the leader) was tried and dropped: 10 to 28 % less damage. No hull contacts in eighteen seeds.
 
-**Not done from that directive, in the order to take them:** sandbox ports of the fifth pass and of #79; finish wing formation on top of them; fighters still fly 55 to 77 km out from their carrier; tick cost at 2,208 ships (about a quarter dearer than before the overhaul); the lull between waves in the Final Battle under prime_apex; nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
+**Not done from that directive, in the order to take them:** fighters still fly 55 to 77 km out from their carrier; the lull of 12 to 29 s between waves in the Final Battle under prime_apex; tick cost at 2,208 ships (about a quarter dearer than before the overhaul); nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
 
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 
@@ -214,7 +216,7 @@ The Pages deploy workflow succeeded on `ed39556`; check the run for `fb61d91`. T
 
 ## Rules in force
 
-Deterministic simulation (seeded Rng only; no `Math.random`, `Date.now`, `performance.now` or `process.env` under `src/simulation`, `src/data`, `src/scenarios`, `src/timelines`, `src/core`); no fake combat (ranges, arcs, barriers, charge, propulsion and collision decide outcomes; forced scene events are recorded as such); tests are the contract (a pinned value changes only with a measured new value and the reason in the commit); provenance on catalogue values; canon by default, AU labelled; HADES is a penetrator with a nuclear warhead; no ripped assets; GitHub's software WebGL is not hardware proof, so performance claims name what was measured and where.
+The sandbox repository is retired by the owner's order of 12 Nov 2026: do no work in it. Deterministic simulation (seeded Rng only; no `Math.random`, `Date.now`, `performance.now` or `process.env` under `src/simulation`, `src/data`, `src/scenarios`, `src/timelines`, `src/core`); no fake combat (ranges, arcs, barriers, charge, propulsion and collision decide outcomes; forced scene events are recorded as such); tests are the contract (a pinned value changes only with a measured new value and the reason in the commit); provenance on catalogue values; canon by default, AU labelled; HADES is a penetrator with a nuclear warhead; no ripped assets; GitHub's software WebGL is not hardware proof, so performance claims name what was measured and where.
 
 
 ## SR-2 release handover — 11 Nov 2026, 18:46 UTC

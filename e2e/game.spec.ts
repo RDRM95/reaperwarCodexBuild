@@ -23,6 +23,9 @@ test.describe('Reaper War Simulator', () => {
   });
 
   test('a complete Battle of Earth can be launched, controlled and finished', async ({ page }) => {
+    // Seven camera changes and a whole battle under software rendering: this took 1.8 to 1.9 minutes of its two on
+    // CI in three runs on 12 Nov and timed out in a fourth. Three times the limit; nothing it checks is changed.
+    test.slow();
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));
     await page.goto('/');

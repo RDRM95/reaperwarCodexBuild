@@ -77,7 +77,9 @@ describe('visual weight of weapon fire', () => {
     expect(allNow / allBefore).toBeLessThan(0.45);
     expect(mainNow).toBeCloseTo(mainBefore, 6);
     expect(fighterNow / allNow).toBeLessThan(0.08);
-    expect(fighterUnthinned / (allNow - fighterNow + fighterUnthinned)).toBeGreaterThan(0.1);
+    // Drawn round for round they would take about three times as much of the picture (how much that is moves with
+    // how many fighters are firing at the looks: 15 % and 17 % at this seed as battles changed).
+    expect(fighterUnthinned / (allNow - fighterNow + fighterUnthinned)).toBeGreaterThan(2.5 * fighterNow / allNow);
   });
 
   it('point-defence lasers are faint and a distant fighter is a faint mote', () => {
