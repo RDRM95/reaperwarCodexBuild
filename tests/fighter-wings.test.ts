@@ -53,9 +53,9 @@ describe('fighter wings', () => {
         if (fighter.targetId === leader.targetId) together++;
       }
     }
-    // Measured: 268 of 272 looks, 99 % (189 of 208 when first measured, before fighters stayed over their target
-    // or flew in formation). A wing-mate is on another target only between its leader's decision and its own
-    // next one.
+    // Measured: 316 of 316 looks (189 of 208 when first measured, before fighters stayed over their target or
+    // flew in formation). A wing-mate is on another target only between its leader's decision and its own next
+    // one.
     expect(looks).toBeGreaterThan(100);
     expect(together / looks).toBeGreaterThan(0.85);
   });
@@ -89,27 +89,36 @@ describe('fighter wings', () => {
   });
 
   it('a wing stays together while it attacks', () => {
-    for (const [rulesId, floor] of [['canon_me3', 0.9], ['prime_apex', 0.9]] as const) {
-      const sim = earth(rulesId);
-      let looks = 0, near = 0, next = 1;
-      while (!sim.finished && sim.time < 240) {
-        sim.step();
-        if (sim.time < next) continue;
-        next += 1;
-        for (const fighter of sim.ships) {
-          if (fighter.role !== 'fighter' || !fighter.alive || fighter.escaped || fighter.rearming || fighter.side !== 'A') continue;
-          const leader = wingLeader(sim, fighter), target = fighter.targetId ? sim.getShip(fighter.targetId) : undefined;
-          if (!leader || leader === fighter || !target) continue;
-          // Only while attacking: within 20 km of its target.
-          if (Math.hypot(target.pos.x - fighter.pos.x, target.pos.y - fighter.pos.y, target.pos.z - fighter.pos.z) > 8) continue;
-          looks++;
-          if (Math.hypot(leader.pos.x - fighter.pos.x, leader.pos.y - fighter.pos.y, leader.pos.z - fighter.pos.z) <= 1) near++;
+    // Six seeds of each battle: at one seed the share swings (the canon battle at seed 1 measures 79 % within
+    // 2.5 km with formation flying and 80 % without, though over six seeds it is 84 % against 75 %).
+    for (const rulesId of ['canon_me3', 'prime_apex'] as const) {
+      let looks = 0, near = 0, close = 0;
+      for (const seed of [1, 2, 3, 4, 5, 6]) {
+        const sim = new BattleSimulation(buildScenario('battle_of_earth', rulesId, seed));
+        let next = 1;
+        while (!sim.finished && sim.time < 240) {
+          sim.step();
+          if (sim.time < next) continue;
+          next += 1;
+          for (const fighter of sim.ships) {
+            if (fighter.role !== 'fighter' || !fighter.alive || fighter.escaped || fighter.rearming || fighter.side !== 'A') continue;
+            const leader = wingLeader(sim, fighter), target = fighter.targetId ? sim.getShip(fighter.targetId) : undefined;
+            if (!leader || leader === fighter || !target) continue;
+            // Only while attacking: within 20 km of its target.
+            if (Math.hypot(target.pos.x - fighter.pos.x, target.pos.y - fighter.pos.y, target.pos.z - fighter.pos.z) > 8) continue;
+            const apart = Math.hypot(leader.pos.x - fighter.pos.x, leader.pos.y - fighter.pos.y, leader.pos.z - fighter.pos.z);
+            looks++;
+            if (apart <= 1) near++;
+            if (apart <= 0.4) close++;
+          }
         }
       }
-      // Measured: a wing-mate is within 2.5 km of its leader in 98 % of looks under canon rules (649 looks) and
-      // 97 % under prime_apex (1,150). Before wings flew in formation: 78 % and 62 %.
-      expect(looks, rulesId).toBeGreaterThan(500);
-      expect(near / looks, rulesId).toBeGreaterThan(floor);
+      // Measured: a wing-mate is within 2.5 km of its leader in 84 % of looks under canon rules (3,065 looks) and
+      // 90 % under prime_apex (6,177), and within 1 km in 42 % and 44 %. Before wings flew in formation: 75 % and
+      // 60 % within 2.5 km, 27 % and 26 % within 1 km.
+      expect(looks, rulesId).toBeGreaterThan(2000);
+      expect(near / looks, rulesId).toBeGreaterThan(0.78);
+      expect(close / looks, rulesId).toBeGreaterThan(0.35);
     }
   });
 
@@ -170,9 +179,8 @@ describe('fighter wings', () => {
   it('fighters spend four tenths of a battle firing and make more than four attack runs a minute', () => {
     const report = measureActivity(earth(), 300);
     const row = report.rows.get('A fighter')!;
-    // Measured, seed 1: firing 55 %, idle 0.4 %, 5.8 attack runs a minute each (prime_apex: 42 % and 2.8). Before
-    // wings flew in formation, 49 % and 5.9 (41 % and 3.9): a wing now makes its passes together, and under
-    // prime_apex there are fewer of them. When a fighter turned for its carrier the moment its torpedoes were gone this battle measured
+    // Measured, seed 1: firing 47 %, idle 0.4 %, 5.1 attack runs a minute each (prime_apex: 43 % and 3.3). Before
+    // wings flew in formation, 49 % and 5.9 (41 % and 3.9): a wing goes in together, and there are fewer runs. When a fighter turned for its carrier the moment its torpedoes were gone this battle measured
     // 37 % and 3.5; before fighters strafed at all, 20 % (three seeds).
     expect(row.seconds.firing / row.hullSeconds).toBeGreaterThan(0.42);
     expect(row.seconds.idle / row.hullSeconds).toBeLessThan(0.05);
