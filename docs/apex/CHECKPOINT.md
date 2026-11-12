@@ -2,7 +2,7 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 12 Nov 2026, 22:10 UTC — combat overhaul, six passes
+## State on 12 Nov 2026, 22:40 UTC — combat overhaul, seven passes
 
 Read this section first. Everything below it is older.
 
@@ -32,7 +32,9 @@ Read this section first. Everything below it is older.
 
 **Sixth pass, in this change:** a wing flies in formation on its leader (400 m apart, echelon), goes in with it, finishes its own firing run and rejoins on the way out. Over six seeds a wing-mate is within 2.5 km of its leader 84 to 90 % of the time while attacking (49 to 75 % before) and within 1 km 42 to 46 % (16 to 27 %); fighter damage is 1 to 10 % lower. Strict formation (turning away with the leader) was tried and dropped: 10 to 28 % less damage. No hull contacts in eighteen seeds.
 
-**Not done from that directive, in the order to take them:** fighters still fly 55 to 77 km out from their carrier; the lull of 12 to 29 s between waves in the Final Battle under prime_apex; tick cost at 2,208 ships (about a quarter dearer than before the overhaul); nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
+**Since then (22:40 UTC).** The sixth pass is merged as Codex #81 (`125660f`). The original `reaperwar` engine was checked for the end-of-battle defect of #79 and does not have it (its end check already counts forces still to arrive). **Seventh pass, in this change:** a fleet on its way arrives five seconds after its side's last hull on the field is lost, if that is sooner than its timetable. In the Final Battle of Earth under prime_apex the Reapers were absent for 22 to 31 s between waves and are now absent for 5; the battle runs 113 to 130 s (143 to 154 s). Canon battles and the Battle of Earth are unchanged.
+
+**Not done from that directive, in the order to take them:** fighters still fly 55 to 77 km out from their carrier; tick cost at 2,208 ships (about a quarter dearer than before the overhaul); nothing has been judged in motion. **Needs the owner:** whether fighters staying to strafe (and dying more) is wanted, and for how long; whether one tracer round in four reads as too thin; which colour was meant for "organic fighters"; whether fighters are now too hard to see; a look on the RTX 5090.
 
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 

@@ -48,6 +48,8 @@ const REARM_SECONDS = 12;
  * carrier. It used to turn at once, and spent more of a battle flying to and from the hangar than fighting.
  */
 export const STATION_SECONDS = 15;
+/** A fleet on its way arrives this many seconds after its side's last hull on the field is lost, if that is sooner. */
+export const EARLY_ARRIVAL_SECONDS = 5;
 /** Seconds between rebuilds of the table of how much fire is aimed at each ship. */
 const TARGET_LOAD_REFRESH = 0.5;
 import type {
@@ -117,6 +119,9 @@ export class BattleSimulation implements AiContext {
   private readonly shipNames: ShipNameGenerator;
   private fleetRules = new Map<string, RuleSet>();
   private pendingFleets: FleetSpec[] = [];
+  /** Fleets called in ahead of their timetable (see `step`). Kept apart from the config, which is not altered. */
+  private readonly broughtForward = new Map<FleetSpec, number>();
+  private arrivalOf(f: FleetSpec): number { return this.broughtForward.get(f) ?? f.arrivalTime ?? 0; }
   private heavyLossesAnnounced = new Set<Side>();
   private engagementAnnounced = new Set<string>();
   private hadesVolleys = new HadesVolleyCoordinator();
@@ -571,8 +576,21 @@ export class BattleSimulation implements AiContext {
     this.time += dt;
     this.tick++;
 
-    // Reinforcements.
-    while (this.pendingFleets.length > 0 && (this.pendingFleets[0].arrivalTime ?? 0) <= this.time) {
+    // Reinforcements. A fleet on its way comes early when its side has fought and has no hull left on the field:
+    // the battle no longer ends there (see checkEnd), and waiting out the timetable left the victors of the first
+    // wave with nothing to shoot at, for 12 to 29 s in the Final Battle of Earth under prime_apex.
+    if (this.pendingFleets.length > 0) {
+      for (const side of ['A', 'B'] as const) {
+        const next = this.pendingFleets.find((f) => f.side === side);
+        if (!next || this.arrivalOf(next) <= this.time + EARLY_ARRIVAL_SECONDS) continue;
+        let deployed = false;
+        for (const fleet of this.fleets.values()) if (fleet.spec.side === side) { deployed = true; break; }
+        if (!deployed || this.ships.some((s) => s.side === side && s.alive && !s.escaped && s.role !== 'fighter')) continue;
+        this.broughtForward.set(next, this.time + EARLY_ARRIVAL_SECONDS);
+        this.pendingFleets.sort((a, b) => this.arrivalOf(a) - this.arrivalOf(b));
+      }
+    }
+    while (this.pendingFleets.length > 0 && this.arrivalOf(this.pendingFleets[0]) <= this.time) {
       const f = this.pendingFleets.shift()!;
       this.deployFleet(f);
       this.comms(f.side, 'battle_start', undefined, this.fleets.get(f.id));
