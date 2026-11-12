@@ -2,9 +2,19 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
+## State on 12 Nov 2026, 15:30 UTC — combat overhaul, first pass
+
+Read this section first. Everything below it is older.
+
+**Owner's directive of 12 Nov** ("Combat AI and Fleet Movement Overhaul"): make combat functional, cinematic, aggressive and fun; ships fight instead of chasing; fix or remove fleet commands; battle groups pass through friendly formations; lightweight collision handling; keep large battles playable. The same message answered the open questions: bring the fixes to `reaperwar` (yes), redesign the geth cruiser, geth dreadnought and quarian heavy cruiser (yes). It did not say which fighter colour was meant or whether fighters are now too hard to see.
+
+**In this change** (`docs/apex/COMBAT_OVERHAUL_2026-11-12.md`): hulls fight what is in reach, a fleet spreads its fire, a hull re-decides at once when its target dies, cruisers and carriers turn their side batteries to their target, hulls sprint to close, frigates and Reaper destroyers swing wider. Share of hull-time firing: 77 to 85 % under canon rules, 57 to 69 % under prime_apex (was 43 to 63 %); dreadnoughts fire about twice as often. Fleet commands audited by measurement: the HUD keeps Attack, Hold position, Withdraw and Retreat; Advance, Flank, Break through, Regroup, Screen and Defend position are removed. Measure with `scripts/combat-activity.ts`.
+
+**Not done from that directive, in the order to take them:** friendly formations crossing each other (nothing changed or measured yet); fighters (firing 14 to 20 % of the time, no squadron behaviour); dreadnoughts in lopsided battles (too slow to arrive); the simulation is a quarter dearer at 2,208 ships. Then: the three hull redesigns; the `reaperwar` port; the sandbox port of this change.
+
 ## State on 12 Nov 2026, 12:50 UTC — owner's play reports worked through
 
-Read this section first. Everything below it is older. Its first half was written on 11 Nov at 15:40 UTC (regroup and screen orders); the paragraph on the owner's play reports is current to the time above.
+Its first half was written on 11 Nov at 15:40 UTC (regroup and screen orders, since removed); the paragraph on the owner's play reports is current to the time above.
 
 **Merged today, Codex build and sandbox both:**
 
