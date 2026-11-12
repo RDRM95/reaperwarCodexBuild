@@ -2,6 +2,7 @@ import type { App, BattleController } from '../app';
 import { OVERLAY_DETAIL_LABELS, resolveOverlayDetail, type OverlayDetail, type ResolvedOverlayDetail } from '../fleetLabels';
 import { SPEEDS } from '../app';
 import { el, fmtNum, fmtTime, setChildren } from '../dom';
+import { COLUMN_FLOOR, NOTICE_FLOOR, NOTICE_HALF_WIDTH, startBelow } from '../hudLayout';
 import { FACTIONS } from '@/data/factions';
 import { getShipClass } from '@/data/ships';
 import type { BattleEvent, BattleResult, FormationType, OrderType, ShipState, TargetPriority } from '@/simulation/types';
@@ -186,6 +187,26 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   ]);
 
   const root = el('div', { class: 'hud' }, [header, left, right, bottom, subtitle, toastHost]);
+
+  let toastEl: HTMLElement | undefined;
+  // The side columns and the centre notice start below whatever part of the top bar is above them (see hudLayout).
+  const layout = () => {
+    const host = root.getBoundingClientRect();
+    if (host.width <= 0) return;
+    const within = (r: DOMRect) => ({ left: r.left - host.left, right: r.right - host.left, top: r.top - host.top, bottom: r.bottom - host.top });
+    const panels = [...header.children].filter((c) => !c.classList.contains('spacer')).map((c) => within(c.getBoundingClientRect()));
+    const l = within(left.getBoundingClientRect()), r = within(right.getBoundingClientRect());
+    root.style.setProperty('--hud-left-top', `${startBelow(panels, l.left, l.right, COLUMN_FLOOR)}px`);
+    root.style.setProperty('--hud-right-top', `${startBelow(panels, r.left, r.right, COLUMN_FLOOR)}px`);
+    // The notice is centred; one showing now is measured, so a long order text clears what a short one would not.
+    const centre = host.width / 2, half = Math.max(NOTICE_HALF_WIDTH, (toastEl?.offsetWidth ?? 0) / 2);
+    root.style.setProperty('--hud-notice-top', `${startBelow(panels, centre - half, centre + half, NOTICE_FLOOR)}px`);
+  };
+  if (typeof ResizeObserver !== 'undefined') {
+    const watch = new ResizeObserver(layout);
+    watch.observe(root);
+    for (const child of header.children) watch.observe(child);
+  }
 
   // --------------------------------------------------------- menu overlay
   const menuOverlay = el('div', { class: 'screen transparent hud-menu', style: { display: 'none', background: 'rgba(6,9,15,0.75)', alignItems: 'center', justifyContent: 'center', cursor: 'default' } });
@@ -550,12 +571,12 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     }
   };
 
-  let toastEl: HTMLElement | undefined;
   let toastTimer = 0;
   const toast = (text: string) => {
     toastEl?.remove();
     toastEl = el('div', { class: 'toast' }, text);
     toastHost.append(toastEl);
+    layout();
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => toastEl?.remove(), 2000);
   };

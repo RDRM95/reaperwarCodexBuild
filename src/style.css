@@ -115,9 +115,9 @@ td.num { font-family: var(--mono); text-align: right; }
 .hud-clock { font-family: var(--mono); font-size: 22px; letter-spacing: 0.1em; color: var(--cyan); }
 .hud-clock small { font-size: 11px; color: var(--text-dim); letter-spacing: 0.2em; display: block; }
 .hud-speed .btn { min-width: 38px; text-align: center; }
-.hud-left { position: absolute; left: 12px; top: 118px; bottom: 190px; width: 300px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.hud-left { position: absolute; left: 12px; top: var(--hud-left-top, 118px); bottom: 190px; width: 300px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
 .hud-left > * { pointer-events: auto; }
-.hud-right { position: absolute; right: 12px; top: 118px; bottom: 190px; width: 320px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.hud-right { position: absolute; right: 12px; top: var(--hud-right-top, 118px); bottom: 190px; width: 320px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
 .hud-right > * { pointer-events: auto; }
 .hud-bottom { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; gap: 10px; align-items: flex-end; pointer-events: none; }
 .hud-bottom > * { pointer-events: auto; }
@@ -158,7 +158,10 @@ td.num { font-family: var(--mono); text-align: right; }
 .intel { font-family: var(--mono); font-size: 11px; line-height: 1.6; }
 .intel .headline { color: var(--red); letter-spacing: 0.15em; margin-bottom: 6px; }
 .intel .level { float: right; }
-.toast { position: absolute; top: 90px; left: 50%; transform: translateX(-50%); font-family: var(--mono); letter-spacing: 0.3em; font-size: 14px; color: var(--orange); background: rgba(6, 9, 15, 0.7); padding: 8px 18px; border: 1px solid rgba(255, 138, 31, 0.4); animation: fadein 0.3s; pointer-events: none; }
+.toast { position: absolute; top: var(--hud-notice-top, 90px); left: 50%; transform: translateX(-50%); font-family: var(--mono); letter-spacing: 0.3em; font-size: 14px; color: var(--orange); background: rgba(6, 9, 15, 0.7); padding: 8px 18px; border: 1px solid rgba(255, 138, 31, 0.4); animation: noticein 0.3s; pointer-events: none; }
+/* The notice keeps its centring while it rises: the shared fade-in replaces the transform, so the notice was drawn
+   starting at the middle of the screen for its first 0.3 s and then jumped half its width to the left. */
+@keyframes noticein { from { transform: translate(-50%, 6px); } to { transform: translate(-50%, 0); } }
 .subtitle { position: absolute; bottom: 160px; left: 50%; transform: translateX(-50%); font-size: 15px; background: rgba(0, 0, 0, 0.55); padding: 6px 14px; max-width: 70%; text-align: center; pointer-events: none; }
 .subtitle .who { color: var(--orange); font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; margin-right: 8px; }
 
