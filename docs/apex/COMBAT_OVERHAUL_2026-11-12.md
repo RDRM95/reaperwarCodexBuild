@@ -164,6 +164,37 @@ A sortie was about 30 s armed followed by 20 to 25 s away, with the carrier 55 t
 
 No hull contacts at any tick in six seeds of the canon Battle of Earth. `tests/fighter-wings.test.ts` has the new case (24 fighters each turn for home exactly 15 s after their last torpedo, having fired 2,049 gun rounds between them meanwhile, and still reload three times each in 150 s).
 
+## Fourth pass, same day: a depleted fleet fights where it stands
+
+**What was wrong.** Found by following one Custom Battle that ran to its 300 s limit. For its last two minutes two Alliance dreadnoughts, at 90 % hull and in range of a Reaper destroyer, flew steadily sideways with it while the other ten Reapers followed at a closing speed of a tenth of a unit a second.
+
+A fleet judged its distance to the enemy, and steered, from its anchor: the point its formation was laid out round. Those two dreadnoughts were the far end of a formation of 56 hulls, so their places were 40 km to one side of the anchor. They were in range; the anchor was not, so the fleet stayed in "approach" and marched its line toward the destroyer. The destroyer's own station is a bearing round the hull it is attacking, so it moved off as that hull moved, and the two went round each other for the rest of the battle.
+
+Reproduced without the rest of the battle (`tests/depleted-fleet.test.ts`): a full Custom Battle formation with only the two dreadnoughts on one end left, against one destroyer, nothing destructible, 300 s.
+
+| | Before | Now |
+|---|---:|---:|
+| Distance each dreadnought flies after first getting in range | 175 km | 18 km |
+| Share of that time under way | 100 % | 12 % |
+| Fleet's state at 100 s | approaching | holding |
+| Shots each | 384, 379 | 380, 381 |
+
+**What changed.** A fleet measures and steers from where its line stands: the anchor, moved by as much as the middle of the places still filled has moved from the middle of all the places the line started with. While the line is whole that is exactly the anchor, so a fleet at full strength behaves as it did. The line is the capitals, or the cruisers once there are no capitals, or every hull once there are neither, as before.
+
+Over eight seeds of five battles (forty battles), the winner is the same in every one:
+
+| | Mean length | Longest | Hulls firing |
+|---|---:|---:|---:|
+| Custom Battle, canon | 179 → 175 s | 219 → 202 s | 83.6 → 83.0 % |
+| Custom Battle, prime_apex | 95 → 95 s | 127 → 125 s | 71.3 → 71.0 % |
+| Battle of Earth, canon | 149 → 139 s | 224 → 167 s | 79.8 → 80.8 % |
+| Battle of Earth, prime_apex | 92 → 91 s | 102 → 102 s | 57.7 → 57.9 % |
+| Final Battle of Earth, canon | 225 → 211 s | 269 → 232 s | 79.9 → 81.1 % |
+
+The long tails shorten where a losing side is ground down to a few hulls (the three canon battles); the averages hardly move, because most battles never reached this state. Battles are chaotic: any change alters which seed has the long ending, so the controlled case above is the evidence and this table is the check that nothing else moved. No hull contacts at any tick in six seeds of the canon Battle of Earth.
+
+One pinned figure was restated: Reaper capitals' firing share in the long Custom Battle at seed 1 is 84 % (88 % before; floor 0.85, now 0.78). Over four seeds it is 83 % before and after. A capital with a target in range is silent about a tenth of the time, turning its guns onto it; not addressed.
+
 ## What this pass does not do
 
 Against the directive's seven acceptance points:

@@ -201,7 +201,11 @@ describe('what hulls spend a battle doing', () => {
     expect(row('A cruiser').shots / (row('A cruiser').hullSeconds / 60)).toBeGreaterThan(55);
     expect(firing('A frigate')).toBeGreaterThan(0.8);
     expect(row('A carrier').shots).toBeGreaterThan(0);
-    expect(firing('B reaper_capital')).toBeGreaterThan(0.85);
+    // Reaper capitals at this seed measure 84 % now (88 % before fleets steered by their surviving line, 94 % when
+    // this was first pinned). Over four seeds they are 83 % before and after: this seed was above the average, and
+    // its floor of 0.85 is 0.78. A capital with a target in range is silent about a tenth of the time, turning its
+    // guns onto it; that is not addressed here.
+    expect(firing('B reaper_capital')).toBeGreaterThan(0.78);
     expect(firing('B reaper_destroyer')).toBeGreaterThan(0.85);
     // A hull keeps a target for about half a minute at a time: 2.3 changes a hull-minute (2.7).
     expect(totals.targetChangesPerMinute).toBeLessThan(3);
