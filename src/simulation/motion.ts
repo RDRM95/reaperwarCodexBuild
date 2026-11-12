@@ -23,9 +23,14 @@ export function advanceMotion(ship: ShipState, goal: MovementGoal, dt: number): 
   // A hull that is steering clear of a neighbour eases off: the clearance rules are tuned for combat speed, and at
   // twice that two frigates sprinting side by side touched before they could part.
   const avoiding = goal.avoidanceAcceleration ? length(goal.avoidanceAcceleration) / Math.max(1e-9, ship.acceleration) : 0;
-  const sprint = 1 + (Math.max(1, goal.sprint ?? 1) - 1) * Math.max(0, 1 - avoiding * 2);
+  const asked = Math.max(1, goal.sprint ?? 1);
+  const sprint = 1 + (asked - 1) * Math.max(0, 1 - avoiding * 2);
   const maxSpeed = ship.maxSpeed * engine * Math.max(0, Math.min(1, goal.speedFraction)) * sprint;
-  const acceleration = ship.acceleration * engine * sprint;
+  // The thrust that took a hull above its combat speed is still there to slow or turn it. Easing the sprint used
+  // to take the thrust away with the speed limit, at the moment a hull doing twice its combat speed began to give
+  // way: it had half the thrust to shed twice the speed, and sprinting frigates grazed each other.
+  const carried = Math.min(asked, length(ship.vel) / Math.max(1e-9, ship.maxSpeed * engine));
+  const acceleration = ship.acceleration * engine * Math.max(sprint, carried);
   const error = sub(goal.position, ship.pos);
   const dist = length(error);
 
