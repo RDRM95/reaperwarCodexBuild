@@ -43,6 +43,8 @@ import {
 
 /** Hangar time for a fighter to reload torpedoes alongside its carrier. */
 const REARM_SECONDS = 12;
+/** Seconds between rebuilds of the table of how much fire is aimed at each ship. */
+const TARGET_LOAD_REFRESH = 0.5;
 import type {
   BattleConfig,
   BattleEvent,
@@ -369,6 +371,29 @@ export class BattleSimulation implements AiContext {
     this.refreshSideCache();
     return side === 'A' ? this.sideCache.A : this.sideCache.B;
   }
+  /** Point value aiming at each ship. Rebuilt every half second and kept current in between as hulls change target. */
+  private readonly targetLoads = new Map<string, number>();
+  private targetLoadsAt = -Infinity;
+
+  targetLoad(id: string): number {
+    if (this.time - this.targetLoadsAt >= TARGET_LOAD_REFRESH) {
+      this.targetLoadsAt = this.time;
+      this.targetLoads.clear();
+      for (const ship of this.ships) {
+        if (!ship.alive || ship.escaped || !ship.targetId) continue;
+        this.targetLoads.set(ship.targetId, (this.targetLoads.get(ship.targetId) ?? 0) + Math.max(1, ship.pointValue));
+      }
+    }
+    return this.targetLoads.get(id) ?? 0;
+  }
+
+  noteTarget(ship: ShipState, previous: string | undefined): void {
+    if (this.time - this.targetLoadsAt >= TARGET_LOAD_REFRESH) return; // The next question rebuilds the table.
+    const weight = Math.max(1, ship.pointValue);
+    if (previous) this.targetLoads.set(previous, Math.max(0, (this.targetLoads.get(previous) ?? 0) - weight));
+    if (ship.targetId) this.targetLoads.set(ship.targetId, (this.targetLoads.get(ship.targetId) ?? 0) + weight);
+  }
+
   getShip(id: string): ShipState | undefined {
     return this.shipById.get(id);
   }
@@ -614,8 +639,11 @@ export class BattleSimulation implements AiContext {
       ship.prevHeading = clone(ship.heading);
       const fleet = this.fleets.get(ship.fleetId)!;
       ship.aiTimer -= dt;
-      if (ship.aiTimer <= 0) {
-        ship.aiTimer = FACTIONS[ship.faction].doctrine.decisionInterval * (0.7 + 0.6 * this.rng.next());
+      // A hull whose target has just died or left decides again now. It used to wait for its next turn, up to
+      // three seconds, and spent them flying back toward its place in the formation.
+      const lost = ship.targetId !== undefined && !this.isLive(this.shipById.get(ship.targetId));
+      if (ship.aiTimer <= 0 || lost) {
+        if (ship.aiTimer <= 0) ship.aiTimer = FACTIONS[ship.faction].doctrine.decisionInterval * (0.7 + 0.6 * this.rng.next());
         const wasWithdrawing = ship.withdrawing;
         shipDecision(this, ship, fleet);
         if (ship.withdrawing && !wasWithdrawing) this.emit({ t: this.time, type: 'ship_withdrawing', shipId: ship.id });
@@ -635,6 +663,10 @@ export class BattleSimulation implements AiContext {
 
     this.checkEscapes();
     this.checkEnd();
+  }
+
+  private isLive(ship: ShipState | undefined): boolean {
+    return !!ship && ship.alive && !ship.escaped;
   }
 
   /** Run to completion (headless). Returns the result. */

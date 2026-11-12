@@ -19,6 +19,10 @@ export interface AiContext {
   enemiesOf(side: 'A' | 'B'): ShipState[];
   alliesOf(side: 'A' | 'B'): ShipState[];
   getShip(id: string): ShipState | undefined;
+  /** Point value of the hulls already aiming at this ship (see OVERKILL_SHARE). Absent in bare test contexts. */
+  targetLoad?(id: string): number;
+  /** Tell the context that a hull changed its target, so the load it reports stays current between refreshes. */
+  noteTarget?(ship: ShipState, previous: string | undefined): void;
 }
 
 export interface MovementGoal {
@@ -29,6 +33,8 @@ export interface MovementGoal {
   face?: Vec3;
   /** Shared local-clearance thrust, combined within class acceleration limits. */
   avoidanceAcceleration?: Vec3;
+  /** Closing sprint: multiplies top speed and thrust while a hull's target is beyond its guns (1 or absent: none). */
+  sprint?: number;
 }
 
 export const doctrineOf = (ship: ShipState): FactionDoctrine => FACTIONS[ship.faction].doctrine;
@@ -52,9 +58,55 @@ export function centroid(ships: ShipState[]): Vec3 | undefined {
   return scale(c, 1 / w);
 }
 
+/** Bearing off the bow, in radians, at which a hull fighting on the beam holds its target. */
+export const BEAM_BEARING = 80 * Math.PI / 180;
+/** A hull fights on the beam when the batteries of one side out-shoot everything that bears ahead by this factor. */
+export const BEAM_ADVANTAGE = 1.15;
+
+export interface BatteryAspect {
+  /** How the hull presents itself to its target once in range: bow-on, or one side toward it. */
+  aspect: 'bow' | 'beam';
+  /** Damage per second that bears ahead, and on each beam. */
+  bow: number; port: number; starboard: number;
+  /** Range at which every battery of the stronger beam bears (0 if the hull has none). */
+  beamRange: number;
+}
+
+const aspects = new WeakMap<ShipState, BatteryAspect>();
+
+/**
+ * Which way a hull's guns point. Summed once per hull from its mounts: damage per second of the anti-ship weapons
+ * that bear dead ahead, and of those that bear on each beam. Cruisers and carriers carry most of their fire in side
+ * batteries, which never bore while every hull stood bow-on to its target: an Alliance cruiser fought with its one
+ * spinal gun and left three quarters of its fire unused; a dreadnought's spinal gun out-shoots one side of its
+ * broadside, so it stays bow-on. Imperium and Chaos hulls keep their own broadside rule (see combatFacing).
+ */
+export function batteryAspect(ship: ShipState): BatteryAspect {
+  let found = aspects.get(ship);
+  if (found) return found;
+  let bow = 0, port = 0, starboard = 0, portRange = Infinity, starboardRange = Infinity;
+  for (const w of ship.weapons) {
+    if (w.def.antiSmall || w.def.cooldown <= 0) continue;
+    const dps = w.def.damage / w.def.cooldown, half = w.def.arc * Math.PI / 360;
+    const off = (bearing: number) => Math.abs(Math.atan2(Math.sin(w.facing - bearing), Math.cos(w.facing - bearing)));
+    if (off(0) <= half) bow += dps;
+    if (off(BEAM_BEARING) <= half) { starboard += dps; starboardRange = Math.min(starboardRange, w.def.range); }
+    if (off(-BEAM_BEARING) <= half) { port += dps; portRange = Math.min(portRange, w.def.range); }
+  }
+  const beam = Math.max(port, starboard);
+  const own = ship.faction === 'imperium' || ship.faction === 'chaos' || ship.faction === 'reaper' || ship.role === 'fighter';
+  found = { aspect: !own && beam > bow * BEAM_ADVANTAGE ? 'beam' : 'bow', bow, port, starboard,
+    beamRange: beam <= 0 ? 0 : starboard >= port ? starboardRange : portRange };
+  aspects.set(ship, found);
+  return found;
+}
+
 /** Principal battery, in simulation units. Turrets/PD never set a capital's
  * standoff, and spent torpedoes never keep their carrier outside gun range. */
 export function shipEngagementRange(ship: ShipState): number {
+  // A hull that fights on the beam engages at the range of its side batteries.
+  const battery = batteryAspect(ship);
+  if (battery.aspect === 'beam') return battery.beamRange;
   // One pass, no temporary arrays: this is asked for every hull every tick. The battery is the spinal mounts if
   // any have ammunition, else any anti-ship mount, else anything usable; the answer is its longest range.
   const light = ship.role === 'fighter' || ship.role === 'frigate';
@@ -118,6 +170,17 @@ export function priorityMultiplier(priority: TargetPriority, target: ShipState):
   }
 }
 
+/**
+ * How much fire a target is worth before others should look elsewhere: once the hulls already aiming at it are
+ * worth this many times its own value, its attraction to one more is halved. Without this a whole fleet chose the
+ * same target (88 of 88 Alliance hulls on one Reaper at the Battle of Earth, none of them in range of it) and flew
+ * at it past enemies they could have been shooting.
+ */
+export const OVERKILL_SHARE = 2;
+
+/** Share of its main battery's range inside which a hull counts an enemy as one it can fight now. */
+export const IN_REACH = 0.97;
+
 export function scoreTarget(ctx: AiContext, shooter: ShipState, fleet: FleetState, target: ShipState, mainRange: number): number {
   const d = doctrineOf(shooter);
   const dist = distance(shooter.pos, target.pos);
@@ -137,7 +200,14 @@ export function scoreTarget(ctx: AiContext, shooter: ShipState, fleet: FleetStat
   if (target.role === 'fighter' && shooter.role !== 'fighter') score *= 0.05;
   // Interceptors prioritise hostile fighters over repeatedly chasing capitals.
   if (shooter.role === 'fighter' && target.role === 'fighter') score *= 3.2;
-  if (!intercepting && fleet.orders.focusFire && fleet.focusTargetId === target.id && relativeRange <= 1.2) score *= 1 + d.focusFire * 2;
+  // The fleet's focus draws only the hulls that can already hit it; a commanded target draws them all.
+  const commandedFocus = fleet.orders.order === 'attack_target' && fleet.orders.targetId === target.id;
+  if (!intercepting && fleet.orders.focusFire && fleet.focusTargetId === target.id && (relativeRange <= 1 || commandedFocus)) score *= 1 + d.focusFire * 2;
+  // Spread the fleet's fire: a target that already has its share of attackers is worth less to one more.
+  if (ctx.targetLoad && !commandedFocus && target.role !== 'fighter') {
+    const others = Math.max(0, ctx.targetLoad(target.id) - (shooter.targetId === target.id ? Math.max(1, shooter.pointValue) : 0));
+    score /= 1 + others / (Math.max(1, target.pointValue) * OVERKILL_SHARE);
+  }
   score *= priorityMultiplier(fleet.orders.priority, target);
   if ((fleet.orders.protectCapitals || fleet.orders.order === 'screen') && (shooter.role === 'frigate' || shooter.role === 'cruiser')) {
     const tgt = target.targetId ? ctx.getShip(target.targetId) : undefined;
@@ -147,6 +217,13 @@ export function scoreTarget(ctx: AiContext, shooter: ShipState, fleet: FleetStat
   return score;
 }
 
+/**
+ * Pick the hull to fight. Two rules come before the score:
+ *  - a hull that has an enemy hull inside its main battery's range fights one of those. It does not keep, or
+ *    choose, a target it cannot hit while there is one it can (a player's or a fleet's commanded target excepted);
+ *  - a hull keeps its target for a few seconds and changes only for a clearly better one, so it does not dither.
+ * Fighters are no reason for a warship to stop: they count as in range only for other fighters.
+ */
 export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState): string | undefined {
   if (ship.forcedTargetId) {
     const forced = ctx.getShip(ship.forcedTargetId);
@@ -157,22 +234,30 @@ export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const range = shipEngagementRange(ship);
   const sensor = ship.sensorRange * (0.4 + 0.6 * ship.subsystems.sensors);
   const currentValid = validEnemy(ship, current) && distance(ship.pos, current.pos) <= sensor * 1.7;
+  const commanded = fleet.orders.order === 'attack_target' ? fleet.orders.targetId : undefined;
+  // "In range" for choosing: a little inside the gun's reach, so a target on the very edge is not taken and lost.
+  const reach = range * IN_REACH;
+  const counts = (e: ShipState): boolean => ship.role === 'fighter' || e.role !== 'fighter';
+  const currentInReach = currentValid && counts(current) && distance(ship.pos, current.pos) <= range;
   const locked = currentValid && ctx.time < (ship.targetLockUntil ?? 0);
+  // Loop invariant, hoisted: it does not depend on the candidate.
+  const unarmedAgainstFighters = ship.role === 'fighter' && !ship.weapons.some(w => w.def.antiSmall);
   let best = currentValid ? current : undefined;
   let bestScore = best ? scoreTarget(ctx, ship, fleet, best, range) : -Infinity;
-  // Loop invariants, hoisted: neither depends on the candidate.
-  const unarmedAgainstFighters = ship.role === 'fighter' && !ship.weapons.some(w => w.def.antiSmall);
-  const currentOutOfReach = currentValid && distance(ship.pos, current.pos) > range * 1.4;
+  let bestInReach = currentInReach;
   for (const e of ctx.enemiesOf(ship.side)) {
-    if (!validEnemy(ship, e)) continue;
+    if (!validEnemy(ship, e) || e === current) continue;
     const separation = distance(ship.pos, e.pos);
     if (separation > sensor * 1.5) continue;
     if (unarmedAgainstFighters && e.role === 'fighter') continue;
-    const reachableReplacement = currentOutOfReach && separation < range;
-    if (locked && !reachableReplacement) continue;
+    const inReach = separation <= reach && counts(e);
+    // A target in reach always replaces one that is not; one out of reach never replaces one that is.
+    const promotes = inReach && !bestInReach && best?.id !== commanded;
+    if (bestInReach && !inReach && e.id !== commanded) continue;
+    if (locked && !promotes) continue;
     const candidate = scoreTarget(ctx, ship, fleet, e, range);
-    const threshold = currentValid && best?.id === current.id && !reachableReplacement ? bestScore * 1.25 : bestScore;
-    if (candidate > threshold) { best = e; bestScore = candidate; }
+    const threshold = promotes ? -Infinity : currentValid && best?.id === current.id ? bestScore * 1.25 : bestScore;
+    if (candidate > threshold) { best = e; bestScore = candidate; bestInReach = inReach; }
   }
   if (best?.id !== ship.targetId) ship.targetLockUntil = ctx.time + 5;
   return best?.id;
@@ -276,6 +361,23 @@ export function pressOf(ship: ShipState): number {
 
 /** A hull whose station is out of range closes to this share of its engagement range from its target. */
 export const CLOSING_RANGE = 0.94;
+
+/**
+ * Closing sprint. A hull whose target is beyond its guns drives at up to this multiple of its combat speed and
+ * thrust, easing back to combat speed as the target comes into range. Catalogue speeds are combat speeds: at them
+ * a cruiser needed 40 s to cross to an enemy that out-ranged it, and half of every large battle was hulls flying
+ * toward something they could not yet hit. Reapers do not sprint: they out-range what they fight, were already
+ * firing nine tenths of the time, and advance at their own pace.
+ */
+export const CLOSING_SPRINT = 2;
+/** The sprint is full when the target is this many gun ranges away, and nothing at one range. */
+export const SPRINT_FULL_AT = 1.5;
+
+/** Sprint multiplier for a hull at `gap` from a target it can engage at `range`. */
+export function closingSprint(ship: ShipState, gap: number, range: number): number {
+  if (ship.faction === 'reaper' || gap <= range) return 1;
+  return 1 + (CLOSING_SPRINT - 1) * Math.min(1, (gap / range - 1) / (SPRINT_FULL_AT - 1));
+}
 
 /**
  * Screening. The fleet's capitals hold their formation and its escorts stand between them and the enemy, wherever the
@@ -483,7 +585,9 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
 }
 
 export function shipDecision(ctx: AiContext, ship: ShipState, fleet: FleetState): void {
+  const previous = ship.targetId;
   ship.targetId = chooseTarget(ctx, ship, fleet);
+  if (ship.targetId !== previous) ctx.noteTarget?.(ship, previous);
   const doctrine = doctrineOf(ship);
   if (ship.faction === 'reaper') { ship.withdrawing = false; return; }
   if (!ship.withdrawing && doctrine.withdrawThreshold > 0 && ship.role !== 'fighter') {
@@ -546,6 +650,37 @@ function attackBearing(ctx: AiContext, ship: ShipState, fleet: FleetState): Atta
   return roleStationsOf(ctx, fleet).bearingByShip.get(ship.id);
 }
 
+/** Which side a hull fighting on the beam has turned to its target, and whether it is turned at all. */
+const beamSides = new WeakMap<ShipState, { side: 1 | -1; active: boolean }>();
+
+/**
+ * Where a hull points. Bow-on hulls point at their target. A hull that fights on the beam points at it while it
+ * closes, and once the target is inside its side batteries' range turns that side toward it: the target sits
+ * BEAM_BEARING off the bow, on whichever side is the shorter turn, and stays on that side until it is out of range
+ * again. Only the facing changes: where the hull goes is decided as before, so this never becomes an orbit.
+ */
+function beamFacing(ship: ShipState, target: ShipState): Vec3 {
+  const battery = batteryAspect(ship);
+  if (battery.aspect !== 'beam') return target.pos;
+  const delta = sub(target.pos, ship.pos);
+  const dist = Math.sqrt(lengthSq(delta));
+  let state = beamSides.get(ship);
+  if (!state) { state = { side: 1, active: false }; beamSides.set(ship, state); }
+  if (state.active && dist > battery.beamRange * 1.06) state.active = false;
+  if (!state.active && dist <= battery.beamRange * 0.99) {
+    // Starboard is +x of a hull heading +z. Turn the side that is already nearer the target, if it has guns.
+    const right = v3(ship.heading.z, 0, -ship.heading.x);
+    const nearer: 1 | -1 = dot(delta, right) >= 0 ? 1 : -1;
+    state.side = (nearer === 1 ? battery.starboard : battery.port) > 0 ? nearer : (nearer === 1 ? -1 : 1);
+    state.active = true;
+  }
+  if (!state.active || dist < 1e-6) return target.pos;
+  // Point the bow BEAM_BEARING away from the target, about the vertical, so that it lies on the chosen beam.
+  const flat = normalize(v3(delta.x, 0, delta.z));
+  const heading = rotateY(flat, -state.side * BEAM_BEARING);
+  return add(ship.pos, v3(heading.x, delta.y / Math.max(dist, 1e-6) * 0.2, heading.z));
+}
+
 interface BroadsideBearing {
   flank: 1 | -1;
   active: boolean;
@@ -557,7 +692,7 @@ const broadsideBearings = new WeakMap<ShipState, BroadsideBearing>();
  * This changes only gun facing: station translation never becomes an orbit.
  * Other factions retain their existing spinal/forward engagement policy. */
 function combatFacing(ship: ShipState, target: ShipState, station: Vec3): Vec3 {
-  if (ship.faction !== 'imperium' && ship.faction !== 'chaos') return target.pos;
+  if (ship.faction !== 'imperium' && ship.faction !== 'chaos') return beamFacing(ship, target);
   let portRange = 0, starboardRange = 0;
   for (const weapon of ship.weapons) {
     if (weapon.def.antiSmall || !weapon.def.antiCapital || weapon.def.kind !== 'mass_accelerator' ||
@@ -756,5 +891,5 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
     const toEnemy = normalize(sub(target.pos, ship.pos));
     if (dot(sub(position, ship.pos), toEnemy) < -1e-6) position = ship.pos;
   }
-  return { position, speedFraction: 1, face: combatFacing(ship, target, position) };
+  return { position, speedFraction: 1, face: combatFacing(ship, target, position), sprint: closingSprint(ship, dist, range) };
 }
