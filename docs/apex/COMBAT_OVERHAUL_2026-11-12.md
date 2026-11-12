@@ -220,6 +220,34 @@ Forty battles (eight seeds of five) keep their winners. Hulls firing, before →
 - Reaper capitals' firing share (`combat-engagement`) at seed 1 has measured 94, 88, 84 and 73 % as other things changed; over four seeds it is 80 % (83 % before this pass). It is now judged over four seeds with a floor of 0.72.
 - Main guns' share of the tracer picture (`visual-weight`) at one seed has measured 75, 63, 53 and 37 %, following the count of main rounds in the air at ten looks (4 to 15). Its absolute floor is dropped; what the drawing rules control is still held (main rounds unchanged, their share at least doubled, fighter cannon under 8 %).
 
+## Sixth pass, same day: a wing flies in formation
+
+**What was wrong.** A wing of four shared a target and nothing else. Each craft flew its own line in and its own pass, so while attacking a wing-mate was within 2.5 km of its leader 49 to 75 % of the time, and within 1 km 16 to 27 %. From the camera a wing was four single fighters.
+
+**What changed.** A wing-mate flies on its leader: the second craft off the leader's right quarter, the third off the left, the fourth further out on the right, 400 m apart and each a rank behind (`wingStation`). It goes in with its leader, finishes its own firing run when the leader turns away a moment ahead of it, and rejoins on the way out. It may fly up to 30 % faster to regain its place. Places are counted from the leader, so a wing that has lost craft closes up. A wing-mate more than 15 km from its place flies its own attack until the wing comes together again.
+
+One detail made it work: the motion controller steers for a place as if to stop there, and so trails a moving one by its response time (top speed over thrust, 2.4 s for a fighter). Steering for where the place will be that long from now cancels the lag; with a fixed two seconds wing-mates trailed by 1.2 km.
+
+| Before → now (six seeds) | Within 2.5 km of leader | Within 1 km | Firing | Attack runs a minute | Fighters lost | Damage dealt |
+|---|---:|---:|---:|---:|---:|---:|
+| Battle of Earth, canon | 75 → 84 % | 27 → 42 % | 50 → 49 % | 4.9 → 4.8 | 144 → 144 of 144 | 38,327 → 34,827 |
+| Battle of Earth, prime_apex | 60 → 90 % | 26 → 44 % | 35 → 36 % | 3.2 → 2.8 | 44 → 41 of 288 | 141,620 → 139,881 |
+| Custom Battle, prime_apex | 49 → 89 % | 16 → 46 % | 46 → 47 % | 4.5 → 4.1 | 106 → 123 of 144 | 65,712 → 58,848 |
+
+On the way in, every wing-mate is 175 to 250 m from its place (`tests/fighter-wings.test.ts`). Winners are unchanged in the eighteen battles.
+
+**What it costs.** Fighters deal 1 to 10 % less damage and make up to an eighth fewer attack runs; in the Custom Battle they lose 123 of 144 craft where they lost 106.
+
+**Tried and not kept: strict formation,** in which a wing-mate turned away with its leader. It kept wings tighter (93 to 98 % within 2.5 km) but cut every wing-mate's firing run short: 10 to 28 % less damage over the same six seeds.
+
+**Hull contacts.** When this was first built, before the fifth pass, it showed frigate contacts in 3 of 12 seeds of the Battle of Earth under prime_apex against 1 of 12 without it. Following those up is what found the thrust defect the fifth pass fixes. On top of that fix there is no contact at any tick in twelve seeds of that battle, nor in six under canon rules.
+
+One carrier's wings on the way in, the same battle at 13 s, before and after (software renderer):
+
+![Each fighter on its own line](qa/combat-overhaul-20261112/wings-own-lines.jpg)
+
+![Wings in formation](qa/combat-overhaul-20261112/wings-in-formation.jpg)
+
 ## What this pass does not do
 
 Against the directive's seven acceptance points:
@@ -232,4 +260,4 @@ Against the directive's seven acceptance points:
 6. *Reapers and allies behave distinctly.* Kept: Reapers do not sprint, do not turn beam-on, press to individual distances and never back away.
 7. *Large battles remain playable.* The simulation is about a quarter dearer at 2,208 ships. Not run on real hardware.
 
-Also not done: fighters still spend a third to a half of their time on the way out to a fight 55 to 77 km from their carrier (the third pass removed most of the time spent going home, not the distance); a wing shares a target but does not hold a formation; anything about how it looks. Nothing here was judged by eye in motion.
+Also not done: fighters still spend a third to a half of their time on the way out to a fight 55 to 77 km from their carrier (the third pass removed most of the time spent going home, not the distance); the lull between waves in the Final Battle under prime_apex, now that it waits for its second wave; the simulation is about a quarter dearer at 2,208 ships than before the overhaul. A Reaper capital with a target in range is silent 15 % of the time, and every such second its target is outside its 70-degree bow arc (61 degrees off the bow at the median) while it turns at three degrees a second: escorts swinging round capitals, as the first pass made them do, get off the big guns' bows. That is left as it is. Dreadnoughts firing little in lopsided battles was traced and is distance, not behaviour: in the prime_apex Battle of Earth 91 Alliance hulls start 100 km from 10 Reapers and a second wave arrives 87 km away at about 55 s. Nothing here was judged by eye in motion.
