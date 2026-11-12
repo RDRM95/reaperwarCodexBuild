@@ -168,7 +168,7 @@ No hull contacts at any tick in six seeds of the canon Battle of Earth. `tests/f
 
 **What was wrong.** Found by following one Custom Battle that ran to its 300 s limit. For its last two minutes two Alliance dreadnoughts, at 90 % hull and in range of a Reaper destroyer, flew steadily sideways with it while the other ten Reapers followed at a closing speed of a tenth of a unit a second.
 
-A fleet judged its distance to the enemy, and steered, from its anchor: the point its formation was laid out round. Those two dreadnoughts were the far end of a line that had been 56 hulls wide, so their places were 40 km to one side of the anchor. They were in range; the anchor was not, so the fleet stayed in "approach" and marched its line toward the destroyer. The destroyer's own station is a bearing round the hull it is attacking, so it moved off as that hull moved, and the two went round each other for the rest of the battle.
+A fleet judged its distance to the enemy, and steered, from its anchor: the point its formation was laid out round. Those two dreadnoughts were the far end of a formation of 56 hulls, so their places were 40 km to one side of the anchor. They were in range; the anchor was not, so the fleet stayed in "approach" and marched its line toward the destroyer. The destroyer's own station is a bearing round the hull it is attacking, so it moved off as that hull moved, and the two went round each other for the rest of the battle.
 
 Reproduced without the rest of the battle (`tests/depleted-fleet.test.ts`): a full Custom Battle formation with only the two dreadnoughts on one end left, against one destroyer, nothing destructible, 300 s.
 
