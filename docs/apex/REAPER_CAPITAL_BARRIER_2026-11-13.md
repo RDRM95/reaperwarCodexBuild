@@ -107,21 +107,23 @@ The owner's fleet lists are not known. This is a stand-in of the same size: 400 
 
 | Full size, 14,652 ships | Before | After |
 |---|---:|---:|
-| Winner, and when | Reapers, 577 s | AFTER_PENDING |
-| Allied warships lost | 8,652 of 8,652 | AFTER_PENDING |
-| Sovereigns destroyed | 0 of 1,500 | AFTER_PENDING |
-| Sovereigns hit at all, and with barriers brought down | 39, 2 | AFTER_PENDING |
-| Barrier damage done to Sovereigns, and regenerated | 121,205, 100 % | AFTER_PENDING |
-| Destroyers destroyed | 110 of 4,500 | AFTER_PENDING |
-| Destroyers whose barriers were brought down | 164 | AFTER_PENDING |
-| Barrier damage done to destroyers, and regenerated | 3,479,038, 79 % | AFTER_PENDING |
-| Damage to destroyer hulls | 497,938 | AFTER_PENDING |
-| Allied hulls aiming at each destroyer under fire | 17.3 on 188 | AFTER_PENDING |
-| Allied rounds fired | 300,488 | AFTER_PENDING |
-| Dreadnought main-gun rounds (400 dreadnoughts) | 1,782 | AFTER_PENDING |
-| Dreadnought and cruiser broadside rounds | 72,224 | AFTER_PENDING |
+| Winner, and when | Reapers, 577 s | Reapers, 587 s |
+| Allied warships lost | 8,652 of 8,652 | 8,652 of 8,652 |
+| Sovereigns destroyed | 0 of 1,500 | 1 of 1,500 |
+| Sovereigns hit at all, and with barriers brought down | 39, 2 | 34, 2 |
+| Barrier damage done to Sovereigns, and regenerated | 121,205, 100 % | 164,919, 75 % |
+| Damage to Sovereign hulls | 17,647 | 33,790 |
+| Destroyers destroyed | 110 of 4,500 | 304 of 4,500 |
+| Destroyers whose barriers were brought down | 164 | 352 |
+| Barrier damage done to destroyers, and regenerated | 3,479,038, 79 % | 4,009,621, 50 % |
+| Damage to destroyer hulls | 497,938 | 1,121,965 |
+| Allied hulls aiming at each destroyer under fire | 17.3 on 188 | 42.4 on 78 |
+| Allied rounds fired | 300,488 | 331,886 |
+| Dreadnought main-gun rounds (400 dreadnoughts) | 1,782 | 3,323 |
+| Cruiser main-gun rounds (2,252 cruisers) | 5,592 | 17,594 |
+| Dreadnought and cruiser broadside rounds | 72,224 | 69,664 |
 
-The after column was still being computed when this note was committed; it is filled in by the next commit on the branch.
+Still a catastrophic Reaper victory: every allied ship is destroyed and 1,499 of 1,500 Sovereigns survive. The allied fleet destroys nearly three times as many destroyers as it did, does twice the damage to Reaper hulls, and half of what it does to destroyer barriers now stays done. Almost all of its fire still goes into the destroyer screen in front of it (328,455 rounds of 331,886); the Sovereigns behind are reached by a hundred hulls at a time, as before. Broadsides still fire about as often as they did: a mount shoots at whatever crosses its arc, and only the hull's facing changed.
 
 At one tenth of the size (865 against 600), which takes a minute:
 

@@ -7,7 +7,7 @@
  * reported on 13 Nov 2026. Their fleet lists are not known; these are stand-ins of that size:
  *   conventional  400 dreadnoughts, 2,252 cruisers, 6,000 frigates
  *   apex          the same with 1 Valkyrie, 40 Omaha and 60 Aegis command ships in place of 101 frigates
- * Scale 1 takes about 35 minutes and 4 GB; scale 0.1 a minute. Progress goes to stderr every 20 s of battle.
+ * Scale 1 takes about 45 minutes; scale 0.1 a minute. Progress goes to stderr every 20 s of battle.
  *
  * Prints losses by class, and for Sovereigns and destroyers: how many were hit, had their barriers brought down
  * and were destroyed; damage arriving, absorbed by barriers, regenerated, and reaching the hull; how many allied
