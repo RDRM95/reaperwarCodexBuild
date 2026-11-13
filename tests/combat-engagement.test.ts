@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildCustomBattle, buildScenario } from '@/scenarios';
 import { BattleSimulation } from '@/simulation/battle';
 import {
-  BEAM_BEARING, CLOSING_SPRINT, IN_REACH, SPRINT_FULL_AT, batteryAspect, chooseTarget, closingSprint, shipEngagementRange,
+  BEAM_BEARING, CLOSING_SPRINT, IN_REACH, SPRINT_FULL_AT, aspectAgainst, batteryAspect, chooseTarget, closingSprint, secondsToDestroy,
+  shipEngagementRange,
 } from '@/simulation/ai';
 import { hullTotals, measureActivity } from '@/simulation/combatActivity';
 import type { ShipState } from '@/simulation/types';
@@ -98,50 +99,95 @@ describe('choosing a target', () => {
 describe('how a hull presents its guns', () => {
   const sim = new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1));
   const one = (classId: string) => sim.ships.find(s => s.classId === classId)!;
+  // One hull of each kind under canon rules, with a Reaper and a Cerberus enemy to judge against.
+  const meeting = (enemy: 'reaper' | 'cerberus') => new BattleSimulation(buildCustomBattle({ seed: 5, rulesId: 'canon_me3', environment: 'deep_space', startingDistanceKm: 60, maxDuration: 400,
+    sideA: { faction: 'alliance', name: 'A', formation: 'line_abreast', counts: { alliance_dreadnought: 1, alliance_cruiser: 1, alliance_carrier: 1 } },
+    sideB: enemy === 'reaper' ? { faction: 'reaper', name: 'B', formation: 'line_abreast', counts: { reaper_capital: 1, reaper_destroyer: 1 } }
+      : { faction: 'cerberus', name: 'B', formation: 'line_abreast', counts: { cerberus_cruiser: 1, cerberus_dreadnought: 1 } } }));
 
-  it('cruisers and carriers fight on the beam; dreadnoughts, frigates and Reapers bow-on', () => {
+  it('what each battery of a hull throws: a cruiser and a carrier more on the beam, a dreadnought with its refit gun more ahead', () => {
     // An Alliance cruiser: 159 damage a second ahead, 240 on either beam (two of its four broadside batteries).
     const cruiser = batteryAspect(one('alliance_cruiser'));
-    expect(cruiser.aspect).toBe('beam');
     expect(cruiser.starboard).toBeGreaterThan(cruiser.bow * 1.4);
     expect(cruiser.port).toBeCloseTo(cruiser.starboard, 6);
-    // It engages at the range of those batteries, which is longer than its spinal gun's.
-    expect(shipEngagementRange(one('alliance_cruiser'))).toBeCloseTo(cruiser.beamRange, 9);
     expect(cruiser.beamRange).toBeCloseTo(12.8, 6);
     expect(batteryAspect(one('alliance_carrier')).aspect).toBe('beam');
     expect(batteryAspect(one('alliance_carrier')).bow).toBe(0);
-    // A dreadnought's spinal gun out-shoots one side of its broadside.
     const dreadnought = batteryAspect(one('alliance_dreadnought'));
-    expect(dreadnought.aspect).toBe('bow');
     expect(dreadnought.bow).toBeGreaterThan(dreadnought.starboard);
-    expect(shipEngagementRange(one('alliance_dreadnought'))).toBeCloseTo(17.6, 6);
     for (const id of ['alliance_frigate', 'reaper_capital', 'reaper_destroyer']) expect(batteryAspect(one(id)).aspect, id).toBe('bow');
+    for (const id of ['reaper_capital', 'reaper_destroyer']) expect(batteryAspect(one(id)).bowOnly, id).toBe(true);
   });
 
-  it.each(['alliance_cruiser', 'alliance_carrier'])('an %s in range turns a side to its target and fires its broadside', (classId) => {
-    const fight = duel({ a: { [classId]: 1 }, b: { reaper_destroyer: 1 } });
-    const hull = fight.ships.find(s => s.side === 'A')!, destroyer = fight.ships.find(s => s.role === 'reaper_destroyer')!;
-    // Neither can be killed and the destroyer stays where it is, so the hull has all the time it wants.
-    destroyer.maxHull = destroyer.hull = 1e12; hull.maxHull = hull.hull = 1e12;
-    fight.issueOrders(destroyer.fleetId, { order: 'hold_formation' });
+  it('a hull turns to its target the battery that would destroy that target soonest', () => {
+    const reapers = meeting('reaper'), cerberus = meeting('cerberus');
+    const of = (battle: BattleSimulation, classId: string) => battle.ships.find(s => s.classId === classId)!;
+    // Against a Sovereign a canon dreadnought's broadside throws 350 damage a second to its spinal gun's 250, and
+    // that is what the first version of this rule compared. But a broadside round reaches a Reaper's hull at 15 %
+    // of its strength and a spinal round at 89 %: expected seconds to destroy it are 312 ahead and 730 abeam at
+    // the catalogue's rates, more with misses.
+    const dreadnought = of(reapers, 'alliance_dreadnought'), sovereign = of(reapers, 'reaper_capital');
+    const ahead = secondsToDestroy(dreadnought, sovereign, 0), abeam = secondsToDestroy(dreadnought, sovereign, BEAM_BEARING);
+    expect(batteryAspect(dreadnought).starboard).toBeGreaterThan(batteryAspect(dreadnought).bow * 1.3);
+    expect(abeam).toBeGreaterThan(ahead * 2);
+    for (const hull of ['alliance_dreadnought', 'alliance_cruiser']) for (const target of ['reaper_capital', 'reaper_destroyer'])
+      expect(aspectAgainst(of(reapers, hull), of(reapers, target)), `${hull} against ${target}`).toBe('bow');
+    // It then fights at the range of its main gun, not of its broadside.
+    expect(shipEngagementRange(dreadnought)).toBeCloseTo(20, 6);
+    // A carrier has nothing that bears ahead: it turns a side to anything.
+    expect(aspectAgainst(of(reapers, 'alliance_carrier'), sovereign)).toBe('beam');
+    // Against a lightly armoured cruiser the broadside is the quicker battery; against a dreadnought the main gun.
+    expect(aspectAgainst(of(cerberus, 'alliance_cruiser'), of(cerberus, 'cerberus_cruiser'))).toBe('beam');
+    expect(shipEngagementRange(of(cerberus, 'alliance_cruiser'))).toBeCloseTo(12.8, 6);
+    expect(aspectAgainst(of(cerberus, 'alliance_dreadnought'), of(cerberus, 'cerberus_dreadnought'))).toBe('bow');
+  });
+
+  const stand = (classId: string, enemy: { faction: 'reaper' | 'cerberus'; classId: string }) => {
+    const fight = new BattleSimulation(buildCustomBattle({ seed: 5, rulesId: 'canon_me3', environment: 'deep_space', startingDistanceKm: 60, maxDuration: 400,
+      sideA: { faction: 'alliance', name: 'A', formation: 'line_abreast', counts: { [classId]: 1 } },
+      sideB: { faction: enemy.faction, name: 'B', formation: 'line_abreast', counts: { [enemy.classId]: 1 } } }));
+    const hull = fight.ships.find(s => s.side === 'A')!, target = fight.ships.find(s => s.side === 'B' && s.role !== 'fighter')!;
+    // Neither can be killed and the target stays where it is and holds its fire, so the hull has all the time it wants.
+    target.maxHull = target.hull = 1e12; hull.maxHull = hull.hull = 1e12; target.weapons.length = 0; target.hangar = undefined;
+    fight.issueOrders(target.fleetId, { order: 'hold_formation' });
     let off = 0, samples = 0, next = 60;
     while (!fight.finished && fight.time < 150) {
       fight.step();
       if (fight.time < next) continue;
       next += 5;
-      const d = gap(hull, destroyer);
-      const cos = ((destroyer.pos.x - hull.pos.x) * hull.heading.x + (destroyer.pos.y - hull.pos.y) * hull.heading.y + (destroyer.pos.z - hull.pos.z) * hull.heading.z) / d;
-      if (d <= batteryAspect(hull).beamRange) { off += Math.acos(Math.max(-1, Math.min(1, cos))); samples++; }
+      const d = gap(hull, target);
+      const cos = ((target.pos.x - hull.pos.x) * hull.heading.x + (target.pos.y - hull.pos.y) * hull.heading.y + (target.pos.z - hull.pos.z) * hull.heading.z) / d;
+      off += Math.acos(Math.max(-1, Math.min(1, cos))); samples++;
     }
-    let broadsides = 0;
-    for (const event of fight.events) if (event.type === 'weapon_fired' && event.shipId === hull.id && event.weaponId === 'alliance_broadside') broadsides++;
-    // Measured: from 60 s on the target sits 79 degrees (cruiser) and 80 degrees (carrier) off the bow, and the
-    // broadside fires 160 and 161 times in the two and a half minutes. Before, each stood bow-on: the cruiser's
-    // broadside never fired at its target and the carrier, which has no other guns, never fired at all.
+    const fired = (weaponId: string) => fight.events.filter(event => event.type === 'weapon_fired' && event.shipId === hull.id && event.weaponId === weaponId).length;
+    return { off: off / samples, samples, fired };
+  };
+
+  it.each([
+    ['alliance_carrier', { faction: 'reaper', classId: 'reaper_destroyer' }],
+    ['alliance_cruiser', { faction: 'cerberus', classId: 'cerberus_cruiser' }],
+  ] as const)('an %s whose broadside is its best battery turns a side to its target and fires it', (classId, enemy) => {
+    const { off, samples, fired } = stand(classId, enemy);
+    // Measured: from 60 s on the target sits 80 degrees (carrier) and 79 degrees (cruiser) off the bow, and the
+    // broadside fires 162 and 160 times in the two and a half minutes.
     expect(samples).toBe(19);
-    expect(off / samples).toBeGreaterThan(BEAM_BEARING - 0.06);
-    expect(off / samples).toBeLessThan(BEAM_BEARING + 0.06);
-    expect(broadsides).toBeGreaterThan(120);
+    expect(off).toBeGreaterThan(BEAM_BEARING - 0.06);
+    expect(off).toBeLessThan(BEAM_BEARING + 0.06);
+    expect(fired('alliance_broadside')).toBeGreaterThan(120);
+  });
+
+  it.each([
+    ['alliance_dreadnought', 'reaper_capital', 'alliance_dn_main'],
+    ['alliance_cruiser', 'reaper_destroyer', 'alliance_cruiser_main'],
+  ] as const)('an %s keeps its bow and its main gun on a %s', (classId, target, mainGun) => {
+    const { off, fired } = stand(classId, { faction: 'reaper', classId: target });
+    // Measured: the target dead ahead from 60 s on; the main gun fires 34 times (dreadnought) and 46 times (cruiser)
+    // in the two and a half minutes and the broadside not at all. Under the first version of the rule both hulls
+    // stood 80 degrees off, the dreadnought's main gun fell silent once it was in broadside range, and its
+    // broadside did the firing.
+    expect(off).toBeLessThan(0.1);
+    expect(fired(mainGun)).toBeGreaterThan(20);
+    expect(fired('alliance_broadside')).toBe(0);
   });
 });
 
@@ -185,20 +231,24 @@ describe('what hulls spend a battle doing', () => {
     sideA: { faction: 'alliance', name: 'Alliance Task Force', formation: 'line_abreast', counts: { alliance_dreadnought: 8, alliance_carrier: 1, alliance_cruiser: 16, alliance_frigate: 30, alliance_frigate_thanix: 1 } },
     sideB: { faction: 'reaper', name: 'Reaper harvest group', formation: 'strike_wedge', counts: { reaper_capital: 4, reaper_destroyer: 8 } } } as never));
 
-  it('in a long fight four fifths of hull-time is spent firing, and dreadnoughts fire twice as often as they did', () => {
+  it('in a long fight four fifths of hull-time is spent firing', () => {
     const report = measureActivity(custom(1, 'canon_me3'), 300);
     const totals = hullTotals(report);
     const row = (key: string) => report.rows.get(key)!;
     const firing = (key: string) => row(key).seconds.firing / row(key).hullSeconds;
-    // Measured, seed 1 (before this change in brackets): all hulls firing 84 % (78 %), chasing or idle 2.5 %;
-    // Alliance dreadnoughts 71 % (66 %) and 66 shots a hull-minute (32); cruisers 67 % and 62 shots (70 %, 51);
-    // frigates 87 % and 51 shots (79 %, 42); the carrier 19 % and 21 shots (never fired); Reaper capitals and
-    // destroyers 94 %. Seed 2: all hulls 78 %, the carrier 73 %.
+    // Measured, seed 1 (before the combat overhaul in brackets): all hulls firing 88 % (78 %), chasing or idle
+    // 0.6 %; Alliance dreadnoughts 72 % (66 %) and 33 shots a hull-minute (32); cruisers 75 % and 46 shots (70 %,
+    // 51); frigates 93 % (79 %); the carrier 40 % and 75 shots (never fired); Reaper capitals and destroyers 94 %.
+    //
+    // Shots a minute were pinned at 50 for dreadnoughts and 55 for cruisers while both stood beam-on to Reapers
+    // and counted broadside rounds (75 and 62 a minute). Those rounds reach a Reaper's hull at 15 % of their
+    // strength. Bow-on they fire fewer, heavier rounds: this fleet destroyed one Reaper of twelve in each of four
+    // seeds beam-on and two to four bow-on. The floors are now on what the main guns do.
     expect(totals.share.firing).toBeGreaterThan(0.76);
     expect(totals.share.chasing + totals.share.idle).toBeLessThan(0.05);
     expect(firing('A dreadnought')).toBeGreaterThan(0.62);
-    expect(row('A dreadnought').shots / (row('A dreadnought').hullSeconds / 60)).toBeGreaterThan(50);
-    expect(row('A cruiser').shots / (row('A cruiser').hullSeconds / 60)).toBeGreaterThan(55);
+    expect(row('A dreadnought').shots / (row('A dreadnought').hullSeconds / 60)).toBeGreaterThan(24);
+    expect(row('A cruiser').shots / (row('A cruiser').hullSeconds / 60)).toBeGreaterThan(32);
     expect(firing('A frigate')).toBeGreaterThan(0.8);
     expect(row('A carrier').shots).toBeGreaterThan(0);
     // The Reapers are judged over four seeds, not this one. At one seed the capitals' share swings by ten points
@@ -222,13 +272,20 @@ describe('what hulls spend a battle doing', () => {
     const report = measureActivity(new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', 1)), 300);
     const row = (key: string) => report.rows.get(key)!;
     const firing = (key: string) => row(key).seconds.firing / row(key).hullSeconds;
-    // Measured, seed 1 (before this change in brackets): all hulls firing 61 % (50 %), frigates 77 % (63 %),
-    // cruisers 50 % and 37 shots a hull-minute (34 %, 26), dreadnoughts 26 % (25 %). Ninety hulls cannot all reach
-    // ten Reapers and a late reinforcement at once, and the dreadnoughts are too slow to arrive before the escorts
-    // have finished: the rest of their time is the approach.
-    expect(hullTotals(report).share.firing).toBeGreaterThan(0.55);
-    expect(firing('A frigate')).toBeGreaterThan(0.7);
-    expect(firing('A cruiser')).toBeGreaterThan(0.42);
+    // Measured over seeds 1 to 3 (before the combat overhaul, seed 1, in brackets): all hulls firing 52 to 58 %
+    // (50 %), frigates 68 to 76 % (63 %), cruisers 35 to 44 % (34 %), dreadnoughts 25 to 31 % (25 %). Ninety hulls
+    // cannot all reach ten Reapers and a late reinforcement at once, and the dreadnoughts are too slow to arrive
+    // before the escorts have finished: the rest of their time is the approach.
+    //
+    // Seed 1 alone read 61 %, 77 % and 50 % while cruisers stood beam-on to Reapers with their broadsides, and
+    // reads 52.5 %, 68 % and 35 % now that they keep their main gun on them; seeds 2 and 3 moved by four points or
+    // less either way. The floors are on the three-seed mean.
+    const seeds = [report, ...[2, 3].map(seed => measureActivity(new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', seed)), 300))];
+    const mean = (of: (r: typeof report) => number) => seeds.reduce((sum, r) => sum + of(r), 0) / seeds.length;
+    const share = (key: string) => (r: typeof report) => r.rows.get(key)!.seconds.firing / r.rows.get(key)!.hullSeconds;
+    expect(mean(r => hullTotals(r).share.firing)).toBeGreaterThan(0.52);
+    expect(mean(share('A frigate'))).toBeGreaterThan(0.66);
+    expect(mean(share('A cruiser'))).toBeGreaterThan(0.34);
     expect(firing('B reaper_capital')).toBeGreaterThan(0.9);
   });
 });

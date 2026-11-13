@@ -49,6 +49,8 @@ describe('a depleted fleet', () => {
     expect(flown).toBeLessThan(20);
     expect(moving / ticks).toBeLessThan(0.2);
     expect(modeAt100).toBe('hold');
-    for (const s of left) expect(s.stats.shotsFired).toBeGreaterThan(300);
+    // Shots were 380 and 381 while dreadnoughts stood beam-on to Reapers and fired their broadsides; bow-on, with
+    // the main gun, they are 311 and 296 (in range at 17 s, 14.6 units flown, under way 13 % of the time).
+    for (const s of left) expect(s.stats.shotsFired).toBeGreaterThan(250);
   });
 });

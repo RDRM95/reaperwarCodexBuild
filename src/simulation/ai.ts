@@ -2,7 +2,9 @@ import { hardcoreReaperTargetFactor } from './reaperHardcore';
 import type { Rng } from '@/core/rng';
 import { add, clampLength, distance, dot, lengthSq, normalize, rotateY, scale, sub, v3, type Vec3 } from '@/core/vec3';
 import { FACTIONS, type FactionDoctrine } from '@/data/factions';
+import { BARRIER_EFFICIENCY } from '@/data/weapons';
 import type { RuleSet } from '@/timelines/rules';
+import { armourReduction, hitProbability, throughArmour } from './damage';
 import { slotToWorld } from './formations';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { assignAttackBearings, swingAmount, swingStation, type AttackBearing, type BearingMember } from './manoeuvre';
@@ -22,7 +24,8 @@ export interface AiContext {
   enemyPositions?(side: 'A' | 'B'): Float64Array | undefined;
   alliesOf(side: 'A' | 'B'): ShipState[];
   getShip(id: string): ShipState | undefined;
-  /** Point value of the hulls already aiming at this ship (see OVERKILL_SHARE). Absent in bare test contexts. */
+  /** The fire already aimed at this ship, as the share of it destroyed each second (see FOCUS_SECONDS). Absent in
+   * bare test contexts. */
   targetLoad?(id: string): number;
   /** Tell the context that a hull changed its target, so the load it reports stays current between refreshes. */
   noteTarget?(ship: ShipState, previous: string | undefined): void;
@@ -67,8 +70,10 @@ export const BEAM_BEARING = 80 * Math.PI / 180;
 export const BEAM_ADVANTAGE = 1.15;
 
 export interface BatteryAspect {
-  /** How the hull presents itself to its target once in range: bow-on, or one side toward it. */
+  /** How the hull presents itself once in range when it has no target to judge by: bow-on, or one side toward it. */
   aspect: 'bow' | 'beam';
+  /** The hull never turns a side to its target under this rule (it has its own, or fights bow-on by nature). */
+  bowOnly: boolean;
   /** Damage per second that bears ahead, and on each beam. */
   bow: number; port: number; starboard: number;
   /** Range at which every battery of the stronger beam bears (0 if the hull has none). */
@@ -98,10 +103,86 @@ export function batteryAspect(ship: ShipState): BatteryAspect {
   }
   const beam = Math.max(port, starboard);
   const own = ship.faction === 'imperium' || ship.faction === 'chaos' || ship.faction === 'reaper' || ship.role === 'fighter';
-  found = { aspect: !own && beam > bow * BEAM_ADVANTAGE ? 'beam' : 'bow', bow, port, starboard,
+  found = { aspect: !own && beam > bow * BEAM_ADVANTAGE ? 'beam' : 'bow', bowOnly: own || beam <= 0, bow, port, starboard,
     beamRange: beam <= 0 ? 0 : starboard >= port ? starboardRange : portRange };
   aspects.set(ship, found);
   return found;
+}
+
+/**
+ * Seconds the guns that bear `bearing` radians off this hull's bow can expect to need to destroy `target` from
+ * fresh, firing from six tenths of their range: its barriers at the rate those guns wear barriers down, then its
+ * hull at the rate they get through its armour. Regeneration is left out. Infinity if nothing bears.
+ */
+export function secondsToDestroy(ship: ShipState, target: ShipState, bearing: number): number {
+  let barrierRate = 0, hullRate = 0, leakRate = 0;
+  for (const w of ship.weapons) {
+    const def = w.def;
+    if (def.antiSmall || def.cooldown <= 0) continue;
+    if (Math.abs(Math.atan2(Math.sin(w.facing - bearing), Math.cos(w.facing - bearing))) > def.arc * Math.PI / 360) continue;
+    const beam = def.kind === 'thanix' || def.kind === 'reaper_beam';
+    // One hit: a round, or a whole beam burst (its catalogue damage is per second of the burst).
+    const hit = def.damage * (beam ? def.beamDuration ?? 1.5 : 1);
+    // Rounds that miss destroy nothing: a frigate's gun lands three times in ten on a Reaper destroyer.
+    const perSecond = hit / def.cooldown * hitProbability(ship, target, def, def.range * 0.6, 0);
+    const stopped = Math.min(1, BARRIER_EFFICIENCY[def.damageType] * def.barrierEfficiencyMultiplier);
+    // A HADES round keeps part of its energy for a warhead that goes off inside, past the armour.
+    const inside = def.kind === 'mass_accelerator' ? Math.max(0, Math.min(0.8, def.internalWarheadFraction ?? 0)) : 0;
+    const outer = hit * (1 - inside);
+    const through = (throughArmour(outer, armourReduction(target.armour, def)) + hit * inside) / hit;
+    barrierRate += perSecond * stopped;
+    leakRate += perSecond * (1 - stopped) * through;
+    hullRate += perSecond * through;
+  }
+  if (hullRate <= 0) return Infinity;
+  if (target.maxBarriers <= 0 || barrierRate <= 0) return target.maxHull / hullRate;
+  const barriersDown = target.maxBarriers / barrierRate;
+  const leaked = leakRate * barriersDown;
+  return leaked >= target.maxHull ? target.maxHull / leakRate : barriersDown + (target.maxHull - leaked) / hullRate;
+}
+
+/** The aspect each hull last chose, and against which target. */
+const presentations = new WeakMap<ShipState, { targetId: string; aspect: BatteryAspect['aspect'] }>();
+
+/**
+ * How a hull presents itself to this target: one side toward it if its broadside would destroy this target sooner
+ * than the guns that bear ahead, by BEAM_ADVANTAGE; bow-on otherwise. Judged once per target.
+ *
+ * The first version of this rule compared damage per second alone and so turned every Alliance dreadnought and
+ * cruiser beam-on to a Reaper. Their broadside batteries throw more metal than the spinal gun, but its rounds are
+ * the ones that get through Reaper armour: against a Sovereign a dreadnought's broadside reaches the hull at a
+ * seventh of its strength and its spinal gun at nine tenths. Beam-on, four dreadnoughts needed ten minutes to
+ * destroy a Sovereign that neither moved nor fired, and the main guns fired 25 times between them.
+ */
+export function aspectAgainst(ship: ShipState, target: ShipState): BatteryAspect['aspect'] {
+  const battery = batteryAspect(ship);
+  if (battery.bowOnly) return 'bow';
+  const last = presentations.get(ship);
+  if (last && last.targetId === target.id) return last.aspect;
+  const ahead = secondsToDestroy(ship, target, 0);
+  const abeam = Math.min(secondsToDestroy(ship, target, BEAM_BEARING), secondsToDestroy(ship, target, -BEAM_BEARING));
+  const aspect = abeam * BEAM_ADVANTAGE < ahead ? 'beam' : 'bow';
+  presentations.set(ship, { targetId: target.id, aspect });
+  return aspect;
+}
+
+const fireRates = new WeakMap<ShipState, { targetId: string; rate: number }>();
+
+/** The share of `target` this hull can expect to destroy each second with its best battery (one over the
+ * seconds it would need alone). Judged once per target. */
+export function fireOn(ship: ShipState, target: ShipState): number {
+  const last = fireRates.get(ship);
+  if (last && last.targetId === target.id) return last.rate;
+  let seconds = secondsToDestroy(ship, target, 0);
+  if (!batteryAspect(ship).bowOnly) seconds = Math.min(seconds, secondsToDestroy(ship, target, BEAM_BEARING), secondsToDestroy(ship, target, -BEAM_BEARING));
+  const rate = seconds === Infinity ? 0 : 1 / seconds;
+  fireRates.set(ship, { targetId: target.id, rate });
+  return rate;
+}
+
+/** The aspect the hull is fighting in: the one it chose against its last target, or its untargeted default. */
+export function fightingAspect(ship: ShipState): BatteryAspect['aspect'] {
+  return presentations.get(ship)?.aspect ?? batteryAspect(ship).aspect;
 }
 
 /** Principal battery, in simulation units. Turrets/PD never set a capital's
@@ -109,7 +190,7 @@ export function batteryAspect(ship: ShipState): BatteryAspect {
 export function shipEngagementRange(ship: ShipState): number {
   // A hull that fights on the beam engages at the range of its side batteries.
   const battery = batteryAspect(ship);
-  if (battery.aspect === 'beam') return battery.beamRange;
+  if (fightingAspect(ship) === 'beam') return battery.beamRange;
   // One pass, no temporary arrays: this is asked for every hull every tick. The battery is the spinal mounts if
   // any have ammunition, else any anti-ship mount, else anything usable; the answer is its longest range.
   const light = ship.role === 'fighter' || ship.role === 'frigate';
@@ -174,12 +255,18 @@ export function priorityMultiplier(priority: TargetPriority, target: ShipState):
 }
 
 /**
- * How much fire a target is worth before others should look elsewhere: once the hulls already aiming at it are
- * worth this many times its own value, its attraction to one more is halved. Without this a whole fleet chose the
- * same target (88 of 88 Alliance hulls on one Reaper at the Battle of Earth, none of them in range of it) and flew
- * at it past enemies they could have been shooting.
+ * Concentration of fire. A target has its share of attackers when the hulls already aiming at it would, between
+ * them, destroy it within this many seconds (see `fireOn`); until then one more attacker is as welcome as the
+ * first, and after it each further one is worth less. Without any such rule a whole fleet chose one target (88 of
+ * 88 Alliance hulls on one Reaper at the Battle of Earth, none of them in range of it) and flew at it past enemies
+ * they could have been shooting.
+ *
+ * The first version of the rule counted attackers by point value against twice the target's own, from the first
+ * attacker on. That spread fire thinner than barriers regenerate: in a large battle 372 hulls aimed at 49 Reaper
+ * destroyers, seven or eight each, and four fifths of the barrier damage they did came back. Ten seconds is short beside
+ * the minute or two in which a Reaper's barriers refill, so fire that meets the mark outruns regeneration.
  */
-export const OVERKILL_SHARE = 2;
+export const FOCUS_SECONDS = 10;
 
 /** Share of its main battery's range inside which a hull counts an enemy as one it can fight now. */
 export const IN_REACH = 0.97;
@@ -208,8 +295,10 @@ export function scoreTarget(ctx: AiContext, shooter: ShipState, fleet: FleetStat
   if (!intercepting && fleet.orders.focusFire && fleet.focusTargetId === target.id && (relativeRange <= 1 || commandedFocus)) score *= 1 + d.focusFire * 2;
   // Spread the fleet's fire: a target that already has its share of attackers is worth less to one more.
   if (ctx.targetLoad && !commandedFocus && target.role !== 'fighter') {
-    const others = Math.max(0, ctx.targetLoad(target.id) - (shooter.targetId === target.id ? Math.max(1, shooter.pointValue) : 0));
-    score /= 1 + others / (Math.max(1, target.pointValue) * OVERKILL_SHARE);
+    // Fire is concentrated until it is enough: the hulls already on a target count against it only once they
+    // would destroy it within FOCUS_SECONDS without this one.
+    const others = Math.max(0, ctx.targetLoad(target.id) - (shooter.targetId === target.id ? fireOn(shooter, target) : 0));
+    score /= 1 + Math.max(0, others * FOCUS_SECONDS - 1);
   }
   score *= priorityMultiplier(fleet.orders.priority, target);
   if (fleet.orders.protectCapitals && (shooter.role === 'frigate' || shooter.role === 'cruiser')) {
@@ -663,7 +752,7 @@ const beamSides = new WeakMap<ShipState, { side: 1 | -1; active: boolean }>();
  */
 function beamFacing(ship: ShipState, target: ShipState): Vec3 {
   const battery = batteryAspect(ship);
-  if (battery.aspect !== 'beam') return target.pos;
+  if (aspectAgainst(ship, target) !== 'beam') { const turned = beamSides.get(ship); if (turned) turned.active = false; return target.pos; }
   const delta = sub(target.pos, ship.pos);
   const dist = Math.sqrt(lengthSq(delta));
   let state = beamSides.get(ship);
@@ -809,6 +898,8 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const engaging = attackOrder(fleet) || (noRetreat && ['withdraw', 'retreat'].includes(fleet.orders.order));
   if (!target || (!engaging && ship.role !== 'fighter')) return { position: slotPos, speedFraction: 1, face: target ? combatFacing(ship, target, slotPos) : undefined };
 
+  // The hull's range is that of the battery it presents to this target.
+  aspectAgainst(ship, target);
   const range = shipEngagementRange(ship);
   const band = engagementBand(ship, range);
   const dist = distance(ship.pos, target.pos);

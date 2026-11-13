@@ -54,7 +54,9 @@ describe('visual weight of weapon fire', () => {
     while (!sim.finished && sim.time < 120) {
       sim.step();
       if (sim.time < next) continue;
-      next += 10;
+      // A look every second. It was every ten: a main round is in the air for under a second, dreadnoughts fire
+      // in volleys, and at this seed all seven looks of a 90 s battle once fell between volleys and saw none.
+      next += 1;
       for (const p of sim.projectiles) {
         const calibre = p.weapon.damage, speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z);
         const was = area(calibre, speed, before(calibre)), drawn = area(calibre, speed, tracerSize(calibre));
@@ -64,15 +66,15 @@ describe('visual weight of weapon fire', () => {
         if (p.weapon.id === 'fighter_gun') { fighterNow += now; fighterUnthinned += drawn; }
       }
     }
-    // Measured (6 main rounds and 896 lighter ones over the looks, 492 of them fighter cannon): main guns were
-    // 7.5 % of the area tracers cover and are 53 %; fighter cannon are 4 %, and would be 15 % if every round were
-    // drawn; all tracers together cover 14 % of what they did. This share moves with how many main rounds happen
-    // to be in the air at the ten looks: with 15 of them (before fighters strafed) it was 75 %, with 9 (when
-    // fighters strafed but went home with their last torpedo) 63 %. The light rounds of hulls are 404 throughout.
+    // Measured with a look every second: main guns were 12 % of the area tracers cover and are 70 %; fighter
+    // cannon are 5 %, and would be 16 % if every round were drawn; all tracers together cover 17 % of what they
+    // did. (On the build before this one, looked at the same way: 7 % and 51 %, 4 % and 16 %, 14 %.) The main
+    // guns' share moves with how many main rounds are in the air at the looks: at ten-second looks it read 53 %,
+    // 63 % and 75 % at this seed as battles changed.
     expect(mainBefore / allBefore).toBeLessThan(0.35);
-    // No absolute floor on the main guns' share: it is 37 % here now and was 53 %, 63 % and 75 % at this seed as
-    // battles changed, following the count of main rounds in the air (4 to 15) and not the drawing rules. What the
-    // rules control is held: main rounds unchanged, their share at least doubled, light fire under half its area.
+    // No absolute floor on the main guns' share: it follows the count of main rounds in the air and not the
+    // drawing rules. What the rules control is held: main rounds unchanged, their share at least doubled, light
+    // fire under half its area.
     expect(mainNow / allNow).toBeGreaterThan(2 * mainBefore / allBefore);
     expect(allNow / allBefore).toBeLessThan(0.45);
     expect(mainNow).toBeCloseTo(mainBefore, 6);
