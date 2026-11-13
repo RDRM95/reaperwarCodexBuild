@@ -17,8 +17,8 @@ import { BattleSimulation } from '@/simulation/battle';
  *     Reaper's hull at 15 % of their strength, while the spinal guns fell silent (25 rounds from four
  *     dreadnoughts in five minutes). Four dreadnoughts needed 614 s to destroy a Sovereign that neither moved
  *     nor fired; eight that it fired back at were all lost and left it with 71 % of its hull;
- *   - a fleet spread its fire thinner than barriers regenerate: in a tenth-size Annihilation battle 350 hulls
- *     aimed at 51 destroyers, seven each, and four fifths of the barrier damage they did was regenerated.
+ *   - a fleet spread its fire thinner than barriers regenerate: in a tenth-size Annihilation battle 372 hulls
+ *     aimed at 49 destroyers, seven or eight each, and four fifths of the barrier damage they did was regenerated.
  */
 const trial = (rulesId: string, dreadnoughts: number, seed: number, reaper: 'passive' | 'fighting', limit: number) => {
   const sim = new BattleSimulation(buildCustomBattle({ seed, rulesId, environment: 'deep_space', startingDistanceKm: 60, maxDuration: limit,

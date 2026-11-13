@@ -2,9 +2,32 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 12 Nov 2026, 23:35 UTC — combat overhaul, eight passes
+## State on 13 Nov 2026, 19:15 UTC — Reaper capital barriers and conventional fire
 
 Read this section first. Everything below it is older.
+
+**Rules in force, unchanged:** the sandbox (`RDRM95/reaper-war-sandbox`) is retired by the owner's hard rule of 12 Nov; no work there. Private reference imagery is never committed. Software rendering is not hardware proof.
+
+**Since the section below:** the HUD fix is merged as Codex #84 (`88d5680`) and deployed.
+
+**Owner's report of 13 Nov:** two Annihilation battles (seed 45) in which 8,652 allied warships fired about 1.5 million rounds at 1,500 Sovereigns and destroyed 15 and 20; suspicion that Reaper capital barriers out-regenerate dreadnought fire; and an after-action report claiming organic victory was possible after total allied destruction. Instructions: investigate shared mechanics first, reproduce with 1, 2, 4, 6 and 8 dreadnoughts against one Sovereign, fix root causes globally without arbitrary multipliers, keep Reaper lethality and Annihilation and Apex settings, fix the report, re-run the large battle.
+
+**In this change** (`docs/apex/REAPER_CAPITAL_BARRIER_2026-11-13.md` has every figure):
+
+- Regeneration is not broken: a Sovereign refills 0.6 % of its barriers a second, a dreadnought 1.1 %. It was left alone.
+- **The main guns were silent.** Since the overhaul a hull turned beam-on if its broadside threw more damage a second; canon dreadnoughts and cruisers therefore fought Reapers with broadsides that reach a Reaper's hull at 15 %. A hull now presents the battery that would destroy its present target soonest (`aspectAgainst`, `secondsToDestroy` in `ai.ts`). Four dreadnoughts against a passive Sovereign: 614 s → 152 s. Eight against one that fights back, canon: all lost → Sovereign destroyed for three lost, in seven seeds of seven.
+- **Fire was spread too thin.** A target now has its share of attackers when those on it would destroy it within ten seconds (`FOCUS_SECONDS`, `fireOn`); the old point-value rule (`OVERKILL_SHARE`) is gone.
+- **The after-action report** counts capital losses as a share of those committed and reports a finished engagement as it ended (`reaperIntel.ts`).
+- Winners unchanged in 54 standard battles; canon Final Battle of Earth: Sovereigns destroyed 0.2 → 2.2 of 10. Annihilation is still a catastrophic Reaper victory at every size tried.
+- New scripts: `scripts/sovereign-trial.ts`, `scripts/annihilation-battle.ts`. New tests: `tests/reaper-capital-barrier.test.ts`, `tests/reaper-assessment.test.ts`.
+
+**Found and NOT changed, for the owner to decide:** armour is charged against a beam every tick, so a Thanix reaches a Reaper's hull at 15 % instead of 86 %, and Reaper beams are likewise weakened against armoured hulls. Fixing it is correct but favours the Reapers (allied losses in Prime/Apex battles up by about a quarter in a trial), so it was left out. Also noted: the dreadnought main gun plays at four seconds where its own catalogue entry quotes the codex's two (Strict Lore uses two); Apex Reaper-killers spend NOVA rounds on destroyers in front of them.
+
+**Open PRs by others, untouched:** #27 and #69 do not overlap this change; #26 already conflicts with the base in `ai.ts`.
+
+## State on 12 Nov 2026, 23:35 UTC — combat overhaul, eight passes
+
+Everything below this line is older than the section above.
 
 **HARD RULE FROM THE OWNER, 12 Nov 2026, about 22:15 UTC: the sandbox (`RDRM95/reaper-war-sandbox`) is retired. No further development there: no ports, no pushes, no merges.** Its last merged state is `76a8848` (sandbox #59, the fourth pass). Sandbox #60 (a port of Codex #79 and #80) was open and passing when the rule came; it has been left open and unmerged for the owner to close. Every mention below of a sandbox port still to do is void.
 

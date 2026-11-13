@@ -262,8 +262,8 @@ export function priorityMultiplier(priority: TargetPriority, target: ShipState):
  * they could have been shooting.
  *
  * The first version of the rule counted attackers by point value against twice the target's own, from the first
- * attacker on. That spread fire thinner than barriers regenerate: in a large battle 350 hulls aimed at 51 Reaper
- * destroyers, seven each, and four fifths of the barrier damage they did came back. Ten seconds is short beside
+ * attacker on. That spread fire thinner than barriers regenerate: in a large battle 372 hulls aimed at 49 Reaper
+ * destroyers, seven or eight each, and four fifths of the barrier damage they did came back. Ten seconds is short beside
  * the minute or two in which a Reaper's barriers refill, so fire that meets the mark outruns regeneration.
  */
 export const FOCUS_SECONDS = 10;
