@@ -22,7 +22,7 @@ import type { FactionId } from '@/data/types';
 import { WEAPONS, getWeapon } from '@/data/weapons';
 import { applyRulesToShip, applyRulesToWeapon, cloneRules, type EffectiveWeapon, type RuleSet } from '@/timelines/rules';
 import { assertLoreCompatible } from '@/timelines/lore';
-import { CLOSING_SPRINT, fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
+import { CLOSING_SPRINT, fireOn, fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
 import { hardcoreReaperBeamDamage } from './reaperHardcore';
 import { applyDamage, applyProjectileDamage, hitProbability } from './damage';
 import { assignSlots } from './formations';
@@ -403,7 +403,8 @@ export class BattleSimulation implements AiContext {
   enemyPositions(side: Side): Float64Array | undefined {
     return this.packedLive ? this.packed[side === 'A' ? 'B' : 'A'] : undefined;
   }
-  /** Point value aiming at each ship. Rebuilt every half second and kept current in between as hulls change target. */
+  /** The fire aimed at each ship, as the share of it destroyed each second (see `fireOn`). Rebuilt every half
+   * second and kept current in between as hulls change target. */
   private readonly targetLoads = new Map<string, number>();
   private targetLoadsAt = -Infinity;
 
@@ -411,18 +412,29 @@ export class BattleSimulation implements AiContext {
     if (this.time - this.targetLoadsAt >= TARGET_LOAD_REFRESH) {
       this.targetLoadsAt = this.time;
       this.targetLoads.clear();
+      this.loadFrom.clear();
       for (const ship of this.ships) {
         if (!ship.alive || ship.escaped || !ship.targetId) continue;
-        this.targetLoads.set(ship.targetId, (this.targetLoads.get(ship.targetId) ?? 0) + Math.max(1, ship.pointValue));
+        const weight = this.loadWeight(ship);
+        this.loadFrom.set(ship.id, weight);
+        this.targetLoads.set(ship.targetId, (this.targetLoads.get(ship.targetId) ?? 0) + weight);
       }
     }
     return this.targetLoads.get(id) ?? 0;
   }
+  /** What each hull last added to its target's load, so the same amount is taken off when it changes target. */
+  private readonly loadFrom = new Map<string, number>();
+  private loadWeight(ship: ShipState): number {
+    const target = ship.targetId ? this.shipById.get(ship.targetId) : undefined;
+    return target ? fireOn(ship, target) : 0;
+  }
 
   noteTarget(ship: ShipState, previous: string | undefined): void {
     if (this.time - this.targetLoadsAt >= TARGET_LOAD_REFRESH) return; // The next question rebuilds the table.
-    const weight = Math.max(1, ship.pointValue);
-    if (previous) this.targetLoads.set(previous, Math.max(0, (this.targetLoads.get(previous) ?? 0) - weight));
+    const was = this.loadFrom.get(ship.id) ?? 0;
+    if (previous) this.targetLoads.set(previous, Math.max(0, (this.targetLoads.get(previous) ?? 0) - was));
+    const weight = this.loadWeight(ship);
+    this.loadFrom.set(ship.id, ship.targetId ? weight : 0);
     if (ship.targetId) this.targetLoads.set(ship.targetId, (this.targetLoads.get(ship.targetId) ?? 0) + weight);
   }
 

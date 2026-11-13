@@ -25,7 +25,9 @@ export function assessReapers(sim: BattleLike): ReaperAssessment {
   const reaperStart = reaperShips.reduce((a, s) => a + s.pointValue, 0);
   const reaperLost = reaperShips.filter((s) => !s.alive).reduce((a, s) => a + s.pointValue, 0);
   const reaperLossesFraction = reaperStart > 0 ? reaperLost / reaperStart : 0;
-  const reaperCapitalLosses = reaperShips.filter((s) => s.role === 'reaper_capital' && !s.alive).length;
+  const reaperCapitals = reaperShips.filter((s) => s.role === 'reaper_capital');
+  const reaperCapitalLosses = reaperCapitals.filter((s) => !s.alive).length;
+  const capitalLossFraction = reaperCapitals.length > 0 ? reaperCapitalLosses / reaperCapitals.length : 0;
   const organicStart = organicShips.reduce((a, s) => a + s.pointValue, 0);
   const organicRemaining = organicShips.filter((s) => s.alive && !s.escaped).reduce((a, s) => a + s.pointValue, 0);
   const organicFleetStrength = organicStart > 0 ? organicRemaining / organicStart : 0;
@@ -48,7 +50,12 @@ export function assessReapers(sim: BattleLike): ReaperAssessment {
   const coordination = Math.max(0, Math.min(1, rules.strategic.alliedCoordination * 0.6 + (organicShots > 50 ? 0.3 : 0.1)));
 
   let threatLevel: ReaperAssessment['threatLevel'] = 'NEGLIGIBLE';
-  const score = reaperLossesFraction * 3 + reaperCapitalLosses * 0.6 + organicTechCapability * 0.8 + (organicFleetStrength > 0.6 && sim.time > 60 ? 0.5 : 0);
+  // A capital unit lost counts for what it is of the capitals committed. The count alone was used here: fifteen
+  // capitals lost of fifteen hundred scored as the loss of fifteen in a ten-ship force, and an engagement the
+  // harvest fleet won without a survivor on the other side was assessed CRITICAL, "organic fleets capable of
+  // defeating harvest forces in open engagement". Unchanged where a tenth or more of the capitals are lost.
+  const capitalLossScore = Math.min(reaperCapitalLosses * 0.6, capitalLossFraction * 6);
+  const score = reaperLossesFraction * 3 + capitalLossScore + organicTechCapability * 0.8 + (organicFleetStrength > 0.6 && sim.time > 60 ? 0.5 : 0);
   if (score > 3.2) threatLevel = 'CRITICAL';
   else if (score > 2.2) threatLevel = 'SEVERE';
   else if (score > 1.3) threatLevel = 'ELEVATED';
@@ -63,6 +70,8 @@ export function assessReapers(sim: BattleLike): ReaperAssessment {
     headline = 'MINOR UNIT LOSSES RECORDED. HARVEST PROCEEDING.';
   } else if (reaperCapitalLosses < 2) {
     headline = 'CAPITAL UNIT LOSS RECORDED. ANOMALY UNDER EVALUATION.';
+  } else if (capitalLossFraction < 0.05 && reaperLossesFraction < 0.05) {
+    headline = 'CAPITAL UNIT LOSSES RECORDED. ATTRITION WITHIN COMMITTED RESERVES.';
   } else if (reaperLossesFraction < 0.5) {
     headline = 'CAPITAL UNIT LOSSES EXCEED HISTORICAL PROJECTIONS.';
   } else {
@@ -72,12 +81,14 @@ export function assessReapers(sim: BattleLike): ReaperAssessment {
   lines.push(`Harvest fleet losses: ${(reaperLossesFraction * 100).toFixed(0)}% of committed force value.`);
   if (reaperCapitalLosses > 0) lines.push(`Capital units destroyed: ${reaperCapitalLosses}.`);
   lines.push(`Organic weapon effectiveness index: ${(organicTechCapability * 100).toFixed(0)}.`);
-  if (sim.finished && sim.result) {
-    const reaperSide = reaperShips[0]?.side;
-    if (reaperSide && sim.result.winner === reaperSide) lines.push('Engagement concluded. Resistance eliminated.');
-    else if (sim.result.winner === 'draw') lines.push('Engagement inconclusive. Reassessment required.');
-    else lines.push('Engagement lost. This outcome has no precedent in archived cycles.');
-  }
+  // How the engagement ended, once it has: the conclusions below must not contradict it.
+  const reaperSide = reaperShips[0]?.side;
+  const ended = sim.finished && sim.result ? sim.result.winner : undefined;
+  const reapersWon = ended !== undefined && reaperSide !== undefined && ended === reaperSide;
+  const reapersLost = ended !== undefined && ended !== 'draw' && !reapersWon;
+  if (reapersWon) lines.push('Engagement concluded. Resistance eliminated.');
+  else if (ended === 'draw') lines.push('Engagement inconclusive. Reassessment required.');
+  else if (reapersLost) lines.push('Engagement lost. This outcome has no precedent in archived cycles.');
 
   let projectedResistance: string;
   if (threatLevel === 'NEGLIGIBLE' || threatLevel === 'LOW') projectedResistance = 'Organic fleets will be eliminated within projected timeframe.';
@@ -90,6 +101,19 @@ export function assessReapers(sim: BattleLike): ReaperAssessment {
   else if (threatLevel === 'LOW' || threatLevel === 'MODERATE') harvest = 'Harvest of this system: delayed. Reinforcement unnecessary.';
   else if (threatLevel === 'ELEVATED') harvest = 'Harvest of this system: delayed. Reinforcement advisable.';
   else harvest = 'Harvest of this system: cannot be completed with committed forces.';
+
+  // The projections above are for an engagement still being fought. Once it is over they give way to what
+  // happened: a force that has been destroyed is not "capable of defeating harvest forces", whatever it cost.
+  if (reapersWon) {
+    const costly = threatLevel === 'ELEVATED' || threatLevel === 'SEVERE' || threatLevel === 'CRITICAL';
+    projectedResistance = organicFleetStrength <= 0.001
+      ? `Organic fleet destroyed${costly ? ' at a cost above projections' : ''}. No resistance remains in this engagement.`
+      : `Organic fleet defeated${costly ? ' at a cost above projections' : ''}. Its remnants will be eliminated within projected timeframe.`;
+    harvest = costly ? 'Harvest of this system: proceeding. Replacement of lost units advisable.' : 'Harvest of this system: proceeding.';
+  } else if (reapersLost) {
+    projectedResistance = 'Organic fleets defeated the committed harvest force in open engagement.';
+    harvest = 'Harvest of this system: cannot be completed with committed forces.';
+  }
 
   return {
     organicTechCapability,

@@ -17,6 +17,19 @@ export interface DamageOutcome {
   internalWarheadDamage?: number;
 }
 
+/** Share of a hit that reaches the hull however thick the armour. */
+export const ARMOUR_FLOOR = 0.15;
+
+/** The flat amount armour takes off one hit of this weapon, before the floor. */
+export function armourReduction(armour: number, weapon: Pick<EffectiveWeapon, 'armourBypass' | 'penetration'>): number {
+  return Math.max(0, armour * (1 - weapon.armourBypass) * Math.max(0, 1.2 - weapon.penetration));
+}
+
+/** What is left of `amount` after armour has taken `reduction` off it: never less than ARMOUR_FLOOR of it. */
+export function throughArmour(amount: number, reduction: number): number {
+  return Math.min(amount, Math.max(amount * ARMOUR_FLOOR, amount - reduction));
+}
+
 /**
  * Resolve a quantity of incoming damage against a ship.
  *
@@ -45,10 +58,7 @@ export function applyDamage(target: ShipState, raw: number, weapon: EffectiveWea
   }
   if (amount <= 0) return out;
 
-  const armourEff = target.armour * (1 - weapon.armourBypass);
-  const reduction = Math.max(0, armourEff * Math.max(0, 1.2 - weapon.penetration));
-  let hullDamage = Math.max(amount * 0.15, amount - reduction);
-  hullDamage = Math.min(hullDamage, amount);
+  const hullDamage = throughArmour(amount, armourReduction(target.armour, weapon));
   // Ablation: armour wears down under sustained fire.
   target.armour = Math.max(0, target.armour - hullDamage * 0.002);
 
