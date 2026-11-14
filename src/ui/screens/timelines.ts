@@ -23,7 +23,7 @@ const TECH_LABELS: Record<keyof TechModifiers, { label: string; tip: string }> =
   fighterStrength: { label: 'Fighter strength', tip: 'Fighter hull, barriers and weapons.' },
   torpedoDamage: { label: 'Torpedo damage', tip: 'Disruptor torpedo warheads (bypass 75% of barriers).' },
   gardianEffectiveness: { label: 'GARDIAN effectiveness', tip: 'Point-defence laser damage.' },
-  beamDamage: { label: 'Beam / stream damage', tip: 'Thanix for organics; primary beams for Reapers.' },
+  beamDamage: { label: 'Beam / stream damage', tip: 'Thanix streams and ship-scale Reaper beams. Oculus pulses use Fighter strength.' },
   crewQuality: { label: 'Crew quality', tip: 'Training and coordination; affects accuracy.' },
 };
 
