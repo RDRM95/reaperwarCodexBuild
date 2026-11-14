@@ -56,7 +56,9 @@ export function assignAttackBearings(role: ShipRole, members: readonly BearingMe
   const out = new Map<string, AttackBearing>();
   const limits = ATTACK_SWING[role];
   if (!limits || !members.length) return out;
-  const halfWidth = Math.max(1e-6, ...members.map(m => Math.abs(m.lateral)));
+  // Do not spread the fleet into Math.max: large custom battles can exceed the engine's argument limit.
+  let halfWidth = 1e-6;
+  for (const member of members) halfWidth = Math.max(halfWidth, Math.abs(member.lateral));
   const ordered = [...members].sort((a, b) => Math.abs(a.lateral) - Math.abs(b.lateral) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const rank = { left: 0, right: 0 };
   for (const [index, member] of ordered.entries()) {
