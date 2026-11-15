@@ -699,14 +699,19 @@ export class BattleView {
   private subjectFor(ship: ShipState | undefined): CameraSubject | undefined {
     if (!ship) return undefined;
     const v = this.visuals.get(ship.id);
+    const a = this.alpha;
     return {
+      id: ship.id,
       position: new THREE.Vector3(
-        (ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * this.alpha) * KM,
-        (ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * this.alpha) * KM,
-        (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * this.alpha) * KM
+        (ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * a) * KM,
+        (ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * a) * KM,
+        (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * a) * KM
       ),
       velocity: new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM),
-      heading: new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z),
+      // The heading between simulation steps, as the hull itself is drawn: taken at the steps, a turning hull
+      // swung the chase camera round it twenty times a second.
+      heading: new THREE.Vector3(ship.prevHeading.x + (ship.heading.x - ship.prevHeading.x) * a, ship.prevHeading.y + (ship.heading.y - ship.prevHeading.y) * a,
+        ship.prevHeading.z + (ship.heading.z - ship.prevHeading.z) * a).normalize(),
       size: v?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
     };
   }

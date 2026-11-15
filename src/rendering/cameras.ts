@@ -19,6 +19,8 @@ export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
 };
 
 export interface CameraSubject {
+  /** Which hull this is, so the rig knows when it has been given another one. */
+  id?: string;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   heading: THREE.Vector3;
@@ -71,6 +73,11 @@ export class CameraRig {
   private currentLook = new THREE.Vector3();
   private transition = 0;
   private shake = 0;
+  /** While the camera rides with a hull: where it and its look point are, measured from that hull. */
+  private anchorId: string | undefined;
+  private readonly relPos = new THREE.Vector3();
+  private readonly relLook = new THREE.Vector3();
+  private riding = false;
   private readonly tmp = new THREE.Vector3();
 
   constructor(aspect: number) {
@@ -182,7 +189,7 @@ export class CameraRig {
         const off = new THREE.Vector3(Math.sin(a) * Math.cos(this.pitch), Math.sin(this.pitch) + 0.25, Math.cos(a) * Math.cos(this.pitch)).normalize().multiplyScalar(dist);
         this.desiredPos.copy(s.position).add(off);
         this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.6);
-        break;
+        return this.apply(dt, false, s);
       }
       case 'reaper': {
         const s = opts.subject;
@@ -195,7 +202,7 @@ export class CameraRig {
         right.normalize();
         this.desiredPos.copy(s.position).addScaledVector(s.heading, -s.size * 0.42).addScaledVector(right, s.size * 0.07).add(new THREE.Vector3(0, s.size * 0.17, 0));
         this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.9).add(new THREE.Vector3(0, -s.size * 0.1, 0));
-        break;
+        return this.apply(dt, false, s);
       }
       case 'projectile': {
         const p = opts.projectile;
@@ -272,13 +279,38 @@ export class CameraRig {
     this.apply(dt, false);
   }
 
-  private apply(dt: number, instant: boolean): void {
+  /**
+   * Move the camera toward where this frame wants it. With `ride`, the camera travels with that hull and only its
+   * place relative to the hull is eased.
+   *
+   * The camera used to ease its own position in space toward a point beside a moving hull. An eased follower lags
+   * its target by an amount that depends on the length of the frame, so with uneven frames the hull slid back and
+   * forth in the picture: the judder was worst when the frame rate was. Riding with the hull, the hull is still
+   * in the frame whatever the frames do, and the easing is spent on what should be eased (an orbit drag, the hull
+   * turning, the move in from another camera).
+   */
+  private apply(dt: number, instant: boolean, ride?: CameraSubject): void {
     const cam = this.camera;
     if (this.transition > 0) this.transition = Math.max(0, this.transition - dt / 0.9);
     // Slower blend while transitioning, snappier otherwise.
     const k = instant && this.transition === 0 ? 1 : 1 - Math.exp(-dt * (this.transition > 0 ? 4 : 9));
-    cam.position.lerp(this.desiredPos, k);
-    this.currentLook.lerp(this.desiredLook, k);
+    if (ride) {
+      // Coming from another camera or another hull: start from where the camera is, measured from this hull.
+      if (!this.riding || this.anchorId !== ride.id) {
+        this.relPos.copy(cam.position).sub(ride.position);
+        this.relLook.copy(this.currentLook).sub(ride.position);
+        this.riding = true;
+        this.anchorId = ride.id;
+      }
+      this.relPos.lerp(this.tmp.copy(this.desiredPos).sub(ride.position), k);
+      this.relLook.lerp(this.tmp.copy(this.desiredLook).sub(ride.position), k);
+      cam.position.copy(ride.position).add(this.relPos);
+      this.currentLook.copy(ride.position).add(this.relLook);
+    } else {
+      this.riding = false;
+      cam.position.lerp(this.desiredPos, k);
+      this.currentLook.lerp(this.desiredLook, k);
+    }
     if (this.shake > 0) {
       const s = this.shake * 3;
       cam.position.add(new THREE.Vector3((Math.random() - 0.5) * s, (Math.random() - 0.5) * s, (Math.random() - 0.5) * s));
