@@ -48,6 +48,15 @@ export class TargetTelemetry {
     this.panel=root.querySelector('.gunner-readout-panel') as HTMLDivElement;
     this.readout=root.querySelector('.fire-readout') as HTMLDivElement;
   }
+  /** Keep the sight's captions clear of the interface's top bar: `top` is where the space under it begins (a CSS length). */
+  clearOf(top: string): void {
+    if (top === this.clearTop) return;
+    this.clearTop = top;
+    if (top) this.root.style.setProperty('--gunnery-top', top);
+    else this.root.style.removeProperty('--gunnery-top');
+  }
+  private clearTop = '';
+
   show(on:boolean){
     if(on&&!this.enabled){
       // Never replay previous vessel's firing animation on a new POV.
@@ -126,7 +135,8 @@ export class TargetTelemetry {
     this.charge.style.width=charge+'%';
     const flash=sim.time-this.lastShotTime<=1.1 ? this.lastShotLabel :
       (cooling?'MAIN GUN RECHARGING':inRange&&linedUp?'FIRING SOLUTION READY':lock);
-    this.line.textContent=flash+' · '+lock;
+    // One statement of each thing: with nothing else to report, the lock state was printed twice.
+    this.line.textContent=flash===lock?lock:flash+' · '+lock;
     this.panel.innerHTML='<strong>'+tidy(source.name)+'</strong><small>'+tidy(weaponLabel)+'</small><div>WEAPON READY <b>'+charge+'%</b> · HEAT <b>'+heat+'%</b></div><div>AMMUNITION <b>'+(primary?.ammo===undefined?'UNLIMITED':String(primary.ammo))+'</b> · KILLS <b>'+source.stats.kills+'</b></div>';
     this.readout.innerHTML=target&&target.alive?
       '<div>TRACK <b>'+tidy(target.name)+'</b></div><div>RANGE <b>'+metres(range)+'</b> · '+(inRange?'WITHIN BATTERY RANGE':'OUTSIDE BATTERY RANGE')+'</div><div>TARGET BARRIERS <b>'+pct(target.barriers,target.maxBarriers)+'%</b> · HULL <b>'+pct(target.hull,target.maxHull)+'%</b></div>':

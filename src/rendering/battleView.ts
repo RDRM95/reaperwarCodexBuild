@@ -66,6 +66,9 @@ export interface GraphicsSettings {
 
 const INITIAL_FAR_POINTS = 2048;
 
+/** How wide the gun camera's own beam is drawn, as a share of its width from any other camera. */
+export const OWN_BEAM_IN_SIGHT = 0.4;
+
 export class BattleView {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -480,7 +483,10 @@ export class BattleView {
           }
           const intensity = w.def.id === 'oculus_beam' ? 0.055 :
             kind === 'reaper_beam' ? (ship.role === 'reaper_capital' ? 1.3 : 0.7) : 0.9;
-          beams.push({ start, end, kind, intensity });
+          // Seen from its own gun camera a beam starts a few tenths of a unit from the lens: at full width it is a
+          // wall of light across the picture. The gunner's own beam is drawn narrower (OWN_BEAM_IN_SIGHT).
+          const own = this.rig.mode === 'gunnery' && ship.id === (this.gunneryLockedShipId ?? this.followId);
+          beams.push({ start, end, kind, intensity: own ? intensity * OWN_BEAM_IN_SIGHT : intensity });
         }
       }
     }
