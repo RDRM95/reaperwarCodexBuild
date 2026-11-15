@@ -18,6 +18,17 @@ export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
   gunnery: 'First-person gunnery',
 };
 
+/**
+ * Where the Reaper view sits and looks, in hull lengths from the hull's centre (see the `reaper` camera). A capital
+ * is seen from the brow of its hood. A destroyer is a compact body over four legs with no hood to stand on: it is
+ * seen from close behind and above, over its back. (Its camera used to sit 0.27 of a unit above its centre, inside
+ * its carapace plates, and showed the insides of them.)
+ */
+export const REAPER_VIEW = {
+  capital: { forward: -0.035, up: 0.178, right: 0.055, lookDown: 0.12 },
+  destroyer: { forward: -0.78, up: 0.44, right: 0.18, lookDown: 0.06 },
+};
+
 export interface CameraSubject {
   /** Which hull this is, so the rig knows when it has been given another one. */
   id?: string;
@@ -194,14 +205,17 @@ export class CameraRig {
       case 'reaper': {
         const s = opts.subject;
         if (!s) return this.fallback(dt, opts.fleetCentre);
-        // Over the carapace: low above the aft blade and a little off the centre line, looking forward over the hood
-        // so the limbs reach into the frame and the fight lies beyond them. The old pose sat half a hull length
-        // above the hull looking at the horizon, with none of the Reaper in the picture.
+        // On the brow: just behind the crown of the hood and a little off the centre line, looking forward and down
+        // over its front lip, so the hood lies under the camera and the limbs reach into the frame with the fight
+        // beyond them. The camera used to sit over the aft blade; with a mantle of its proper size the hood stood
+        // between that camera and everything ahead of it.
         const right = new THREE.Vector3().crossVectors(s.heading, new THREE.Vector3(0, 1, 0));
         if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
         right.normalize();
-        this.desiredPos.copy(s.position).addScaledVector(s.heading, -s.size * 0.42).addScaledVector(right, s.size * 0.07).add(new THREE.Vector3(0, s.size * 0.17, 0));
-        this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.9).add(new THREE.Vector3(0, -s.size * 0.1, 0));
+        const w = capitalScale(s.size), a = REAPER_VIEW.destroyer, b = REAPER_VIEW.capital;
+        const at = (key: keyof typeof a): number => s.size * (a[key] + (b[key] - a[key]) * w);
+        this.desiredPos.copy(s.position).addScaledVector(s.heading, at('forward')).addScaledVector(right, at('right')).add(new THREE.Vector3(0, at('up'), 0));
+        this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.9).add(new THREE.Vector3(0, -at('lookDown'), 0));
         return this.apply(dt, false, s);
       }
       case 'projectile': {
@@ -332,7 +346,9 @@ export class CameraRig {
     cam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(tangent));
     // Gun cameras sit immediately at the muzzle and need a close near plane.
     const d = cam.position.distanceTo(this.currentLook);
-    cam.near = this.mode === 'gunnery' ? 0.06 : THREE.MathUtils.clamp(d * 0.002, 0.2, 50);
+    // The Reaper view rides on its own hull, a few tenths of a unit from it on a destroyer: it needs a near plane to
+    // match, or the hull it rides on is cut away.
+    cam.near = this.mode === 'gunnery' ? 0.06 : this.mode === 'reaper' ? THREE.MathUtils.clamp(d * 0.002, 0.03, 0.2) : THREE.MathUtils.clamp(d * 0.002, 0.2, 50);
     cam.updateProjectionMatrix();
   }
 
