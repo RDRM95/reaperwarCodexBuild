@@ -128,6 +128,16 @@ function mergeTinted(geoms: THREE.BufferGeometry[]): THREE.BufferGeometry {
 // (starboard), π is the ventral line. Each half is a superellipse so the
 // aft blade can carry a sharp dorsal ridge while the hood stays boxy.
 interface Section { z: number; w: number; hTop: number; hBot: number; cy: number; cx: number; nTop: number; nBot: number }
+/** A capital's mantle against the section table: half-width and height above the centre line (see buildReaper). */
+export const MANTLE = {
+  girth: 1.4,
+  crown: 1.3,
+  /** Limb spread is cut by this, so the knees stay about where they were. */
+  spread: 0.64,
+  /** Limb reach is cut by this: the limbs were longer than the body they hang from. */
+  reach: 0.7,
+};
+
 const sec = (z: number, w: number, hTop: number, hBot: number, extra: Partial<Section> = {}): Section =>
   ({ z, w, hTop, hBot, cy: 0, cx: 0, nTop: 2.2, nBot: 2.2, ...extra });
 
@@ -285,11 +295,17 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // and glow code rely on) reproduce the previous build: tail tip at the old
   // tail emitter, forward claw tips at the old claw reach.
   const aftZ = -0.44 * L - 0.25 * A;
-  const fwdZ = 0.1 * L + L * opts.armLengthFactor + 0.255 * A;
+  const armFactor = opts.armLengthFactor * (opts.arms === 4 ? 1 : MANTLE.reach);
+  const fwdZ = 0.1 * L + L * armFactor + 0.255 * A;
   /** Longitudinal station from a body-length fraction; the aft half is remapped onto the tail extent. */
   const zf = (frac: number): number => (frac >= 0 ? frac * L : aftZ * (-frac / 0.5));
 
   // --- Carapace core: a tall thin aft blade swelling into a boxy hood.
+  // How much broader and taller than the section table a capital's mantle is built. The table alone gave a body
+  // 278 m wide under limbs spread over 725 m (38 %): a dart carrying a claw. The underside is left where it was,
+  // so the emitter, which hangs below it, and everything laid out from it stay put.
+  const GIRTH = destroyer ? 1 : MANTLE.girth;
+  const CROWN = destroyer ? 1 : MANTLE.crown;
   const S: Section[] = [
     sec(-0.500, 0.025, 0.05, 0.02, { nTop: 1.4, nBot: 1.8 }),
     sec(-0.450, 0.09, 0.26, 0.12, { nTop: 1.4, nBot: 2.0 }),
@@ -304,7 +320,11 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
     sec(0.252, 0.62, 0.50, 0.66, { nTop: 2.8, nBot: 2.8 }),
     sec(0.268, 0.30, 0.22, 0.34, { nTop: 3.0, nBot: 3.0 }),
     sec(0.272, 0.05, 0.04, 0.06, { nTop: 3.0, nBot: 3.0 }),
-  ].map(s => ({ ...s, z: zf(s.z), w: s.w * R, hTop: s.hTop * R, hBot: s.hBot * R }));
+  ].map(s => {
+    // A capital's mantle is broad and deep: the blade keeps its edge at the tail and fills out toward the hood.
+    const fill = smooth(-0.5, -0.12, s.z);
+    return { ...s, z: zf(s.z), w: s.w * R * (1 + (GIRTH - 1) * fill), hTop: s.hTop * R * (1 + (CROWN - 1) * fill), hBot: s.hBot * R };
+  });
   // Ventral cavity: the hood underside between the limb roots is recessed.
   const recess = (z: number, th: number): number => {
     let d = th - Math.PI; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -456,12 +476,12 @@ export function buildReaper(opts: ReaperOpts): BuiltShip {
   // moving only about shoulder/elbow bearings. Pivots are lightweight Transform
   // nodes named for the rig; the geometry is never deformed or skinned.
   // Static merged stand-ins keep distant/bulk Reapers at two limb draw calls.
-  const armLen = L * opts.armLengthFactor;
+  const armLen = L * armFactor;
   const stations = destroyer
     ? [{ th: 2.05, z: 0.02, spread: 2.3, drop: 0.1, root: 0.62 }, { th: 2.62, z: 0.12, spread: 1.8, drop: 0.35, root: 0.56 }]
-    : [{ th: 1.98, z: 0.03, spread: harbinger ? 1.95 : 1.7, drop: 0.0, root: 0.52 },
-       { th: 2.38, z: 0.09, spread: harbinger ? 1.7 : 1.45, drop: 0.12, root: 0.5 },
-       { th: 2.70, z: 0.145, spread: harbinger ? 1.3 : 1.1, drop: 0.32, root: 0.48 }];
+    : [{ th: 1.98, z: 0.03, spread: (harbinger ? 1.95 : 1.7) * MANTLE.spread, drop: 0.0, root: 0.52 },
+       { th: 2.38, z: 0.09, spread: (harbinger ? 1.7 : 1.45) * MANTLE.spread, drop: 0.12, root: 0.5 },
+       { th: 2.70, z: 0.145, spread: (harbinger ? 1.3 : 1.1) * MANTLE.spread, drop: 0.32, root: 0.48 }];
   const staticArms: THREE.BufferGeometry[] = [];
   const staticSeams: THREE.BufferGeometry[] = [];
   const bake = (g: THREE.BufferGeometry, offset: THREE.Vector3): THREE.BufferGeometry => g.clone().translate(offset.x, offset.y, offset.z);

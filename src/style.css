@@ -267,7 +267,9 @@ body.hud-none:not(.theatre-on) #battle-canvas { cursor: none !important; }
   color:#9dcae0;font:11px ui-monospace,monospace;text-shadow:0 1px 8px #000}
 #ui>.target-telemetry[hidden]{display:none!important}
 .target-telemetry .target-scope{position:absolute;inset:0}
-.target-telemetry .scope-top{position:absolute;top:112px;left:50%;transform:translateX(-50%);
+/* The sight's captions begin under the interface's top bar, wherever that ends (--gunnery-top, from the HUD's own
+   layout): at fixed heights they were printed across the camera panel's buttons. */
+.target-telemetry .scope-top{position:absolute;top:calc(var(--gunnery-top, 112px) + 12px);left:50%;transform:translateX(-50%);
   color:#a2cbdc;font-size:10px;letter-spacing:.1em}
 .target-telemetry .scope-center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
   font-size:38px;opacity:.78;color:#a3d6ec}
@@ -275,7 +277,7 @@ body.hud-none:not(.theatre-on) #battle-canvas { cursor: none !important; }
   transform:translate(-50%,-50%);width:118px;height:118px;border:1px solid #81b9d244;border-radius:50%}
 .target-telemetry .scope-bottom{position:absolute;left:50%;bottom:55px;transform:translateX(-50%);
   color:#89abbf;font-size:10px;letter-spacing:.05em}
-.target-telemetry .gunnery-line{position:absolute;top:153px;left:50%;transform:translateX(-50%);
+.target-telemetry .gunnery-line{position:absolute;top:calc(var(--gunnery-top, 112px) + 30px);left:50%;transform:translateX(-50%);
   white-space:nowrap;font-size:10px;color:#b0d0de;letter-spacing:.07em}
 .target-telemetry .target-marker{position:absolute;width:55px;height:55px;
   transform:translate(-50%,-50%);border:1px solid #8ab8d488}
@@ -295,7 +297,8 @@ body.hud-none:not(.theatre-on) #battle-canvas { cursor: none !important; }
 .target-telemetry .gunner-readout-panel small{color:#91b4c9}
 .target-telemetry .gunner-readout-panel b,.target-telemetry .fire-readout b{color:#d9e9f3}
 .target-telemetry .gunner-readout-panel div,.target-telemetry .fire-readout div{display:flex;gap:12px;justify-content:space-between}
-.target-telemetry .charge-track{position:absolute;bottom:58px;left:calc(50% - 100px);
+/* Above the caption, not through it. */
+.target-telemetry .charge-track{position:absolute;bottom:76px;left:calc(50% - 100px);
   width:200px;height:3px;background:#2c435566;border:1px solid #8cb3c277}
 .target-telemetry .charge-fill{display:block;width:0;height:100%;background:#85bdcf}
 .target-telemetry.cerberus-hud .scope-center{color:#e0b589}
@@ -309,7 +312,7 @@ body.hud-none:not(.theatre-on) #battle-canvas { cursor: none !important; }
 
 /* Diegetic optical cues: restrained, no flashing or full-screen whiteout. */
 .target-telemetry .gunnery-warning{
-  position:absolute;left:50%;top:17%;transform:translateX(-50%);
+  position:absolute;left:50%;top:calc(var(--gunnery-top, 112px) + 48px);transform:translateX(-50%);
   color:#ddb988;letter-spacing:.1em;font:10px ui-monospace,monospace;
   text-shadow:0 1px 5px #000;white-space:nowrap;opacity:.86
 }
