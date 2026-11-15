@@ -702,14 +702,19 @@ export class BattleView {
   private subjectFor(ship: ShipState | undefined): CameraSubject | undefined {
     if (!ship) return undefined;
     const v = this.visuals.get(ship.id);
+    const a = this.alpha;
     return {
+      id: ship.id,
       position: new THREE.Vector3(
-        (ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * this.alpha) * KM,
-        (ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * this.alpha) * KM,
-        (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * this.alpha) * KM
+        (ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * a) * KM,
+        (ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * a) * KM,
+        (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * a) * KM
       ),
       velocity: new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM),
-      heading: new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z),
+      // The heading between simulation steps, as the hull itself is drawn: taken at the steps, a turning hull
+      // swung the chase camera round it twenty times a second.
+      heading: new THREE.Vector3(ship.prevHeading.x + (ship.heading.x - ship.prevHeading.x) * a, ship.prevHeading.y + (ship.heading.y - ship.prevHeading.y) * a,
+        ship.prevHeading.z + (ship.heading.z - ship.prevHeading.z) * a).normalize(),
       size: v?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
     };
   }
@@ -812,6 +817,18 @@ export class BattleView {
           projectile = { position: subject.position.clone().addScaledVector(subject.heading, subject.size * 0.6), velocity: subject.heading.clone().multiplyScalar(50), heading: subject.heading, size: 2 };
         }
       }
+    }
+    if (this.rig.mode === 'free') {
+      // How far the free camera is from the nearest hull: its speed follows from it (CameraRig.freeReach).
+      const at = this.rig.freePos;
+      let nearest = Infinity;
+      for (const ship of sim.ships) {
+        if (!ship.alive || ship.escaped) continue;
+        const dx = ship.pos.x * KM - at.x, dy = ship.pos.y * KM - at.y, dz = ship.pos.z * KM - at.z;
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d < nearest) nearest = d;
+      }
+      this.rig.freeReach = Number.isFinite(nearest) ? Math.sqrt(nearest) : 600;
     }
     this.rig.update(dt, { subject, cinematic, projectile, gunnery, fleetCentre });
   }

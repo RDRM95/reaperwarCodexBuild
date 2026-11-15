@@ -116,6 +116,10 @@ td.num { font-family: var(--mono); text-align: right; }
 
 /* ---------- battle HUD ---------- */
 .hud { position: absolute; inset: 0; pointer-events: none; }
+/* The HUD root is a child of #ui, whose `#ui > *` rule (an id selector) outranks `.hud`: without this the full-screen
+   HUD layer took every pointer and wheel event over the battle, so no drag, wheel or click ever reached the camera
+   or a ship. */
+#ui > .hud { pointer-events: none; }
 .hud > * { pointer-events: auto; }
 .hud-top { position: absolute; top: 12px; left: 12px; right: 12px; display: flex; gap: 10px; align-items: flex-start; pointer-events: none; }
 .hud-top > * { pointer-events: auto; }
@@ -131,6 +135,8 @@ td.num { font-family: var(--mono); text-align: right; }
 .hud.hidden > *:not(.hud-top):not(.hud-menu) { display: none; }
 .hud.none > *:not(.hud-menu) { display: none !important; }
 .hud.none { cursor: none; }
+/* The clean frame has no pointer over the battle either (in theatre mode it comes and goes with the controls). */
+body.hud-none:not(.theatre-on) #battle-canvas { cursor: none !important; }
 .ship-list { flex: 1; overflow: auto; font-size: 12px; }
 .ship-row { display: grid; grid-template-columns: 1fr 70px; gap: 6px; padding: 4px 6px; cursor: pointer; border-left: 2px solid transparent; }
 .ship-row:hover { background: rgba(79, 163, 255, 0.12); }
@@ -451,3 +457,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .target-telemetry .gunnery-zoom:hover,.target-telemetry .gunnery-zoom:focus-visible {
   color:#edf9ff; border-color:rgba(173,212,232,.75);
 }
+
+/* Theatre mode: the battle and nothing else (src/ui/screens/theatre.ts). */
+/* `#ui > *` takes the pointer; the theatre must let the battle under it have the mouse. */
+#ui > .theatre { position: absolute; inset: 0; pointer-events: none; z-index: 40; }
+#ui > .theatre[hidden] { display: none; }
+.theatre-bar, .theatre-hint { pointer-events: none; }
+.theatre-bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 0.5s ease; }
+.theatre-bar.top { top: 0; }
+.theatre-bar.bottom { bottom: 0; }
+/* Cinema bars frame the picture at 2.39 to 1; on a window already that wide they have no height. */
+.theatre.bars .theatre-bar { height: max(0px, calc((100vh - 100vw / 2.39) / 2)); }
+.theatre-strip { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 6px; align-items: center; padding: 8px 12px; background: rgba(6, 9, 15, 0.78); border: 1px solid rgba(79, 163, 255, 0.28); border-radius: 4px; pointer-events: auto; opacity: 1; white-space: nowrap; }
+.theatre-speed { min-width: 44px; text-align: center; color: var(--cyan); font-size: 13px; }
+.theatre-gap { width: 10px; }
+.theatre-hint { position: absolute; left: 50%; top: 22px; transform: translateX(-50%); font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; color: var(--text-dim); opacity: 0; white-space: nowrap; }
+.theatre-hint.shown { animation: theatrehint 5s ease 1 forwards; }
+@keyframes theatrehint { 0% { opacity: 0; } 10% { opacity: 0.9; } 75% { opacity: 0.9; } 100% { opacity: 0; } }
+/* The mouse has been still: put the strip and the pointer away. */
+/* It fades out and comes back at once: a control that fades in is late when frames are slow. */
+body.theatre-idle .theatre-strip { opacity: 0; pointer-events: none; transition: opacity 0.35s ease; }
+body.theatre-idle, body.theatre-idle * { cursor: none !important; }
+

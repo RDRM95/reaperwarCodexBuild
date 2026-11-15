@@ -41,6 +41,7 @@ import { applyCivilizationBattleResult, beginCivilizationBattle, cancelCivilizat
 import type { CivilizationInput, CivilizationOrigin, CivilizationState } from '@/civilization/types';
 import { buildCustomBattle, type CustomBattleInput, type CustomFleetInput } from '@/scenarios';
 import { TargetTelemetry } from './screens/gunneryOverlay';
+import { Theatre } from './screens/theatre';
 import { primaryGunneryMount,isMainGunShot } from '@/rendering/gunnery';
 
 export type ScreenName = 'menu' | 'briefing' | 'battle' | 'results' | 'comparison' | 'codex' | 'database' | 'custom' | 'timelines' | 'settings' | 'campaign' | 'campaign_setup' | 'postwar' | 'saves' | 'au_hub' | 'civilization';
@@ -75,6 +76,7 @@ export class BattleController {
   readonly overlay: TacticalOverlay;
   hud: Hud;
   readonly gunneryOverlay:TargetTelemetry;
+  readonly theatre: Theatre;
   private lastGunTarget?:string;
   private lastGunReady=false;
   private lastCritical=false;
@@ -88,6 +90,8 @@ export class BattleController {
   private keys = new Set<string>();
   private dragging: { button: number; x: number; y: number; moved: boolean } | null = null;
   private hudTimer = 0;
+  /** Where the pointer last rested over the battle, until the next frame has looked up what is under it. */
+  private hoverAt?: { x: number; y: number; width: number; height: number };
   /** Set when the simulation runs in a worker: `sim` is then this mirror of it. */
   private remote?: RemoteBattle;
   private worker?: Worker;
@@ -136,6 +140,7 @@ export class BattleController {
     };
     this.hud = createHud(app, this);
     this.gunneryOverlay = new TargetTelemetry(app.ui);
+    this.theatre = new Theatre(app.ui, this);
     this.resize();
     this.bindInput();
     this.loop = this.loop.bind(this);
@@ -224,13 +229,43 @@ export class BattleController {
     this.hudHidden = this.hudLevel !== 'full';
     this.hud.root.classList.toggle('hidden', this.hudHidden);
     this.hud.root.classList.toggle('none', this.hudLevel === 'none');
+    document.body.classList.toggle('hud-none', this.hudLevel === 'none');
+    this.syncOverlayVisibility();
+    this.hud.refresh();
+  }
+
+  /** What theatre mode replaced, to put back on leaving it. */
+  private beforeTheatre?: { hudLevel: BattleController['hudLevel']; camera: CameraMode };
+  get inTheatre(): boolean { return this.theatre.active; }
+  get cameraMode(): CameraMode { return this.view.rig.mode; }
+  leaveTheatre(): void { this.setTheatre(false); }
+  /**
+   * Theatre mode: no interface, no annotations, cinema bars, and the director's camera unless the player is already
+   * flying or following. Leaving puts the interface and the camera back as they were. It never touches the battle's
+   * pause or speed.
+   */
+  setTheatre(on: boolean): void {
+    if (on === this.theatre.active) return;
+    if (on) {
+      const camera = this.view.rig.mode;
+      this.beforeTheatre = { hudLevel: this.hudLevel, camera };
+      while (this.hudLevel !== 'none') this.toggleHud();
+      if (camera !== 'free' && camera !== 'follow' && camera !== 'cinematic') this.setCamera('cinematic');
+    }
+    this.theatre.show(on);
+    if (!on && this.beforeTheatre) {
+      const { hudLevel, camera } = this.beforeTheatre;
+      this.beforeTheatre = undefined;
+      while (this.hudLevel !== hudLevel) this.toggleHud();
+      if (this.view.rig.mode === 'cinematic' && camera !== 'cinematic') this.setCamera(camera);
+    }
     this.syncOverlayVisibility();
     this.hud.refresh();
   }
 
   /** HUD layout and tactical annotations have separate visibility policies. */
   syncOverlayVisibility(): void {
-    this.overlay.visible = this.app.prefs.showOverlay && (!this.hudHidden || this.app.prefs.overlayIndependent);
+    this.overlay.visible = !this.theatre.active && this.app.prefs.showOverlay && (!this.hudHidden || this.app.prefs.overlayIndependent);
     this.overlay.detail = this.app.prefs.overlayDetail;
   }
 
@@ -402,6 +437,13 @@ export class BattleController {
     const dtReal = Math.min(0.1, frameMs / 1000);
     this.lastFrame = now;
     this.handleKeys(dtReal);
+    if (this.hoverAt && !this.dragging) {
+      const at = this.hoverAt;
+      const hit = this.view.pick(at.x, at.y, at.width, at.height);
+      this.overlay.hoverId = hit?.id;
+      this.canvas.style.cursor = hit ? 'pointer' : 'default';
+    }
+    this.hoverAt = undefined;
     // A benchmark run times the parts of the frame. Six clock reads a frame; nothing when no benchmark is running.
     const probe = this.benchmark;
     let mark = probe ? performance.now() : 0, simMs = 0, updateMs = 0, renderMs = 0, overlayMs = 0;
@@ -465,6 +507,7 @@ export class BattleController {
     if (probe) overlayMs = lap();
     this.hudTimer -= dtReal;
     this.hud.tick(dtReal, this.pendingEvents);
+    this.theatre.tick();
     this.pendingEvents = [];
     if (this.hudTimer <= 0) {
       this.hudTimer = 0.25;
@@ -473,6 +516,8 @@ export class BattleController {
     if (probe) this.benchmarkFrame(probe, now, { frame: frameMs, sim: simMs, update: updateMs, render: renderMs, overlay: overlayMs, hud: lap(), drawCalls: this.view.drawCalls });
     if (this.ended && this.sim.result) {
       this.ended = false;
+      // The result is part of the interface: the theatre gives way to it.
+      this.setTheatre(false);
       this.hud.showEnd(this.sim.result);
     }
     this.raf = requestAnimationFrame(this.loop);
@@ -483,7 +528,7 @@ export class BattleController {
     if (this.view.rig.mode === 'free') {
       const f = (k.has('w') ? 1 : 0) - (k.has('s') ? 1 : 0);
       const s = (k.has('d') ? 1 : 0) - (k.has('a') ? 1 : 0);
-      const u = (k.has('r') ? 1 : 0) - (k.has('f') ? 1 : 0);
+      const u = (k.has('r') || k.has('e') ? 1 : 0) - (k.has('f') || k.has('q') ? 1 : 0);
       if (f || s || u) this.view.rig.freeMove(f, s, u, dt, k.has('shift'));
     } else if (this.view.rig.mode === 'tactical' || this.view.rig.mode === 'command') {
       const f = (k.has('w') ? 1 : 0) - (k.has('s') ? 1 : 0);
@@ -538,14 +583,15 @@ export class BattleController {
         if (Math.abs(dx) + Math.abs(dy) > 3) this.dragging.moved = true;
         if (this.dragging.moved) {
           if (this.dragging.button === 0 || this.dragging.button === 2) this.view.rig.orbit(dx, dy);
+          else if (this.view.rig.mode === 'free') this.view.rig.freeTruck(dx, dy);
           else this.view.rig.pan(dx, dy);
           this.dragging.x = e.clientX;
           this.dragging.y = e.clientY;
         }
       } else {
-        const hit = this.view.pick(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height);
-        this.overlay.hoverId = hit?.id;
-        c.style.cursor = hit ? 'pointer' : 'default';
+        // Looked up once a frame (see the loop): a mouse reports up to a thousand moves a second, and finding the
+        // ship under it walks every ship.
+        this.hoverAt = { x: e.clientX - rect.left, y: e.clientY - rect.top, width: rect.width, height: rect.height };
       }
     };
     const onUp = (e: PointerEvent) => {
@@ -582,7 +628,9 @@ export class BattleController {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.view.rig.zoom(e.deltaY);
+      // The free camera has no distance to zoom: the wheel flies it along its view. A notch is 100 in most browsers.
+      if (this.view.rig.mode === 'free') this.view.rig.freeDolly(Math.max(-4, Math.min(4, e.deltaY / 100)));
+      else this.view.rig.zoom(e.deltaY);
     }, { passive: false });
     c.addEventListener('dblclick', (e) => {
       const rect = c.getBoundingClientRect();
@@ -623,7 +671,10 @@ export class BattleController {
         if(this.view.rig.mode==='gunnery' && !e.repeat){e.preventDefault();this.view.rig.toggleGunneryZoom();}
         break;
       case 'h':
-        this.toggleHud();
+        if (!this.theatre.active) this.toggleHud();
+        break;
+      case 't':
+        if (!e.repeat && this.view.rig.mode !== 'gunnery') this.setTheatre(!this.theatre.active);
         break;
       case 'o':
         if (!e.repeat) this.toggleOverlay();
@@ -654,7 +705,8 @@ export class BattleController {
         this.selectFleet();
         break;
       case 'escape':
-        this.hud.toggleMenu();
+        if (this.theatre.active) this.setTheatre(false);
+        else this.hud.toggleMenu();
         break;
       default:
         break;
@@ -720,7 +772,9 @@ export class BattleController {
     window.removeEventListener('keyup', this.onKeyUp);
     window.removeEventListener('resize', this.onResize);
     this.hud.root.remove();
+    document.body.classList.remove('hud-none');
     this.gunneryOverlay.root.remove();
+    this.theatre.dispose();
     this.view.dispose();
     this.worker?.terminate();
     this.overlay.resize(1, 1, 1);

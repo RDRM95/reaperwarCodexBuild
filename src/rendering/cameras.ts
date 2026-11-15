@@ -19,6 +19,8 @@ export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
 };
 
 export interface CameraSubject {
+  /** Which hull this is, so the rig knows when it has been given another one. */
+  id?: string;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   heading: THREE.Vector3;
@@ -65,12 +67,25 @@ export class CameraRig {
   freePos = new THREE.Vector3(0, 300, -900);
   freeYaw = 0;
   freePitch = -0.2;
+  /** Where the free camera is flying to; it eases there, so a wheel notch or a key is a glide, not a jump. */
+  freeGoal = new THREE.Vector3(0, 300, -900);
+  /**
+   * How far the free camera is from the nearest thing worth looking at (units), set by the view. Its speed follows
+   * from it: slow and exact beside a frigate, fast across an empty field. It flew at 600 units a second anywhere,
+   * which crosses a frigate's length five hundred times a second.
+   */
+  freeReach = 600;
   /** Smoothing. */
   private desiredPos = new THREE.Vector3();
   private desiredLook = new THREE.Vector3();
   private currentLook = new THREE.Vector3();
   private transition = 0;
   private shake = 0;
+  /** While the camera rides with a hull: where it and its look point are, measured from that hull. */
+  private anchorId: string | undefined;
+  private readonly relPos = new THREE.Vector3();
+  private readonly relLook = new THREE.Vector3();
+  private riding = false;
   private readonly tmp = new THREE.Vector3();
 
   constructor(aspect: number) {
@@ -84,6 +99,7 @@ export class CameraRig {
     if (mode === 'free') {
       // Start free flight from where the camera currently is.
       this.freePos.copy(this.camera.position);
+      this.freeGoal.copy(this.camera.position);
       const dir = this.tmp.copy(this.currentLook).sub(this.camera.position).normalize();
       this.freeYaw = Math.atan2(dir.x, dir.z);
       this.freePitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
@@ -135,11 +151,40 @@ export class CameraRig {
     const k = this.distance * 0.0015;
     this.focus.addScaledVector(right, -dx * k).addScaledVector(fwd, -dy * k);
   }
+  /** The way the free camera looks. */
+  private freeDirection(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(Math.sin(this.freeYaw) * Math.cos(this.freePitch), Math.sin(this.freePitch), Math.cos(this.freeYaw) * Math.cos(this.freePitch));
+  }
+  /** Units a second the free camera flies at under the keys: its distance from the nearest hull, within limits. */
+  freeSpeed(fast: boolean): number {
+    return THREE.MathUtils.clamp(this.freeReach * 1.2, 12, 2500) * (fast ? 4 : 1);
+  }
+  /** The free camera's own right and up, as they are on screen. */
+  private freeAxes(): { dir: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 } {
+    const dir = this.freeDirection(new THREE.Vector3());
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+    return { dir, right, up };
+  }
+  /**
+   * Keys: forward and back along the view, sideways, and straight up and down. Sideways was the wrong way round
+   * (D flew the camera to its left): the camera looks along +z at yaw 0, where its right is −x, not +x.
+   */
   freeMove(forward: number, strafe: number, up: number, dt: number, fast: boolean): void {
-    const speed = (fast ? 2500 : 600) * dt;
-    const dir = new THREE.Vector3(Math.sin(this.freeYaw) * Math.cos(this.freePitch), Math.sin(this.freePitch), Math.cos(this.freeYaw) * Math.cos(this.freePitch));
-    const right = new THREE.Vector3(Math.cos(this.freeYaw), 0, -Math.sin(this.freeYaw));
-    this.freePos.addScaledVector(dir, forward * speed).addScaledVector(right, strafe * speed).addScaledVector(new THREE.Vector3(0, 1, 0), up * speed);
+    const speed = this.freeSpeed(fast) * dt;
+    const { dir, right } = this.freeAxes();
+    this.freeGoal.addScaledVector(dir, forward * speed).addScaledVector(right, strafe * speed).addScaledVector(new THREE.Vector3(0, 1, 0), up * speed);
+  }
+  /** Mouse wheel: fly along the view, a fifth of the way to the nearest hull for each notch (`notches` < 0 is forward). */
+  freeDolly(notches: number): void {
+    const step = THREE.MathUtils.clamp(this.freeReach * 0.2, 1.5, 4000);
+    this.freeGoal.addScaledVector(this.freeDirection(new THREE.Vector3()), -notches * step);
+  }
+  /** Middle-button drag (pixels): slide across the view, the scene following the pointer. */
+  freeTruck(dx: number, dy: number): void {
+    const { right, up } = this.freeAxes();
+    const k = THREE.MathUtils.clamp(this.freeReach, 6, 20_000) * 0.0016;
+    this.freeGoal.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
   }
 
   /**
@@ -182,7 +227,7 @@ export class CameraRig {
         const off = new THREE.Vector3(Math.sin(a) * Math.cos(this.pitch), Math.sin(this.pitch) + 0.25, Math.cos(a) * Math.cos(this.pitch)).normalize().multiplyScalar(dist);
         this.desiredPos.copy(s.position).add(off);
         this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.6);
-        break;
+        return this.apply(dt, false, s);
       }
       case 'reaper': {
         const s = opts.subject;
@@ -195,7 +240,7 @@ export class CameraRig {
         right.normalize();
         this.desiredPos.copy(s.position).addScaledVector(s.heading, -s.size * 0.42).addScaledVector(right, s.size * 0.07).add(new THREE.Vector3(0, s.size * 0.17, 0));
         this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.9).add(new THREE.Vector3(0, -s.size * 0.1, 0));
-        break;
+        return this.apply(dt, false, s);
       }
       case 'projectile': {
         const p = opts.projectile;
@@ -254,8 +299,9 @@ export class CameraRig {
         break;
       }
       case 'free': {
+        this.freePos.lerp(this.freeGoal, 1 - Math.exp(-Math.max(0, dt) * 10));
         this.desiredPos.copy(this.freePos);
-        const dir = new THREE.Vector3(Math.sin(this.freeYaw) * Math.cos(this.freePitch), Math.sin(this.freePitch), Math.cos(this.freeYaw) * Math.cos(this.freePitch));
+        const dir = this.freeDirection(new THREE.Vector3());
         this.desiredLook.copy(this.freePos).add(dir.multiplyScalar(100));
         instant = true;
         break;
@@ -272,16 +318,47 @@ export class CameraRig {
     this.apply(dt, false);
   }
 
-  private apply(dt: number, instant: boolean): void {
+  /**
+   * Move the camera toward where this frame wants it. With `ride`, the camera travels with that hull and only its
+   * place relative to the hull is eased.
+   *
+   * The camera used to ease its own position in space toward a point beside a moving hull. An eased follower lags
+   * its target by an amount that depends on the length of the frame, so with uneven frames the hull slid back and
+   * forth in the picture: the judder was worst when the frame rate was. Riding with the hull, the hull is still
+   * in the frame whatever the frames do, and the easing is spent on what should be eased (an orbit drag, the hull
+   * turning, the move in from another camera).
+   */
+  private apply(dt: number, instant: boolean, ride?: CameraSubject): void {
     const cam = this.camera;
     if (this.transition > 0) this.transition = Math.max(0, this.transition - dt / 0.9);
     // Slower blend while transitioning, snappier otherwise.
     const k = instant && this.transition === 0 ? 1 : 1 - Math.exp(-dt * (this.transition > 0 ? 4 : 9));
-    cam.position.lerp(this.desiredPos, k);
-    this.currentLook.lerp(this.desiredLook, k);
+    if (ride) {
+      // Coming from another camera or another hull: start from where the camera is, measured from this hull.
+      if (!this.riding || this.anchorId !== ride.id) {
+        this.relPos.copy(cam.position).sub(ride.position);
+        this.relLook.copy(this.currentLook).sub(ride.position);
+        this.riding = true;
+        this.anchorId = ride.id;
+      }
+      this.relPos.lerp(this.tmp.copy(this.desiredPos).sub(ride.position), k);
+      this.relLook.lerp(this.tmp.copy(this.desiredLook).sub(ride.position), k);
+      cam.position.copy(ride.position).add(this.relPos);
+      this.currentLook.copy(ride.position).add(this.relLook);
+    } else {
+      this.riding = false;
+      cam.position.lerp(this.desiredPos, k);
+      this.currentLook.lerp(this.desiredLook, k);
+    }
     if (this.shake > 0) {
-      const s = this.shake * 3;
-      cam.position.add(new THREE.Vector3((Math.random() - 0.5) * s, (Math.random() - 0.5) * s, (Math.random() - 0.5) * s));
+      // Up to 3 units, and never more than 3 % of the way to what the camera is looking at. The knock was 3 units at
+      // any distance: nothing from 900 units up, and half the distance to a frigate followed from six units, so a
+      // hull dying somewhere near threw a close camera about for half a second.
+      const s = this.shake * Math.min(3, cam.position.distanceTo(this.currentLook) * 0.03);
+      const knock = this.tmp.set((Math.random() - 0.5) * s, (Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+      cam.position.add(knock);
+      // A knock moves the camera and is then eased out, riding or not: it is kept, not redrawn every frame.
+      if (ride) this.relPos.add(knock);
       this.shake = Math.max(0, this.shake - dt * 2.5);
     }
     cam.lookAt(this.currentLook);
