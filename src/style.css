@@ -24,6 +24,11 @@
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); overflow: hidden; }
 button, input, select, textarea { font-family: inherit; }
+/* The interface is a game display, not a document. Left selectable, a click on any label put a text caret
+   there: invisible in most browsers, a blinking bar wherever one clicked with caret browsing on (F7 in Chrome
+   and Edge). Fields that are typed into keep their caret and selection. */
+html, body { -webkit-user-select: none; user-select: none; caret-color: transparent; }
+input, textarea, [contenteditable='true'] { -webkit-user-select: text; user-select: text; caret-color: auto; }
 #app { position: fixed; inset: 0; }
 #battle-canvas, #overlay-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #overlay-canvas { pointer-events: none; }
