@@ -2,6 +2,7 @@ import type { App, BattleController } from '../app';
 import { OVERLAY_DETAIL_LABELS, resolveOverlayDetail, type OverlayDetail, type ResolvedOverlayDetail } from '../fleetLabels';
 import { SPEEDS } from '../app';
 import { el, fmtNum, fmtTime, setChildren } from '../dom';
+import { applyTheme, panelTitle, themeFor } from '../factionTheme';
 import { COLUMN_FLOOR, NOTICE_FLOOR, NOTICE_HALF_WIDTH, startBelow } from '../hudLayout';
 import { FACTIONS } from '@/data/factions';
 import { getShipClass } from '@/data/ships';
@@ -50,6 +51,10 @@ const PRIORITIES: { id: TargetPriority; label: string }[] = [
 export function createHud(app: App, ctrl: BattleController): Hud {
   const sim = () => ctrl.sim;
   const rules = ctrl.config.rules;
+  // The console of the fleet in command: its colours, panel shapes, banner and words (factionTheme.ts).
+  const commandFleet = ctrl.playerFleetIds[0] ? ctrl.sim.fleets.get(ctrl.playerFleetIds[0]) : undefined;
+  const theme = themeFor(commandFleet?.spec.faction);
+  const title = (key: Parameters<typeof panelTitle>[1]): string => panelTitle(theme, key);
   let comparison: ComparisonReport | undefined;
   let comparisonSide: 'a' | 'b' | undefined;
   let menuOpen = false;
@@ -60,7 +65,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   let killRendered = -1;
   const killsA = el('div', {class:'kill-type-list','data-kills':'A'}, 'No losses');
   const killsB = el('div', {class:'kill-type-list','data-kills':'B'}, 'No losses');
-  const scoreTitle = el('div',{class:'panel-title'},'SHIP LOSSES BY CLASS');
+  const scoreTitle = el('div',{class:'panel-title'},title('losses'));
   const killBody = el('div',{class:'kill-score-columns'},[
     el('div',{},[el('strong',{},'SIDE A DESTROYED'),killsA]),
     el('div',{},[el('strong',{},'SIDE B DESTROYED'),killsB])
@@ -152,22 +157,24 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       clock,
       statusLine,
     ]),
-    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'SIMULATION'), speedRow, el('button', { class: 'btn small hud-panels-toggle', 'data-action': 'toggle-panels', style: { marginTop: '6px' }, onclick: () => root.classList.toggle('panels-open') }, 'Panels')]),
-    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'CAMERA'), cameraRow, el('div', { class: 'row', style: { marginTop: '6px' } }, [watchBtn, theatreBtn, overlayBtn])]),
+    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, title('simulation')), speedRow, el('button', { class: 'btn small hud-panels-toggle', 'data-action': 'toggle-panels', style: { marginTop: '6px' }, onclick: () => root.classList.toggle('panels-open') }, 'Panels')]),
+    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, title('camera')), cameraRow, el('div', { class: 'row', style: { marginTop: '6px' } }, [watchBtn, theatreBtn, overlayBtn])]),
     el('div', { class: 'spacer' }),
-    el('div', { class: 'panel orange hud-timeline', style: { maxWidth: '260px' } }, [el('div', { class: 'panel-title' }, 'TIMELINE'), el('div', { style: { fontSize: '13px' } }, rules.name), el('div', { class: 'dim', style: { fontSize: '11px' } }, rules.tagline)]),
+    el('div', { class: 'panel orange hud-timeline', style: { maxWidth: '260px' } }, [el('div', { class: 'panel-title' }, title('timeline')), el('div', { style: { fontSize: '13px' } }, rules.name), el('div', { class: 'dim', style: { fontSize: '11px' } }, rules.tagline)]),
     el('button', { class: 'btn', 'data-action': 'menu', onclick: () => toggleMenu() }, 'Menu'),
   ]);
 
+  const banner = el('div', { class: 'faction-banner', 'data-hud': 'faction-banner' }, [el('b', {}, theme.name), el('small', {}, theme.net)]);
   const left = el('div', { class: 'hud-left' }, [
-    el('div', { class: 'panel', style: { flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' } }, [el('div', { class: 'panel-title' }, ['ALLIED FLEET', el('button', { class: 'btn small', onclick: () => ctrl.selectFleet() }, 'Select all')]), shipList]),
-    el('div', { class: 'panel red', style: { flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' } }, [el('div', { class: 'panel-title' }, 'HOSTILE CONTACTS'), enemyList]),
+    banner,
+    el('div', { class: 'panel', style: { flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' } }, [el('div', { class: 'panel-title' }, [title('allied'), el('button', { class: 'btn small', onclick: () => ctrl.selectFleet() }, 'Select all')]), shipList]),
+    el('div', { class: 'panel red', style: { flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' } }, [el('div', { class: 'panel-title' }, title('hostile')), enemyList]),
   ]);
 
   const right = el('div', { class: 'hud-right' }, [
-    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'TARGET / SELECTION'), targetPanel]),
+    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, title('target')), targetPanel]),
     el('div', { class: 'panel orange' }, [
-      el('div', { class: 'panel-title' }, 'FLEET ORDERS'),
+      el('div', { class: 'panel-title' }, title('orders')),
       el('div', { class: 'row', style: { marginBottom: '8px' } }, [el('label', { class: 'field', style: { flex: '1' } }, ['Formation', formationSel]), el('label', { class: 'field', style: { flex: '1' } }, ['Priority', prioritySel])]),
       ordersPanel,
       el('div', { class: 'spinal-fire-controls' }, [
@@ -179,15 +186,16 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       ]),
       el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Right-click enemy: attack · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD · O: tactical overlay'),
     ]),
-    el('div', { class: 'panel red', style: { flex: '1', minHeight: '100px', overflow: 'auto' } }, [el('div', { class: 'panel-title' }, 'REAPER INTELLIGENCE ASSESSMENT'), intelBox]),
+    el('div', { class: 'panel red', style: { flex: '1', minHeight: '100px', overflow: 'auto' } }, [el('div', { class: 'panel-title' }, title('intel')), intelBox]),
   ]);
 
   const bottom = el('div', { class: 'hud-bottom' }, [
-    el('div', { class: 'panel', style: { flex: '1', maxWidth: '640px' } }, [el('div', { class: 'panel-title' }, 'FLEET COMMUNICATIONS'), commsBox]),
+    el('div', { class: 'panel', style: { flex: '1', maxWidth: '640px' } }, [el('div', { class: 'panel-title' }, title('comms')), commsBox]),
     killScorePanel,
   ]);
 
   const root = el('div', { class: 'hud' }, [header, left, right, bottom, subtitle, toastHost]);
+  applyTheme(root, theme);
 
   let toastEl: HTMLElement | undefined;
   // The side columns and the centre notice start below whatever part of the top bar is above them (see hudLayout).
