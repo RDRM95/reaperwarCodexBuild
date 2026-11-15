@@ -29,6 +29,8 @@ button, input, select, textarea { font-family: inherit; }
    and Edge). Fields that are typed into keep their caret and selection. */
 html, body { -webkit-user-select: none; user-select: none; caret-color: transparent; }
 input, textarea, [contenteditable='true'] { -webkit-user-select: text; user-select: text; caret-color: auto; }
+/* Text meant to be copied out (the benchmark result). */
+.selectable { -webkit-user-select: text; user-select: text; }
 #app { position: fixed; inset: 0; }
 #battle-canvas, #overlay-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #overlay-canvas { pointer-events: none; }

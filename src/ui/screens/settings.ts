@@ -1,3 +1,4 @@
+import { BENCHMARK_SCENES, type BenchmarkScene } from '../benchmark';
 import type { App } from '../app';
 import { el } from '../dom';
 import { storage } from '@/core/storage';
@@ -76,6 +77,10 @@ export function renderSettings(app: App): HTMLElement {
         } }, (Object.keys(OVERLAY_DETAIL_LABELS) as OverlayDetail[]).map(detail => el('option', { value: detail, selected: p.overlayDetail === detail }, OVERLAY_DETAIL_LABELS[detail])))]),
         el('p', { class: 'dim', style: { fontSize: '12px' } }, 'Automatic detail uses fleet names and live ship counts from 80 ships, keeping inspected ships readable. It returns to individual labels below 64 ships.'),
         el('p', { class: 'dim', style: { fontSize: '12px' } }, 'Changes apply to the next battle. Low quality disables antialiasing and caps the render resolution.'),
+        el('div', { class: 'panel-title', style: { marginTop: '14px' } }, 'BENCHMARK'),
+        el('p', { class: 'dim', style: { fontSize: '12px' } }, 'Runs a fixed battle at the settings above and reports frames a second, the slowest frames and where the time went. About a minute.'),
+        el('div', { class: 'row' }, (Object.keys(BENCHMARK_SCENES) as BenchmarkScene[]).map((scene) =>
+          el('button', { class: 'btn small', 'data-action': `benchmark-${scene}`, title: BENCHMARK_SCENES[scene].description, onclick: () => app.runBenchmark(scene) }, BENCHMARK_SCENES[scene].label))),
       ]),
       el('div', { class: 'panel orange' }, [
         el('div', { class: 'panel-title' }, 'AUDIO'),
