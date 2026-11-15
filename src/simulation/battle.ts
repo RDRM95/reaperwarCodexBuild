@@ -36,7 +36,7 @@ import { WeaponTargetField } from './weaponTargetField';
 import { HadesVolleyCoordinator } from './volleys';
 import { ShipNameGenerator } from './shipNames';
 import {
-  batteryIntent, inWeaponArc, isCommandedBattery, PrimaryVolleyControl,
+  batteryIntent, inWeaponArc, isCapitalShip, isCommandedBattery, PrimaryVolleyControl,
   weaponTarget, weaponWorldOffset,
   type FleetBatteryStatus, type PrimaryBatteryReason, type PrimaryBatteryStatus,
 } from './fireControl';
@@ -129,6 +129,7 @@ export class BattleSimulation implements AiContext {
   private hadesVolleys = new HadesVolleyCoordinator();
   private separationField?: SeparationField;
   private weaponTargetField?: WeaponTargetField;
+  private capitalsOnField: { tick: number; A?: boolean; B?: boolean } = { tick: -1 };
   private readonly mountReaches = new Map<string, number>();
   private readonly missileNear = { tick: -1, shipId: '', reach: 0, scanned: 0, found: false };
   /** Fighter references indexed by carrier: no full-fleet scan per hangar per tick. */
@@ -371,6 +372,19 @@ export class BattleSimulation implements AiContext {
     this.sideCache = { tick: this.tick, A, B };
   }
 
+  /** Whether the side opposing `side` has a capital ship on the field (worked out once a tick, when first asked). */
+  private enemyCapitalOnField(side: Side): boolean {
+    const cache = this.capitalsOnField;
+    if (cache.tick !== this.tick) { cache.tick = this.tick; cache.A = undefined; cache.B = undefined; }
+    let found = cache[side];
+    if (found === undefined) {
+      found = false;
+      for (const e of this.enemiesOf(side)) if (e.alive && !e.escaped && isCapitalShip(e)) { found = true; break; }
+      cache[side] = found;
+    }
+    return found;
+  }
+
   /** Living, present ships on the opposing side (cached per tick). */
   enemiesOf(side: Side): ShipState[] {
     this.refreshSideCache();
@@ -542,7 +556,7 @@ export class BattleSimulation implements AiContext {
       else if (cooldown > 0) { reason = 'cooling'; cooling++; }
       if (counts && reason !== 'ready') return { reason, cooldown, range: w.def.range, distance: undefined, targetId: undefined };
       const origin = weaponWorldOffset(ship, w);
-      const solution = weaponTarget(ship, fleet, w, getShip, enemies, nearby?.());
+      const solution = weaponTarget(ship, fleet, w, getShip, enemies, nearby?.(), () => this.enemyCapitalOnField(ship.side));
       const intended = solution ?? (counts ? undefined : batteryIntent(ship, fleet, getShip, enemies));
       const targetDistance = intended ? distance(origin, intended.pos) : undefined;
       if (reason === 'ready' && !solution) {
@@ -980,7 +994,7 @@ export class BattleSimulation implements AiContext {
       }
       if (!missile && !target) return;
     } else {
-      target = weaponTarget(ship, fleet, w, id => this.shipById.get(id), this.enemiesOf(ship.side), this.weaponTargetField);
+      target = weaponTarget(ship, fleet, w, id => this.shipById.get(id), this.enemiesOf(ship.side), this.weaponTargetField, () => this.enemyCapitalOnField(ship.side));
       if (!target) return;
     }
 
