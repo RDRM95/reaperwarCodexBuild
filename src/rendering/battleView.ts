@@ -818,6 +818,18 @@ export class BattleView {
         }
       }
     }
+    if (this.rig.mode === 'free') {
+      // How far the free camera is from the nearest hull: its speed follows from it (CameraRig.freeReach).
+      const at = this.rig.freePos;
+      let nearest = Infinity;
+      for (const ship of sim.ships) {
+        if (!ship.alive || ship.escaped) continue;
+        const dx = ship.pos.x * KM - at.x, dy = ship.pos.y * KM - at.y, dz = ship.pos.z * KM - at.z;
+        const d = dx * dx + dy * dy + dz * dz;
+        if (d < nearest) nearest = d;
+      }
+      this.rig.freeReach = Number.isFinite(nearest) ? Math.sqrt(nearest) : 600;
+    }
     this.rig.update(dt, { subject, cinematic, projectile, gunnery, fleetCentre });
   }
 
