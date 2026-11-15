@@ -90,6 +90,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   const speedRow = el('div', { class: 'row hud-speed' });
   const cameraRow = el('div', { class: 'row' });
   const watchBtn = el('button', { class: 'btn small', 'data-action': 'watch-battle', onclick: () => ctrl.toggleWatch() }, 'Watch battle');
+  const theatreBtn = el('button', { class: 'btn small', 'data-action': 'theatre', title: 'Theatre mode: the battle and nothing else, with cinema bars (T)', onclick: () => ctrl.setTheatre(true) }, 'Theatre (T)');
   const overlayBtn = el('button', { class: 'btn small', 'data-action': 'toggle-overlay', title: 'Toggle tactical overlay (O)', onclick: () => ctrl.toggleOverlay() }, 'Overlay: on (O)');
   const shipList = el('div', { class: 'ship-list scroll' });
   const enemyList = el('div', { class: 'ship-list scroll' });
@@ -152,7 +153,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       statusLine,
     ]),
     el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'SIMULATION'), speedRow, el('button', { class: 'btn small hud-panels-toggle', 'data-action': 'toggle-panels', style: { marginTop: '6px' }, onclick: () => root.classList.toggle('panels-open') }, 'Panels')]),
-    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'CAMERA'), cameraRow, el('div', { class: 'row', style: { marginTop: '6px' } }, [watchBtn, overlayBtn])]),
+    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, 'CAMERA'), cameraRow, el('div', { class: 'row', style: { marginTop: '6px' } }, [watchBtn, theatreBtn, overlayBtn])]),
     el('div', { class: 'spacer' }),
     el('div', { class: 'panel orange hud-timeline', style: { maxWidth: '260px' } }, [el('div', { class: 'panel-title' }, 'TIMELINE'), el('div', { style: { fontSize: '13px' } }, rules.name), el('div', { class: 'dim', style: { fontSize: '11px' } }, rules.tagline)]),
     el('button', { class: 'btn', 'data-action': 'menu', onclick: () => toggleMenu() }, 'Menu'),
