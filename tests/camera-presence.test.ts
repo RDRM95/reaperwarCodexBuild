@@ -29,16 +29,43 @@ function widthShare(rig: CameraRig, size: number): number {
 }
 
 describe('camera presence for capital-scale hulls', () => {
-  it('the Reaper view looks over the carapace: hood and limb tips are in the picture', () => {
+  it('the Reaper view is from the brow of the hood: the limbs reach into the picture and the hood is not in the way', () => {
     const rig = new CameraRig(16 / 9);
     rig.setMode('reaper');
     settle(rig, { subject: subject(20) });
-    // Reference points of a 20-unit Sovereign-class hull heading +z (hood top and front, the forward limb tips).
-    for (const p of [V(0, 2.2, 1.5), V(0, 0.3, 3.2), V(3, -1.6, 9.6), V(-3, -1.6, 9.6)]) expect(inFrame(rig, p)).toBe(true);
-    // The camera rides low over the aft blade, not half a hull length above it, and looks ahead.
-    expect(rig.camera.position.y).toBeLessThan(20 * 0.25);
-    expect(rig.camera.position.z).toBeLessThan(-20 * 0.3);
+    // A 20-unit Sovereign-class hull heading +z, as measured on the model: the hood's crown is 2.5 units up and its
+    // nose 2.8 units forward of the centre; the four forward claw tips are below.
+    const tips = [V(1.88, -2.12, 9.4), V(-1.88, -2.12, 9.4), V(2.34, -1.38, 8.5), V(-2.34, -1.38, 8.5)];
+    for (const p of tips) expect(inFrame(rig, p)).toBe(true);
+    const cam = rig.camera.position;
+    // On the brow, a little above the crown: not over the aft blade, where the hood filled the view (the camera sat
+    // at z = −8.4 until the mantle was given its size), and not half a hull length above.
+    expect(cam.y).toBeGreaterThan(2.5 + 0.5);
+    expect(cam.y).toBeLessThan(20 * 0.25);
+    expect(cam.z).toBeGreaterThan(-20 * 0.1);
+    expect(cam.z).toBeLessThan(20 * 0.05);
     expect(rig.camera.getWorldDirection(V(0, 0, 0)).z).toBeGreaterThan(0.9);
+    // The line of sight to each claw tip clears the crown of the hood ahead of the camera.
+    for (const tip of tips) {
+      const y = cam.y + (tip.y - cam.y) * ((0.5 - cam.z) / (tip.z - cam.z));
+      expect(y).toBeGreaterThan(2.5);
+    }
+  });
+
+  it('a destroyer is seen from over its back, from outside its hull', () => {
+    // A 1.6-unit destroyer heading +z: its carapace reaches 0.28 of a unit above its centre and 0.8 behind it. The
+    // camera used to sit 0.27 above the centre and 0.67 behind it, among the carapace plates, with a near plane of
+    // 0.2: the view was the inside of the hull.
+    const rig = new CameraRig(16 / 9);
+    rig.setMode('reaper');
+    settle(rig, { subject: subject(1.6) });
+    const cam = rig.camera.position;
+    expect(cam.y).toBeGreaterThan(0.28 + 0.3);
+    expect(cam.z).toBeLessThan(-0.8 - 0.3);
+    expect(rig.camera.near).toBeLessThan(0.1);
+    expect(rig.camera.getWorldDirection(V(0, 0, 0)).z).toBeGreaterThan(0.9);
+    // Its back and the reach of its forward legs are in the picture.
+    for (const p of [V(0, 0.28, 0), V(0.38, -0.32, 0.64), V(-0.38, -0.32, 0.64)]) expect(inFrame(rig, p)).toBe(true);
   });
 
   it('holds for any heading, including straight up', () => {
