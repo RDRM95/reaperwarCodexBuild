@@ -2,9 +2,27 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
+## State on 15 Nov 2026, 22:25 UTC — "destroyers seem OP ... you gotta wait for them all to die to see the capitals die"
+
+Read this section first, then the one below it (the same day's earlier requests, all merged). Everything below those is older.
+
+**Owner's report, in their words:** "destroyers seem OP? just seems like they wreck havoc even if you have 500 and 1000 sovreigns, the destroyers seem like a distraction, you gotta wait for them all to die to see the capitals die". Full note with every figure: `docs/apex/CAPITAL_ROUNDS_2026-11-15.md`.
+
+**What it was.** Destroyers are twice as fast as Sovereigns and screen them: allied hulls aim at a destroyer 73 to 90 % of a battle and a Sovereign is inside their guns under 3 % of that time. That part is the Reaper fleet working as a fleet. Three defects sat on top of it, all fixed in one change (`tests/capital-rounds.test.ts`):
+
+1. The three guns with a limited magazine of capital-killing rounds (Valkyrie NOVA Array, Aegis command gun, Cerberus HADES gun) were emptied into destroyers: under Annihilation nine NOVA rounds of twelve and 25 Aegis rounds of 27. Such a round is now kept for capital ships while the enemy has one on the field (`keptForCapitals`, `src/simulation/fireControl.ts`), and a ship carrying them hunts capital ships (`chooseTarget`, `src/simulation/ai.ts`). A target the player names is still fired on.
+2. Under Prime/Apex and HFY the hyper-mass accelerator refit replaced the NOVA Array and the Aegis gun with the fleet's ordinary accelerator (only the Omaha's and the Cerberus gun were exempt, by name). The refit now leaves every AU-designed gun in place (`src/timelines/rules.ts`).
+3. A fleet's coordinated main guns all fired at the cycle of whichever gun asked first. There is now one salvo clock for each kind of gun, and a magazine gun fires when it bears (`src/simulation/volleys.ts`).
+
+**Measured** (100 Sovereigns and 300 destroyers against 416 allied hulls with 6 Valkyries and 10 Aegis, seed 45): Annihilation, Sovereigns destroyed 2 → 8, the first at 81 → 49 s; Prime/Apex 11 → 35, the first at 120 → 46 s. The Reapers win all four. At four times the size under Annihilation: 14 → 41 Sovereigns, 106 → 76 destroyers, Reapers win both. The 54 standard battles are identical. Of 17 AU library battles that field these ships, 16 keep their winner; `ascendant_contact_2885` goes from three Reaper victories at the time limit to two allied victories in three (its 14 Aegis dreadnoughts have their guns).
+
+**Tried and not made:** weakening the destroyer (regeneration, barriers, armour scaled from the Sovereign's: fleet battles did not change); making all dreadnoughts go for Sovereigns (they arrive without their screen: Sovereigns surviving 9 and 4 of 20 → 18 and 17).
+
+**Open, the owner's to decide:** (a) the destroyer's barrier refills in 81 s against a Sovereign's 175 s, so a lone dreadnought needs four to eight minutes to destroy one under canon rules and can lose to one under Annihilation; ten destroyers (the points of one Sovereign) take two to four times as long to destroy as one Sovereign. Nothing was changed there. (b) Fewer destroyers now die where Valkyries and Aegis are present, because those guns no longer shoot them.
+
 ## State on 15 Nov 2026, 19:05 UTC — the owner's requests of 15 Nov (cameras, interface, Reapers, frame rate)
 
-Read this section first. Everything below it is older.
+All of this section is merged and deployed. Everything below it is older.
 
 **Rules in force, unchanged:** the sandbox is retired (owner's hard rule of 12 Nov); private reference imagery is never committed; software rendering is not hardware proof.
 

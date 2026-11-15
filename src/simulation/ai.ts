@@ -8,7 +8,8 @@ import { armourReduction, hitProbability, throughArmour } from './damage';
 import { slotToWorld } from './formations';
 import { BATTLESPACE_SCALE as S } from './constants';
 import { assignAttackBearings, swingAmount, swingStation, type AttackBearing, type BearingMember } from './manoeuvre';
-import type { FleetState, ShipState, TargetPriority } from './types';
+import { carriesCapitalRounds, isCapitalShip, priorityMultiplier } from './fireControl';
+import type { FleetState, ShipState } from './types';
 
 /** Fleet orders own translation; ship controllers trim their firing station and
  * track their target independently. No controller injects time-driven orbits. */
@@ -243,16 +244,7 @@ export function fleetEngagementRange(fleetShips: ShipState[]): number {
   return weight ? total / weight : 20 * S;
 }
 
-export function priorityMultiplier(priority: TargetPriority, target: ShipState): number {
-  switch (priority) {
-    case 'reaper_destroyers': return target.role === 'reaper_destroyer' ? 4 : 1;
-    case 'reaper_capitals': return target.role === 'reaper_capital' ? 4 : 1;
-    case 'capitals': return ['dreadnought', 'carrier', 'reaper_capital'].includes(target.role) ? 4 : 1;
-    case 'escorts': return ['frigate', 'cruiser', 'reaper_destroyer'].includes(target.role) ? 3 : 1;
-    case 'fighters': return target.role === 'fighter' ? 4 : 1;
-    default: return 1;
-  }
-}
+export { priorityMultiplier };
 
 /**
  * Concentration of fire. A target has its share of attackers when the hulls already aiming at it would, between
@@ -389,6 +381,25 @@ export function chooseTarget(ctx: AiContext, ship: ShipState, fleet: FleetState)
   const sensor = ship.sensorRange * (0.4 + 0.6 * ship.subsystems.sensors);
   const currentValid = validEnemy(ship, current) && distance(ship.pos, current.pos) <= sensor * 1.7;
   const commanded = fleet.orders.order === 'attack_target' ? fleet.orders.targetId : undefined;
+  // A hull with capital-killing rounds aboard hunts capital ships (see keptForCapitals in fireControl): it takes an
+  // enemy capital ship as its target wherever its fleet can see one, and fights the escorts it passes with its
+  // other batteries. A commanded target, or a fleet priority that names escorts or fighters, comes first.
+  const priority = fleet.orders.priority;
+  if (!commanded && priority !== 'escorts' && priority !== 'reaper_destroyers' && priority !== 'fighters' && carriesCapitalRounds(ship)) {
+    const sight = attackOrder(fleet) ? Infinity : sensor * 1.5;
+    const keep = currentValid && isCapitalShip(current) ? current : undefined;
+    const held = !!keep && ctx.time < (ship.targetLockUntil ?? 0);
+    let prey = keep, preyScore = keep ? scoreTarget(ctx, ship, fleet, keep, range) : -Infinity;
+    if (!held) for (const e of ctx.enemiesOf(ship.side)) {
+      if (e === keep || !isCapitalShip(e) || !validEnemy(ship, e) || distance(ship.pos, e.pos) > sight) continue;
+      const candidate = scoreTarget(ctx, ship, fleet, e, range);
+      if (candidate > (keep && prey === keep ? preyScore * 1.25 : preyScore)) { prey = e; preyScore = candidate; }
+    }
+    if (prey) {
+      if (prey.id !== ship.targetId) ship.targetLockUntil = ctx.time + 5;
+      return prey.id;
+    }
+  }
   // "In range" for choosing: a little inside the gun's reach, so a target on the very edge is not taken and lost.
   const reach = range * IN_REACH;
   const counts = (e: ShipState): boolean => ship.role === 'fighter' || e.role !== 'fighter';

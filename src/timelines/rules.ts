@@ -256,12 +256,14 @@ export function applyRulesToWeapon(
   let substitutedFrom: string | undefined;
 
   if (faction !== 'reaper' && isMassEffectFaction(faction) && !rules.strictLore) {
-    // Hyper-mass accelerators replace dreadnought spinal guns.
+    // Hyper-mass accelerators replace dreadnought spinal guns: the canon ones. A gun that is itself an AU design is
+    // what its ship was built round and stays. Two were exempted by name (the Omaha's and the Cerberus HADES gun);
+    // the two added after them were not, so wherever the refit is in force (Prime/Apex, HFY) the Valkyrie fought
+    // without her NOVA Array and the Aegis without its command gun, each with the fleet's 44 km accelerator.
     if (
       rules.special.hyperMassAccelerators &&
       cls.role === 'dreadnought' &&
-      weapon.id !== 'omaha_spinal' &&
-      weapon.id !== 'cerberus_hades_spinal' &&
+      weapon.provenance.provenance !== 'AU_MODIFIED' &&
       weapon.kind === 'mass_accelerator' &&
       weapon.antiCapital &&
       weapon.arc <= 20
