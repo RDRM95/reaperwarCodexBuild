@@ -13,7 +13,9 @@ import type { BattleConfig, BattleEvent, BattleResult, FleetOrders } from '@/sim
 import { PRESETS, getPreset } from '@/timelines/presets';
 import { cloneRules, type RuleSet } from '@/timelines/rules';
 import type { ComparisonReport } from '@/scenarios/comparison';
+import { buildScenario } from '@/scenarios';
 import { clear, el } from './dom';
+import { BENCHMARK_MEASURE_SECONDS, BENCHMARK_SCENES, BENCHMARK_WARM_UP_BATTLE_SECONDS, formatBenchmark, summariseBenchmark, type BenchmarkReport, type BenchmarkScene, type FrameSample } from './benchmark';
 import { applyUiScale, normaliseUiScale } from './tvDisplay';
 import { TacticalOverlay } from './overlay';
 import { createHud, type Hud } from './screens/hud';
@@ -92,6 +94,8 @@ export class BattleController {
   private ended = false;
   /** Events consumed by the HUD since last frame. */
   private pendingEvents: BattleEvent[] = [];
+  /** Set while this battle is a benchmark run (see benchmark.ts). */
+  benchmark?: { scene: BenchmarkScene; phase: 'warm-up' | 'measure'; startedAt: number; samples: FrameSample[]; ships: number };
   readonly isReplay: boolean;
   /** Set when this battle resolves a campaign engagement. */
   campaignLink?: CampaignBattleLink;
@@ -394,9 +398,14 @@ export class BattleController {
 
   private loop(now: number): void {
     if (this.disposed) return;
-    const dtReal = Math.min(0.1, (now - this.lastFrame) / 1000);
+    const frameMs = now - this.lastFrame;
+    const dtReal = Math.min(0.1, frameMs / 1000);
     this.lastFrame = now;
     this.handleKeys(dtReal);
+    // A benchmark run times the parts of the frame. Six clock reads a frame; nothing when no benchmark is running.
+    const probe = this.benchmark;
+    let mark = probe ? performance.now() : 0, simMs = 0, updateMs = 0, renderMs = 0, overlayMs = 0;
+    const lap = (): number => { const t = performance.now(), took = t - mark; mark = t; return took; };
     if (this.remote) {
       // The worker steps the simulation. This thread only says how much simulated time has passed and applies the
       // snapshots that are due, so a tick costs this frame the copy, not the simulation.
@@ -424,8 +433,11 @@ export class BattleController {
       }
     }
     const alpha = this.paused ? 1 : Math.min(1, this.accumulator / SIM_DT);
+    if (probe) simMs = lap();
     this.view.update(dtReal, alpha);
+    if (probe) updateMs = lap();
     this.view.render();
+    if (probe) renderMs = lap();
     if(this.view.rig.mode==='gunnery'){
       const id=this.view.gunneryLockedShipId??this.view.followId;
       this.gunneryOverlay.update(this.sim,this.view,id);
@@ -450,6 +462,7 @@ export class BattleController {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     this.overlay.draw(this.view, w, h, this.view.rig.mode);
+    if (probe) overlayMs = lap();
     this.hudTimer -= dtReal;
     this.hud.tick(dtReal, this.pendingEvents);
     this.pendingEvents = [];
@@ -457,6 +470,7 @@ export class BattleController {
       this.hudTimer = 0.25;
       this.hud.refresh();
     }
+    if (probe) this.benchmarkFrame(probe, now, { frame: frameMs, sim: simMs, update: updateMs, render: renderMs, overlay: overlayMs, hud: lap(), drawCalls: this.view.drawCalls });
     if (this.ended && this.sim.result) {
       this.ended = false;
       this.hud.showEnd(this.sim.result);
@@ -660,6 +674,45 @@ export class BattleController {
     this.overlay.resize(w, h, Math.min(window.devicePixelRatio, 2));
   }
 
+  /** Start measuring this battle as a benchmark: it runs fast until the fleets are in contact, then at 1x. */
+  startBenchmark(scene: BenchmarkScene): void {
+    this.benchmark = { scene, phase: 'warm-up', startedAt: 0, samples: [], ships: 0 };
+    this.paused = false;
+    this.setSpeed(SPEEDS.length - 1);
+    this.setCamera('tactical');
+  }
+
+  private benchmarkFrame(run: NonNullable<BattleController['benchmark']>, now: number, sample: FrameSample): void {
+    if (run.phase === 'warm-up') {
+      if (this.sim.time < BENCHMARK_WARM_UP_BATTLE_SECONDS && !this.sim.finished) return;
+      run.phase = 'measure';
+      run.startedAt = now;
+      run.ships = this.sim.ships.filter((ship) => ship.alive && !ship.escaped).length;
+      this.setSpeed(SPEEDS.indexOf(1));
+      return;
+    }
+    run.samples.push(sample);
+    const seconds = (now - run.startedAt) / 1000;
+    if (seconds < BENCHMARK_MEASURE_SECONDS && !this.sim.finished) return;
+    this.benchmark = undefined;
+    this.paused = true;
+    const renderer = this.view.renderer, gl = renderer.getContext(), info = gl.getExtension('WEBGL_debug_renderer_info');
+    const bloom = this.app.prefs.graphics.bloom;
+    this.app.showBenchmarkReport(summariseBenchmark(run.samples, {
+      scene: BENCHMARK_SCENES[run.scene].label,
+      ships: run.ships,
+      seconds: Math.round(seconds),
+      quality: this.app.prefs.graphics.quality,
+      bloom: bloom === undefined ? 'auto' : bloom ? 'on' : 'off',
+      simulationThread: this.remote ? 'its own thread' : 'the main thread',
+      width: renderer.domElement.width,
+      height: renderer.domElement.height,
+      pixelRatio: renderer.getPixelRatio(),
+      renderer: String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)),
+      triangles: this.view.triangles,
+    }), run.scene);
+  }
+
   dispose(): void {
     this.disposed = true;
     cancelAnimationFrame(this.raf);
@@ -737,6 +790,9 @@ export class App {
     audio.settings = { ...this.prefs.audio };
     this.show('menu');
     installShipReferenceInspector();
+    // ?benchmark=standard or ?benchmark=large runs the benchmark straight away.
+    const wanted = new URLSearchParams(window.location.search).get('benchmark');
+    if (wanted === 'standard' || wanted === 'large') this.runBenchmark(wanted);
     document.getElementById('boot')?.classList.add('hidden');
   }
 
@@ -986,6 +1042,42 @@ export class App {
     } catch (error) {
       cancelCivilizationBattle(state, launch.battle.id); void this.saveCivilization(); this.toast(error instanceof Error ? error.message : 'CIVILIZATION LAUNCH FAILED');
     }
+  }
+
+  /** Run a fixed battle and report what its frames cost on this machine (see benchmark.ts). */
+  runBenchmark(scene: BenchmarkScene): void {
+    const config = scene === 'standard' ? buildScenario('final_battle_of_earth', 'prime_apex', 1)
+      : buildCustomBattle({ seed: 42, rulesId: 'prime_apex', environment: 'deep_space', startingDistanceKm: 60, maxDuration: 600,
+        sideA: { faction: 'alliance', name: 'Alliance line', formation: 'line_abreast', counts: { alliance_dreadnought: 144, alliance_cruiser: 432, alliance_frigate: 720 } },
+        sideB: { faction: 'reaper', name: 'Reaper pressure', formation: 'strike_wedge', counts: { reaper_capital: 192, reaper_destroyer: 720 } } });
+    this.startBattle(config, { replay: true });
+    this.battle!.startBenchmark(scene);
+    this.toast('BENCHMARK: THE FLEETS CLOSE, THEN 30 SECONDS ARE MEASURED');
+  }
+
+  /** The last benchmark report, for anything that drives the page from outside. */
+  benchmarkReport?: BenchmarkReport;
+
+  showBenchmarkReport(report: BenchmarkReport, scene: BenchmarkScene): void {
+    this.benchmarkReport = report;
+    const text = formatBenchmark(report);
+    const copied = el('span', { class: 'dim', style: { marginLeft: '10px' } });
+    const panel = el('div', { class: 'screen transparent', 'data-screen': 'benchmark-report', style: { background: 'rgba(6,9,15,0.82)', alignItems: 'center', justifyContent: 'center' } }, [
+      el('div', { class: 'panel', style: { maxWidth: '920px', width: '92%' } }, [
+        el('div', { class: 'panel-title' }, 'BENCHMARK RESULT'),
+        el('pre', { class: 'selectable', 'data-benchmark': 'text', style: { whiteSpace: 'pre-wrap', fontFamily: 'var(--mono)', fontSize: '13px', lineHeight: '1.5', margin: '0 0 12px' } }, text),
+        report.software ? el('p', { style: { color: 'var(--orange)' } }, 'The browser is drawing with a software renderer, not the graphics card. Check that hardware acceleration is on in the browser settings.') : null,
+        el('div', { class: 'row' }, [
+          el('button', { class: 'btn', 'data-action': 'benchmark-copy', onclick: () => {
+            void navigator.clipboard?.writeText(text).then(() => { copied.textContent = 'Copied.'; }, () => { copied.textContent = 'Could not copy: select the text above instead.'; });
+          } }, 'Copy result'),
+          el('button', { class: 'btn', 'data-action': 'benchmark-again', onclick: () => this.runBenchmark(scene) }, 'Run again'),
+          el('button', { class: 'btn', 'data-action': 'benchmark-close', onclick: () => this.show('settings') }, 'Close'),
+          copied,
+        ]),
+      ]),
+    ]);
+    this.ui.appendChild(panel);
   }
 
   toast(text: string): void {

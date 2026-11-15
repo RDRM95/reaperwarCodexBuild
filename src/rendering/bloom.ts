@@ -83,6 +83,8 @@ export interface BloomPipeline {
   setSize(width: number, height: number): void;
   /** Draw calls of the scene pass alone in the last frame (the post passes are not counted). */
   sceneDrawCalls(): number;
+  /** Triangles of the scene pass alone in the last frame. */
+  sceneTriangles(): number;
   dispose(): void;
 }
 
@@ -92,10 +94,12 @@ export function createBloomPipeline(renderer: THREE.WebGLRenderer, scene: THREE.
   composer.renderTarget2.samples = config.samples;
   const scenePass = new RenderPass(scene, camera);
   let sceneCalls = 0;
+  let sceneTriangles = 0;
   const drawScene = scenePass.render.bind(scenePass);
   scenePass.render = (...args: Parameters<RenderPass['render']>): void => {
     drawScene(...args);
     sceneCalls = renderer.info.render.calls;
+    sceneTriangles = renderer.info.render.triangles;
   };
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), config.strength, config.radius, config.threshold);
   // Replace the luminance high-pass with the colour-aware one described above.
@@ -111,6 +115,7 @@ export function createBloomPipeline(renderer: THREE.WebGLRenderer, scene: THREE.
     render: () => composer.render(),
     setSize: (width, height) => composer.setSize(width, height),
     sceneDrawCalls: () => sceneCalls,
+    sceneTriangles: () => sceneTriangles,
     dispose: () => { bloomPass.dispose(); outputPass.dispose(); composer.dispose(); },
   };
 }
