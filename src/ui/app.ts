@@ -484,6 +484,7 @@ export class BattleController {
     if(this.view.rig.mode==='gunnery'){
       const id=this.view.gunneryLockedShipId??this.view.followId;
       this.gunneryOverlay.update(this.sim,this.view,id);
+      this.gunneryOverlay.clearOf(this.hudLevel === 'none' ? '24px' : this.hud.root.style.getPropertyValue('--hud-notice-top'));
       const ship=id?this.sim.getShip(id):undefined;
       const target=ship?.targetId;
       if(target!==this.lastGunTarget){

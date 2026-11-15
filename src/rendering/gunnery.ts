@@ -29,7 +29,25 @@ export function gunneryFrame(ship: ShipState, weapon: WeaponState, alpha: number
     bore = new THREE.Vector3(Math.sin(weapon.facing), 0, Math.cos(weapon.facing)).applyQuaternion(rotation);
   }
   position.addScaledVector(bore, Math.max(0.18, ship.radiusKm * KM * 0.2));
+  // A beam is sighted from just above its emitter, not from inside it. On the bore, the camera sat within the beam's
+  // glow (0.29 of a unit round a Reaper's main beam) and half the picture was white while it fired.
+  const sight = beamSight(weapon);
+  if (sight > 0) {
+    const up = rendered ? new THREE.Vector3(0, 1, 0).transformDirection(rendered.group.matrixWorld) : new THREE.Vector3(0, 1, 0).applyQuaternion(rotation);
+    position.addScaledVector(up, sight);
+  }
   return { position, aim: position.clone().addScaledVector(bore, 2000) };
+}
+
+/**
+ * How far above its bore a beam weapon's gun camera sits, in render units: clear of the beam's glow, which is 3.2
+ * times its core (effects.ts: a Reaper beam's core is 0.09 of a unit, a Thanix's 0.05). Guns that fire rounds are
+ * sighted along the bore itself.
+ */
+export function beamSight(weapon: WeaponState): number {
+  if (weapon.def.kind === 'reaper_beam') return 0.09 * 3.2 * 1.9;
+  if (weapon.def.kind === 'thanix') return 0.05 * 3.2 * 1.9;
+  return 0;
 }
 
 /** Only genuine forward capital-class main batteries own a first-person

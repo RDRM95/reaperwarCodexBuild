@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest';
 import * as THREE from 'three';
-import {gunneryFrame,primaryGunneryMount} from '@/rendering/gunnery';
-import {weaponFlashPose} from '@/rendering/weaponFlash';
+import {beamSight,gunneryFrame,primaryGunneryMount} from '@/rendering/gunnery';
+import {weaponBeamOrigin,weaponFlashPose} from '@/rendering/weaponFlash';
 import {buildCustomBattle} from '@/scenarios';
 import {BattleSimulation} from '@/simulation/battle';
 import {KM} from '@/rendering/geometry';
@@ -23,6 +23,28 @@ describe('rigid main-battery optics',()=>{
   const clearance=Math.max(.18,ship.radiusKm*KM*.2);
   expect(frame.position.distanceTo(flash.position.clone().addScaledVector(flash.direction,clearance))).toBeLessThan(1e-10);
   expect(frame.aim.clone().sub(frame.position).normalize().distanceTo(flash.direction)).toBeLessThan(1e-10);
+ });
+ it('a beam is sighted from above its emitter, clear of its own glow, and still along its bore',()=>{
+  // The gun camera sat on the bore, inside the glow of the beam it was watching: from a Reaper, half the picture
+  // was white for as long as the beam was on.
+  const sim=new BattleSimulation(buildCustomBattle({seed:42,rulesId:'prime_apex',environment:'deep_space',startingDistanceKm:60,
+   sideA:{faction:'reaper',name:'Mount',formation:'line_abreast',counts:{reaper_capital:1}},
+   sideB:{faction:'alliance',name:'Contact',formation:'line_abreast',counts:{alliance_dreadnought:1}}}));
+  const ship=sim.ships[0],weapon=primaryGunneryMount(ship)!;
+  expect(weapon.def.kind).toBe('reaper_beam');
+  const group=new THREE.Group();group.position.set(20,30,40);group.rotation.set(.3,.4,.1);group.updateMatrixWorld(true);
+  const muzzle=new THREE.Vector3(0,-1.5,1.8);
+  const frame=gunneryFrame(ship,weapon,.5,{group,muzzle});
+  const origin=weaponBeamOrigin(group,muzzle,weapon,true);
+  const bore=new THREE.Vector3(0,0,1).transformDirection(group.matrixWorld),up=new THREE.Vector3(0,1,0).transformDirection(group.matrixWorld);
+  const offset=frame.position.clone().sub(origin);
+  const sight=beamSight(weapon);
+  expect(sight).toBeGreaterThan(0.09*3.2*1.5); // well outside the glow, which is 3.2 times the core's 0.09
+  expect(offset.dot(up)).toBeCloseTo(sight,9);
+  expect(offset.dot(bore)).toBeCloseTo(Math.max(.18,ship.radiusKm*KM*.2),9);
+  expect(frame.aim.clone().sub(frame.position).normalize().distanceTo(bore)).toBeLessThan(1e-10);
+  // A gun that fires rounds is sighted along the bore itself, as the test above holds.
+  expect(beamSight(fixture().weapon)).toBe(0);
  });
  it('interpolates barrel rotation between ticks without following AI targets',()=>{
   const {ship,weapon}=fixture();ship.prevPos={x:0,y:0,z:0};ship.pos={x:1,y:2,z:3};
