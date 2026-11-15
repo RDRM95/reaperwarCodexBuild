@@ -1,3 +1,11 @@
+## State on 15 Nov 2026 — Oculus Annihilation damage separation merged
+
+- Codex PR #27 merged as squash commit `5a42c213f23cd877e9b048165d12ddcbd0847b5d` after its PR-head CI and reference/large-fleet workflows both reported success; GitHub reported the head mergeable. The change removes Annihilation's capital-beam 1.4× multiplier from Oculus interceptor pulses, retaining fighter upgrades and capital Reaper lethality. Source, focused tests, E2E and QA are in #27. No RTX 5090 hardware verification was performed.
+- GitHub reports the PR merged; post-merge deployment and workflow results are not yet established. Do not claim deployed without checking.
+- PR #69 (150,000-ship attack-bearing stack overflow) is still draft despite green PR-head CI; review and current-base verification remain before merge. PR #26 (rear engagement) is draft and not mergeable; reconcile the concurrent combat-reach and composer branches before touching its controllers.
+- Issue #16 has no manually approved P0 ship silhouettes; issue #19 retains gameplay/physical-hardware acceptance. The sandbox remains retired by the 12 Nov owner directive; do not port there.
+- Next concrete task: verify #27 on deployment, then inspect #69's current-base mergeability and test coverage. Do not modify AU Valkyrie damage or barriers to match conventional ship outcomes.
+
 # APEX programme checkpoint
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
