@@ -57,15 +57,13 @@ function text(parent:HTMLElement,value:string):void{parent.append(document.creat
 const records=auditShipReferences();
 const key=(id:string,view:string)=>'reaper-ref-pack-v1:'+id+':'+view;
 
+let installed=false;
 export function installShipReferenceInspector():void{
-  if(document.getElementById('ship-reference-launch'))return;
+  if(installed)return;
+  installed=true;
   const style=document.createElement('style');style.textContent=css;document.head.append(style);
-  const open=button('SHIP REFERENCES · 6 VIEWS',()=>showInspector());
-  open.id='ship-reference-launch';open.className='shipref-open';
-  open.textContent='REF';
-  open.title='Ship references: six views (Alt+R)';
-  open.setAttribute('aria-label','SHIP REFERENCES · 6 VIEWS');
-  document.body.append(open);
+  // No launcher on the screen: the tab that stood out of the right-hand edge sat over the battle and the orders
+  // panel. The inspector is a review tool; it opens and closes with Alt+R.
   document.addEventListener('keydown',event=>{
     if(event.altKey&&!event.ctrlKey&&!event.metaKey&&event.key.toLowerCase()==='r'){
       event.preventDefault();showInspector();
