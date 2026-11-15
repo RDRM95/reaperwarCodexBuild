@@ -20,21 +20,33 @@ export interface ReaperAssessment {
 }
 
 export function assessReapers(sim: BattleLike): ReaperAssessment {
-  const reaperShips = sim.ships.filter((s) => s.faction === 'reaper');
-  const organicShips = sim.ships.filter((s) => s.faction !== 'reaper' && s.role !== 'fighter');
-  const reaperStart = reaperShips.reduce((a, s) => a + s.pointValue, 0);
-  const reaperLost = reaperShips.filter((s) => !s.alive).reduce((a, s) => a + s.pointValue, 0);
+  // One walk of the ships. Each total is still added up in ship order, so every figure is the number it was when
+  // each was a pass of its own: twelve passes and four lists, four times a second, at two thousand ships.
+  let reaperStart = 0, reaperLost = 0, reaperCapitalCount = 0, reaperCapitalLosses = 0;
+  let organicStart = 0, organicRemaining = 0, organicDamage = 0, shots = 0;
+  let reaperSide: BattleLike['ships'][number]['side'] | undefined;
+  for (const s of sim.ships) {
+    if (s.faction === 'reaper') {
+      reaperSide ??= s.side;
+      reaperStart += s.pointValue;
+      if (!s.alive) reaperLost += s.pointValue;
+      if (s.role === 'reaper_capital') {
+        reaperCapitalCount++;
+        if (!s.alive) reaperCapitalLosses++;
+      }
+    } else if (s.role !== 'fighter') {
+      organicStart += s.pointValue;
+      if (s.alive && !s.escaped) organicRemaining += s.pointValue;
+      organicDamage += s.stats.damageDealt;
+      shots += s.stats.shotsFired;
+    }
+  }
   const reaperLossesFraction = reaperStart > 0 ? reaperLost / reaperStart : 0;
-  const reaperCapitals = reaperShips.filter((s) => s.role === 'reaper_capital');
-  const reaperCapitalLosses = reaperCapitals.filter((s) => !s.alive).length;
-  const capitalLossFraction = reaperCapitals.length > 0 ? reaperCapitalLosses / reaperCapitals.length : 0;
-  const organicStart = organicShips.reduce((a, s) => a + s.pointValue, 0);
-  const organicRemaining = organicShips.filter((s) => s.alive && !s.escaped).reduce((a, s) => a + s.pointValue, 0);
+  const capitalLossFraction = reaperCapitalCount > 0 ? reaperCapitalLosses / reaperCapitalCount : 0;
   const organicFleetStrength = organicStart > 0 ? organicRemaining / organicStart : 0;
 
   // Technology: ratio of hull damage inflicted on Reapers per shot vs canon expectations.
-  const organicDamage = organicShips.reduce((a, s) => a + s.stats.damageDealt, 0);
-  const organicShots = Math.max(1, organicShips.reduce((a, s) => a + s.stats.shotsFired, 0));
+  const organicShots = Math.max(1, shots);
   const dmgPerShot = organicDamage / organicShots;
   const organicTechCapability = Math.max(0, Math.min(1, dmgPerShot / 900));
 
@@ -82,7 +94,6 @@ export function assessReapers(sim: BattleLike): ReaperAssessment {
   if (reaperCapitalLosses > 0) lines.push(`Capital units destroyed: ${reaperCapitalLosses}.`);
   lines.push(`Organic weapon effectiveness index: ${(organicTechCapability * 100).toFixed(0)}.`);
   // How the engagement ended, once it has: the conclusions below must not contradict it.
-  const reaperSide = reaperShips[0]?.side;
   const ended = sim.finished && sim.result ? sim.result.winner : undefined;
   const reapersWon = ended !== undefined && reaperSide !== undefined && ended === reaperSide;
   const reapersLost = ended !== undefined && ended !== 'draw' && !reapersWon;
