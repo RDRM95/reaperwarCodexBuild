@@ -163,6 +163,13 @@ export function planShot(ships: readonly ShipState[], rng: Rng, memory: ShotMemo
     // Now and then a fast hull in a fight is worth watching go by.
     if (memory.move !== 'flyby' && speed * hold >= ship.lengthKm * FLYBY_LENGTHS * 2 && rng.next() < 0.2) { kind = 'pass'; moves = ['flyby']; toId = undefined; hold = 8 + rng.next() * 3; }
   }
-  const move = moves.find(m => m !== memory.move) ?? moves[0];
+  // Not the move made last time; of the rest, the earlier in the list the likelier (4 : 3 : 2 : 1).
+  const open = moves.filter(m => m !== memory.move);
+  let move = open[0] ?? moves[0];
+  let draw = rng.next() * open.reduce((sum, _m, i) => sum + Math.max(1, 4 - i), 0);
+  for (let i = 0; i < open.length; i++) {
+    draw -= Math.max(1, 4 - i);
+    if (draw <= 0) { move = open[i]; break; }
+  }
   return { kind, fromId: ship.id, toId, move, side, hold, wide };
 }

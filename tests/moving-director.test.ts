@@ -89,6 +89,8 @@ describe('the cinematic camera on a directed shot', () => {
     ['a Reaper on its own', () => ({ from: hull(20) }), (f) => [f.from.position]],
     ['two cruisers fighting', () => ({ from: hull(5), to: hull(5, V(40, 4, 60)) }), (f) => [f.from.position, f.to!.position]],
     ['a Reaper and a distant cruiser', () => ({ from: hull(20), to: hull(5, V(0, 0, 220)) }), (f) => [f.from.position, f.to!.position]],
+    ['a frigate and a Reaper two and a half Reaper-lengths off', () => ({ from: hull(1.7), to: hull(20, V(10, 4, 53)) }), (f) => [f.from.position, f.to!.position]],
+    ['a Reaper and a frigate one Reaper-length off', () => ({ from: hull(20), to: hull(1.7, V(6, -2, 20)) }), (f) => [f.from.position, f.to!.position]],
     ['a battlegroup', () => ({ from: hull(10), group: { centre: V(20, 5, 30), radius: 60, heading: V(0, 0, 1) } }),
       (f) => [f.group!.centre, f.group!.centre.clone().add(V(60, 0, 0)), f.group!.centre.clone().add(V(-60, 0, 0)), f.group!.centre.clone().add(V(0, 0, 60)), f.group!.centre.clone().add(V(0, 0, -60))]],
   ];
@@ -119,6 +121,26 @@ describe('the cinematic camera on a directed shot', () => {
       for (let i = 1; i < path.length; i++) step = Math.max(step, path[i].distanceTo(path[i - 1]));
       expect(step / path[0].distanceTo(path.at(-1)!), kind).toBeLessThan(0.02);
     }
+  });
+
+  it('a pair far apart for their size is shot over the shoulder, so there is a hull in the picture', () => {
+    // Two cruisers 400 units apart. Side-on, the camera stood 290 units off and each hull was a speck.
+    const from = hull(5), to = hull(5, V(0, 0, 400));
+    const rig = new CameraRig(16 / 9);
+    rig.setMode('cinematic');
+    for (let i = 0; i < 120; i++) rig.update(1 / 60, { cinematic: { from, to, age: 6, move: { kind: 'arc', side: 1, hold: 12 }, shot: 1 }, fleetCentre: centre });
+    expect(rig.camera.position.distanceTo(from.position)).toBeLessThan(5 * 2.5);
+    const bow = onScreen(rig, V(0, 0, 2.5)), stern = onScreen(rig, V(0, 0, -2.5));
+    expect(Math.hypot(bow.x - stern.x, bow.y - stern.y) / 2).toBeGreaterThan(0.15); // the hull spans a sixth of the frame or more
+    const target = onScreen(rig, to.position);
+    expect(Math.abs(target.x)).toBeLessThan(1);
+    expect(Math.abs(target.y)).toBeLessThan(1);
+    expect(target.z).toBeLessThan(1);
+    // Without a director's move the old side-on framing stands, as its own test requires.
+    const plain = new CameraRig(16 / 9);
+    plain.setMode('cinematic');
+    for (let i = 0; i < 400; i++) plain.update(0.1, { cinematic: { from, to, age: 0 }, fleetCentre: centre });
+    expect(plain.camera.position.distanceTo(from.position)).toBeGreaterThan(200);
   });
 
   it('cuts to a new shot: the first frame is the shot, not a flight across the field to it', () => {

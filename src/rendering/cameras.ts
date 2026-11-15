@@ -80,12 +80,13 @@ export const MOVE_TRAVEL = {
 /**
  * Carry a framing (camera position and look point) along a move, `age` seconds into it. An arc and a rise pass
  * through the framing halfway, so the shot is as well framed at its middle as it was when it did not move; a push
- * ends, and a pull begins, just inside it.
+ * ends, and a pull begins, just inside it. The camera turns about `about`: the look point, unless the shot has a hull
+ * in its foreground, which it then turns about instead, so that the hull stays in the foreground.
  */
-export function travel(position: THREE.Vector3, look: THREE.Vector3, move: ShotMove, age: number): void {
+export function travel(position: THREE.Vector3, look: THREE.Vector3, move: ShotMove, age: number, about: THREE.Vector3 = look): void {
   if (move.kind === 'flyby') return;
   const p = THREE.MathUtils.clamp(age / Math.max(1, move.hold), 0, 1) - 0.5; // −½ at the start, ½ at the end
-  const offset = position.clone().sub(look);
+  const offset = position.clone().sub(about);
   const swing = move.kind === 'arc' ? MOVE_TRAVEL.arc : MOVE_TRAVEL.swing;
   offset.applyAxisAngle(UP, move.side * swing * p);
   if (move.kind === 'push' || move.kind === 'pull') {
@@ -101,7 +102,7 @@ export function travel(position: THREE.Vector3, look: THREE.Vector3, move: ShotM
       offset.applyAxisAngle(across.normalize(), -lift);
     }
   }
-  position.copy(look).add(offset);
+  position.copy(about).add(offset);
 }
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -123,6 +124,10 @@ export const cinematicOrbitHeight = (size: number): number => 1.0 - 0.62 * capit
  */
 export const overShoulderWeight = (size: number, separation: number): number =>
   capitalScale(size) * THREE.MathUtils.smoothstep(separation / Math.max(size, 1e-6), 1.5, 3.5);
+
+/** How far a directed two-ship shot leans to the over-the-shoulder view for being far apart: 0 to 1, from six to ten hull lengths. */
+export const distantPair = (size: number, separation: number): number =>
+  THREE.MathUtils.smoothstep(separation / Math.max(size, 1e-6), 6, 10);
 
 export class CameraRig {
   readonly camera: THREE.PerspectiveCamera;
@@ -157,7 +162,13 @@ export class CameraRig {
   private readonly relPos = new THREE.Vector3();
   private readonly relLook = new THREE.Vector3();
   private readonly pivot = new THREE.Vector3();
+  private readonly foreground = new THREE.Vector3();
   private riding = false;
+  /** While the camera stands still for a flyby: what is left of the knocks it has taken. */
+  private standing = false;
+  private readonly knocked = new THREE.Vector3();
+  /** Whether the directed two-ship shot now showing is taken over a shoulder (1) or side-on (0). */
+  private shotShoulder: number | undefined;
   /** The shot the cinematic camera last showed, to know a cut when it comes. */
   private lastShot: number | undefined;
   private readonly tmp = new THREE.Vector3();
@@ -329,6 +340,10 @@ export class CameraRig {
       case 'cinematic': {
         const c = opts.cinematic;
         if (!c) return this.fallback(dt, opts.fleetCentre);
+        // Set when the shot has a hull in its foreground: the point a camera move turns about.
+        let foreground = false;
+        const cut = c.shot !== undefined && c.shot !== this.lastShot;
+        this.lastShot = c.shot;
         const from = c.from;
         const to = c.to;
         if (c.group) {
@@ -355,14 +370,26 @@ export class CameraRig {
           this.desiredLook.copy(mid);
           // A capital-scale hull with a distant partner: move in over its shoulder and look down the line of fire.
           const anchor = to.size > from.size ? to : from;
-          const shoulder = overShoulderWeight(anchor.size, dist);
+          let shoulder = overShoulderWeight(anchor.size, dist);
+          if (c.move) {
+            // A directed shot is one framing or the other, chosen at the cut and held. Part-way between the two the
+            // camera frames neither: a frigate fighting a Reaper two and a half Reaper-lengths off was out of the
+            // picture for the whole shot. A pair far apart for their size is taken over the shoulder whatever the
+            // hull: side-on, two cruisers 400 units apart were two specks seen from 290 units off.
+            if (cut || this.shotShoulder === undefined) this.shotShoulder = Math.max(shoulder, distantPair(anchor.size, dist)) >= 0.5 ? 1 : 0;
+            shoulder = this.shotShoulder;
+          }
           if (shoulder > 0) {
             const toward = anchor === from ? line : line.clone().negate();
             const s = anchor.size;
-            const pos = anchor.position.clone().addScaledVector(toward, -0.8 * s).addScaledVector(side, 0.55 * s * (1 + drift)).add(new THREE.Vector3(0, 0.27 * s, 0));
+            // A small hull is stood off further in its own lengths, or its stern fills the frame (directed shots only).
+            const off = c.move ? 1 + 0.8 * (1 - capitalScale(s)) : 1;
+            const pos = anchor.position.clone().addScaledVector(toward, -0.8 * s * off).addScaledVector(side, 0.55 * s * off * (1 + drift)).add(new THREE.Vector3(0, 0.27 * s * off, 0));
             const look = anchor.position.clone().addScaledVector(toward, 1.1 * s);
             this.desiredPos.lerp(pos, shoulder);
             this.desiredLook.lerp(look, shoulder);
+            this.foreground.copy(this.desiredLook).lerp(anchor.position, shoulder);
+            foreground = true;
           }
         } else {
           const ang = this.yaw + Math.sin(c.age * 0.08) * 0.25;
@@ -370,8 +397,6 @@ export class CameraRig {
           this.desiredPos.copy(from.position).add(new THREE.Vector3(Math.sin(ang) * r, from.size * cinematicOrbitHeight(from.size) + 3, Math.cos(ang) * r));
           this.desiredLook.copy(from.position);
         }
-        const cut = c.shot !== undefined && c.shot !== this.lastShot;
-        this.lastShot = c.shot;
         if (!c.move) break;
         // A directed shot. The camera cuts to it, travels with what it frames (so that uneven frames do not slide
         // the subject about, as they did under the follow camera), and makes its move.
@@ -381,10 +406,14 @@ export class CameraRig {
           this.desiredPos.copy(c.move.anchor);
           this.desiredLook.copy(from.position);
           this.riding = false;
-          return this.apply(dt, true);
+          if (cut) this.knocked.set(0, 0, 0);
+          this.standing = true;
+          this.apply(dt, true);
+          this.standing = false;
+          return;
         }
         const pivot = this.pivot.copy(this.desiredLook);
-        travel(this.desiredPos, this.desiredLook, c.move, c.age);
+        travel(this.desiredPos, this.desiredLook, c.move, c.age, foreground ? this.foreground : this.desiredLook);
         return this.apply(dt, false, { id: `shot-${c.shot ?? 0}`, position: pivot, velocity: from.velocity, heading: from.heading, size: from.size }, cut);
       }
       case 'free': {
@@ -444,6 +473,11 @@ export class CameraRig {
       this.riding = false;
       cam.position.lerp(this.desiredPos, k);
       this.currentLook.lerp(this.desiredLook, k);
+      if (this.standing) {
+        // Standing still for a flyby: a knock is kept and eased out here too, not thrown away by the next frame.
+        this.knocked.multiplyScalar(Math.exp(-Math.max(0, dt) * 9));
+        cam.position.add(this.knocked);
+      }
     }
     if (this.shake > 0) {
       // Up to 3 units, and never more than 3 % of the way to what the camera is looking at. The knock was 3 units at
@@ -454,6 +488,7 @@ export class CameraRig {
       cam.position.add(knock);
       // A knock moves the camera and is then eased out, riding or not: it is kept, not redrawn every frame.
       if (ride) this.relPos.add(knock);
+      else if (this.standing) this.knocked.add(knock);
       this.shake = Math.max(0, this.shake - dt * 2.5);
     }
     cam.lookAt(this.currentLook);
