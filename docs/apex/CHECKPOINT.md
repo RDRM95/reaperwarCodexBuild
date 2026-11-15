@@ -2,44 +2,49 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 15 Nov 2026, 15:30 UTC — the owner's requests of 15 Nov (cameras, interface, frame rate)
+## State on 15 Nov 2026, 19:05 UTC — the owner's requests of 15 Nov (cameras, interface, Reapers, frame rate)
 
 Read this section first. Everything below it is older.
 
 **Rules in force, unchanged:** the sandbox is retired (owner's hard rule of 12 Nov); private reference imagery is never committed; software rendering is not hardware proof.
 
-**Merged since the section below:** #85 `6c54d0b` (Reaper capital barriers and conventional fire). The owner merged #27 as `5a42c21`. On `reaperwar`, the after-action report fix went to `main` as `55f10b8` (its PR #4); its launcher was not republished (needs a version bump to 0.12.6).
+**Merged before today's requests:** #85 `6c54d0b` (Reaper capital barriers and conventional fire). The owner merged #27 as `5a42c21`. On `reaperwar`, the after-action report fix went to `main` as `55f10b8` (its PR #4); its launcher was not republished (needs a version bump to 0.12.6).
 
 **Owner's requests of 15 Nov, in their words:** more work on the first-person modes, effects and quality; a unique HUD and UI for each faction; a cinematic camera that moves; a free camera movable in any direction with the mouse; remove the text cursor that blinks on a click; remove the REF button at the side of the screen; a theatre mode; an intelligent auto-director camera; the Reaper body may be misaligned, upside down or too small for its legs; any optimisation for Ultra settings ("this is so good i could use it for youtube content"). Then: Reapers all tilt alike and look copied, vary it; fleets should engage like a real fleet, battlegroups may try different tactics, nothing that costs action or ruins what exists; **priority: higher frame rate**. Then: the follow-ship camera judders with the ships' movement, worse at low frame rates.
 
-**Done and merged (all deployed with the base):**
+**Done and merged, all deployed with the base:**
 
 | PR | Commit | What |
 |---|---|---|
 | #87 | `a5142ba` | No text caret on click; the REF tab is gone (the inspector still opens with Alt+R) |
 | #88 | `cd82d66` | Each Reaper holds its own roll and trim (`src/rendering/attitude.ts`) |
-| #89 | `ee58e7f` | In-game benchmark: Settings → Graphics → Benchmark, or `?benchmark=standard` / `?benchmark=large`; reports frame rate, lows, and main-thread work by part, as text to copy |
+| #89 | `ee58e7f` | In-game benchmark: Settings → Graphics → Benchmark, or `?benchmark=standard` / `?benchmark=large`; frame rate, lows, and main-thread work by part, as text to copy |
 | #90 | `77eda29` | Every battle is batched, not only those of 150 ships and more (Battle of Earth 356 → 110 draw calls) |
 | #91 | `b933d49` | Follow camera holds its ship steady at uneven frame rates; camera shake bounded by distance |
 | #92 | `c021b8e` | The mouse reaches the battle (it never did in this build); free camera flown by mouse; theatre mode (T) |
+| #93 | `617bd97` | Interface refresh in large battles 6.1 → 0.9 ms (the "guns ready" readout walked every enemy for every gun) |
+| #94 | `4aa333a` | The cinematic camera moves (arc, push, pull, rise, flyby), shots cut, and a director chooses them (`planShot`) |
+| #96 | `92cec92` | A console for each of the eight founding factions: colours, panel shapes, banner, panel words (`src/ui/factionTheme.ts`) |
+| #95 | `a906b48` | Reaper capitals: mantle 1.4 × as broad and 1.3 × as tall, limbs 0.7 of their length; the Reaper view from the brow of the hood; the destroyer's Reaper view no longer inside its hull |
+| #97 | `05a7bf0` | First-person gunnery: captions clear of the top bar, status said once, a beam sighted from above its emitter and drawn narrower from its own gun camera |
 
-**Follow camera (#91):** two causes. The camera eased its own position toward a point beside a moving hull, so its lag changed with frame length; it now rides with the hull and eases only its place relative to it. And camera shake was 3 units at any distance (half the way to a frigate followed from six units); it is now at most 3 % of the way to what the camera looks at. In the running game, following a frigate from the side, frame-to-frame change in the hull's speed across the picture: 1.36 → 0.19 at a steady 60, 4.45 → 0.22 and 4.05 → 0.12 with hitching frames. Tests: `tests/follow-camera-steady.test.ts`.
+**Three things found on the way that matter beyond today:**
 
-**In this change (interface refresh):** in a battle of two thousand ships the interface's four-times-a-second refresh was the largest main-thread cost after the simulation. Most of it was the "guns ready" readout, which worked out a firing solution for every commanded gun by walking every enemy. It now skips guns that cannot be ready and searches the index the simulation's own firing uses; the Reaper assessment is one walk of the ships instead of twelve. Figures are identical (`tests/battery-readout.test.ts`). The refresh at 1,881 ships: 6.1 → 0.9 ms; at 2,132 ships with the battle stepping: 8.5 → 1.9 ms; small battles unchanged at 0.5 to 0.8 ms (software-rendered machine; the ratio is what carries over).
+- **In this build the mouse never reached the battle.** The interface layer took every pointer event over it (`#ui > *` outranked `.hud { pointer-events: none }`), from the first commit until #92: no drag, wheel, click-to-select, right-click attack or double-click focus. `reaperwar` fixed the same thing on 6 Nov. `e2e/mouse-camera.spec.ts` holds it now.
+- **The free camera's sideways keys were the wrong way round** (D flew it left). Fixed in #92.
+- **A camera that eases its own position toward a moving ship judders when frames are uneven.** The follow, Reaper and cinematic cameras now travel with what they frame and ease only their place relative to it (#91, #94). Any new camera should do the same.
 
-**Found, not yet done:**
+**Measured and not changed: battlegroup tactics.** The owner asked that battlegroups may try different tactics, without loss of action. Fleets already hold stations across an arc of about 55° round the enemy and on separate altitude lanes (Final Battle of Earth, canon). Giving the later fleets of a side flanking approach lanes, at 0.25, 0.5 and 1.0 of engagement range, changed nothing that can be seen or measured in the scripted battles: firing share (81 / 57 / 50 / 81 %), first shot, length and winners were the same, and so were the bearings the fleets fought from, because the fleets deploy close and the approach is short. It was not shipped. A difference a player would notice needs battlegroup roles (a screen that leads, a gun line that stands off, a group that swings wide) with longer approaches or waypoints, which is a larger design and needs the owner's steer.
 
-- Reaper capital model: orientation is sound (limbs forward, mantle aft, limbs hang below). The body is too small for the legs, as the owner suspected: measured on the 2 km hull, the body is 1,060 m long and 278 m wide, the limbs 1,343 m long and spread over 725 m. Being reworked (see below).
-- In the Reaper intelligence panel "THREAT: ELEVATED" overlaps the line beside it.
-- The simulation runs on the drawing thread unless Settings → Simulation thread is set to Worker (the local-hardware profile sets it). On the drawing thread every step lands in one frame in three at 60 frames a second, which is itself uneven frame time.
+**Frame rate, where it stands.** Nothing here can measure a graphics card: the owner's computer has not been reachable (its folder list has come back empty every time), so the benchmark of #89 is the route. What was cut on the drawing thread today: draw calls in battles under 150 ships (#90), and the interface refresh in large battles (#93). What remains largest there is the simulation itself when it runs on the drawing thread, which is the default unless Settings → Simulation thread is set to Worker (the local-hardware profile sets it): a step then lands in one frame in three at 60 frames a second.
 
-**Found by #92, worth knowing:** in this build the interface layer took every pointer event over the battle (`#ui > *` outranked `.hud { pointer-events: none }`), so the camera could not be turned or zoomed with the mouse and a ship could not be clicked, from the first commit until #92. `reaperwar` fixed the same thing on 6 Nov. `e2e/mouse-camera.spec.ts` now holds it.
+**Still to do from the 15 Nov requests:** the projectile camera was looked at and left as it is (it holds its round in the middle of the picture, small); faction consoles only dress the battle interface, not menus or results; battlegroup tactics as above.
 
-**In progress at the time of writing, on their own branches:** the moving cinematic camera and the director (`feat/moving-director-20261115`: every shot has a camera move, shots change by a cut, the director prefers a kill about to happen, then a Reaper's beam, then capitals in a fight); the Reaper capital's proportions (`feat/reaper-body-20261115`: mantle half as broad again and a third taller, limbs 0.7 of their length, the Reaper view moved onto the brow of the hood).
+**Two browser tests were given more time after a red CI run each, with nothing they check being wrong:** `e2e/theatre.spec.ts` is `test.slow()` (it ran past 120 s on a slow runner), and `e2e/gunnery-view.spec.ts` waits 30 s, not 5, for the sight's first frame. A new browser test that waits on frames should allow for a runner three times slower than this machine.
 
-**Still to do from the 15 Nov requests:** first-person effects and quality beyond the Reaper view; a HUD for each faction; battlegroup tactics (measure with `scripts/combat-activity.ts`; nothing that lowers the share of hulls firing).
+**Needs the owner:** a benchmark result from the RTX 5090, standard and large; their eye on the Reaper's new proportions, the director's shots, theatre mode and the eight consoles, none of which has been seen on real hardware; the beam-armour-per-tick decision below; whether to bump `reaperwar` to 0.12.6.
 
-**Needs the owner:** a benchmark result from the RTX 5090 (nothing here can measure it: the folder list for the owner's computer has come back empty every time it was asked); the beam-armour-per-tick decision below; whether to bump `reaperwar` to 0.12.6.
+**Looked at and left alone:** in a window under about 1,000 px tall the right-hand column of the battle interface is taller than its space (the orders panel alone is 510 px) and the Reaper intelligence panel is below the fold. The column scrolls, by design, so nothing is lost; it was mistaken for a defect once today and is not one.
 
 ## State on 13 Nov 2026, 19:15 UTC — Reaper capital barriers and conventional fire
 
