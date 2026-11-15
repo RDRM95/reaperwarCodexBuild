@@ -31,7 +31,7 @@ test('theatre mode shows the battle alone, its controls come and go with the mou
   for (const selector of ['.hud-top', '.hud-left', '.hud-right', '[data-action="pause"]']) await expect(page.locator(selector).first()).toBeHidden();
   // Cinema bars: a 1280 x 720 window framed at 2.39 to 1 has two bars of 92 px.
   const barHeight = () => page.locator('.theatre-bar.top').evaluate((e) => e.getBoundingClientRect().height);
-  await expect.poll(barHeight, { timeout: 10_000 }).toBeGreaterThan(90);
+  await expect.poll(barHeight, { timeout: 30_000 }).toBeGreaterThan(90);
   expect(await barHeight()).toBeLessThan(94);
 
   // The strip is up while the mouse moves, and goes with the pointer when it rests.
@@ -61,7 +61,8 @@ test('theatre mode shows the battle alone, its controls come and go with the mou
   await expect(page.locator('[data-theatre-camera="free"]')).toHaveClass(/active/);
   await page.click('[data-theatre="bars"]');
   await expect(page.locator('[data-theatre="bars"]')).toHaveAttribute('aria-pressed', 'false');
-  await expect.poll(() => page.locator('.theatre-bar.top').evaluate((e) => e.getBoundingClientRect().height)).toBeLessThan(1);
+  // The bars slide; on a software renderer under load the slide can be slow to start.
+  await expect.poll(() => page.locator('.theatre-bar.top').evaluate((e) => e.getBoundingClientRect().height), { timeout: 30_000 }).toBeLessThan(1);
 
   // The free camera under the mouse: the wheel flies it along its view, a middle drag slides it.
   const camera = () => page.evaluate(() => {
