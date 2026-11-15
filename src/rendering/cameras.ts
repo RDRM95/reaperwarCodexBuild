@@ -78,6 +78,14 @@ export class CameraRig {
   freePos = new THREE.Vector3(0, 300, -900);
   freeYaw = 0;
   freePitch = -0.2;
+  /** Where the free camera is flying to; it eases there, so a wheel notch or a key is a glide, not a jump. */
+  freeGoal = new THREE.Vector3(0, 300, -900);
+  /**
+   * How far the free camera is from the nearest thing worth looking at (units), set by the view. Its speed follows
+   * from it: slow and exact beside a frigate, fast across an empty field. It flew at 600 units a second anywhere,
+   * which crosses a frigate's length five hundred times a second.
+   */
+  freeReach = 600;
   /** Smoothing. */
   private desiredPos = new THREE.Vector3();
   private desiredLook = new THREE.Vector3();
@@ -102,6 +110,7 @@ export class CameraRig {
     if (mode === 'free') {
       // Start free flight from where the camera currently is.
       this.freePos.copy(this.camera.position);
+      this.freeGoal.copy(this.camera.position);
       const dir = this.tmp.copy(this.currentLook).sub(this.camera.position).normalize();
       this.freeYaw = Math.atan2(dir.x, dir.z);
       this.freePitch = Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1));
@@ -153,11 +162,40 @@ export class CameraRig {
     const k = this.distance * 0.0015;
     this.focus.addScaledVector(right, -dx * k).addScaledVector(fwd, -dy * k);
   }
+  /** The way the free camera looks. */
+  private freeDirection(out: THREE.Vector3): THREE.Vector3 {
+    return out.set(Math.sin(this.freeYaw) * Math.cos(this.freePitch), Math.sin(this.freePitch), Math.cos(this.freeYaw) * Math.cos(this.freePitch));
+  }
+  /** Units a second the free camera flies at under the keys: its distance from the nearest hull, within limits. */
+  freeSpeed(fast: boolean): number {
+    return THREE.MathUtils.clamp(this.freeReach * 1.2, 12, 2500) * (fast ? 4 : 1);
+  }
+  /** The free camera's own right and up, as they are on screen. */
+  private freeAxes(): { dir: THREE.Vector3; right: THREE.Vector3; up: THREE.Vector3 } {
+    const dir = this.freeDirection(new THREE.Vector3());
+    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+    const up = new THREE.Vector3().crossVectors(right, dir).normalize();
+    return { dir, right, up };
+  }
+  /**
+   * Keys: forward and back along the view, sideways, and straight up and down. Sideways was the wrong way round
+   * (D flew the camera to its left): the camera looks along +z at yaw 0, where its right is −x, not +x.
+   */
   freeMove(forward: number, strafe: number, up: number, dt: number, fast: boolean): void {
-    const speed = (fast ? 2500 : 600) * dt;
-    const dir = new THREE.Vector3(Math.sin(this.freeYaw) * Math.cos(this.freePitch), Math.sin(this.freePitch), Math.cos(this.freeYaw) * Math.cos(this.freePitch));
-    const right = new THREE.Vector3(Math.cos(this.freeYaw), 0, -Math.sin(this.freeYaw));
-    this.freePos.addScaledVector(dir, forward * speed).addScaledVector(right, strafe * speed).addScaledVector(new THREE.Vector3(0, 1, 0), up * speed);
+    const speed = this.freeSpeed(fast) * dt;
+    const { dir, right } = this.freeAxes();
+    this.freeGoal.addScaledVector(dir, forward * speed).addScaledVector(right, strafe * speed).addScaledVector(new THREE.Vector3(0, 1, 0), up * speed);
+  }
+  /** Mouse wheel: fly along the view, a fifth of the way to the nearest hull for each notch (`notches` < 0 is forward). */
+  freeDolly(notches: number): void {
+    const step = THREE.MathUtils.clamp(this.freeReach * 0.2, 1.5, 4000);
+    this.freeGoal.addScaledVector(this.freeDirection(new THREE.Vector3()), -notches * step);
+  }
+  /** Middle-button drag (pixels): slide across the view, the scene following the pointer. */
+  freeTruck(dx: number, dy: number): void {
+    const { right, up } = this.freeAxes();
+    const k = THREE.MathUtils.clamp(this.freeReach, 6, 20_000) * 0.0016;
+    this.freeGoal.addScaledVector(right, -dx * k).addScaledVector(up, dy * k);
   }
 
   /**
@@ -275,8 +313,9 @@ export class CameraRig {
         break;
       }
       case 'free': {
+        this.freePos.lerp(this.freeGoal, 1 - Math.exp(-Math.max(0, dt) * 10));
         this.desiredPos.copy(this.freePos);
-        const dir = new THREE.Vector3(Math.sin(this.freeYaw) * Math.cos(this.freePitch), Math.sin(this.freePitch), Math.cos(this.freeYaw) * Math.cos(this.freePitch));
+        const dir = this.freeDirection(new THREE.Vector3());
         this.desiredLook.copy(this.freePos).add(dir.multiplyScalar(100));
         instant = true;
         break;
