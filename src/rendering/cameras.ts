@@ -27,12 +27,83 @@ export interface CameraSubject {
   size: number;
 }
 
+/**
+ * How the camera travels during a shot.
+ *
+ *   arc    swings round what it frames
+ *   push   closes in
+ *   pull   draws back
+ *   rise   climbs from below the subject's level to above it
+ *   flyby  stands still in space and turns to watch a hull go past
+ */
+export type CameraMove = 'arc' | 'push' | 'pull' | 'rise' | 'flyby';
+export const CAMERA_MOVES: readonly CameraMove[] = ['arc', 'push', 'pull', 'rise', 'flyby'];
+
+export interface ShotMove {
+  kind: CameraMove;
+  /** Which way round: 1 or −1. */
+  side: 1 | -1;
+  /** Seconds the shot is planned to last: the move is spread over them. */
+  hold: number;
+  /** For a flyby: where the camera stands. */
+  anchor?: THREE.Vector3;
+}
+
 export interface CinematicFrame {
   from: CameraSubject;
   to?: CameraSubject;
   age: number;
   group?: { centre: THREE.Vector3; radius: number; heading: THREE.Vector3 };
+  /** The camera's travel in this shot. Without one the framing only drifts, as it always did. */
+  move?: ShotMove;
+  /** The number of this shot. When it changes the camera cuts to the new shot instead of flying across to it. */
+  shot?: number;
 }
+
+/** How far each move takes the camera over a shot. */
+export const MOVE_TRAVEL = {
+  /** Every move swings a little, so that no shot stands still (radians, whole shot). */
+  swing: THREE.MathUtils.degToRad(14),
+  /** An arc's swing. */
+  arc: THREE.MathUtils.degToRad(56),
+  /**
+   * A push runs from `far` to `near` times the framing's distance and a pull the other way. `near` is as close as
+   * two fighting cruisers can be framed with both still in the picture; the rest of the travel is on the far side.
+   */
+  near: 0.9,
+  far: 1.3,
+  /** A rise starts this far below the framing's elevation and ends this far above it (radians). */
+  riseFrom: THREE.MathUtils.degToRad(-12),
+  riseTo: THREE.MathUtils.degToRad(12),
+} as const;
+
+/**
+ * Carry a framing (camera position and look point) along a move, `age` seconds into it. An arc and a rise pass
+ * through the framing halfway, so the shot is as well framed at its middle as it was when it did not move; a push
+ * ends, and a pull begins, just inside it.
+ */
+export function travel(position: THREE.Vector3, look: THREE.Vector3, move: ShotMove, age: number): void {
+  if (move.kind === 'flyby') return;
+  const p = THREE.MathUtils.clamp(age / Math.max(1, move.hold), 0, 1) - 0.5; // −½ at the start, ½ at the end
+  const offset = position.clone().sub(look);
+  const swing = move.kind === 'arc' ? MOVE_TRAVEL.arc : MOVE_TRAVEL.swing;
+  offset.applyAxisAngle(UP, move.side * swing * p);
+  if (move.kind === 'push' || move.kind === 'pull') {
+    const { near, far } = MOVE_TRAVEL;
+    const t = move.kind === 'push' ? 0.5 - p : 0.5 + p; // far to near for a push, near to far for a pull
+    offset.multiplyScalar(near + (far - near) * t);
+  } else if (move.kind === 'rise') {
+    // Tilt the offset up about the level axis across it.
+    const across = new THREE.Vector3().crossVectors(UP, offset);
+    if (across.lengthSq() > 1e-9) {
+      const lift = MOVE_TRAVEL.riseFrom + (MOVE_TRAVEL.riseTo - MOVE_TRAVEL.riseFrom) * (p + 0.5);
+      // Rotating about `across` by a negative angle raises the camera.
+      offset.applyAxisAngle(across.normalize(), -lift);
+    }
+  }
+  position.copy(look).add(offset);
+}
+const UP = new THREE.Vector3(0, 1, 0);
 
 /**
  * Chase and orbit distances in hull lengths, by hull size (render units). Small hulls keep the roomy framing they
@@ -85,7 +156,10 @@ export class CameraRig {
   private anchorId: string | undefined;
   private readonly relPos = new THREE.Vector3();
   private readonly relLook = new THREE.Vector3();
+  private readonly pivot = new THREE.Vector3();
   private riding = false;
+  /** The shot the cinematic camera last showed, to know a cut when it comes. */
+  private lastShot: number | undefined;
   private readonly tmp = new THREE.Vector3();
 
   constructor(aspect: number) {
@@ -296,7 +370,22 @@ export class CameraRig {
           this.desiredPos.copy(from.position).add(new THREE.Vector3(Math.sin(ang) * r, from.size * cinematicOrbitHeight(from.size) + 3, Math.cos(ang) * r));
           this.desiredLook.copy(from.position);
         }
-        break;
+        const cut = c.shot !== undefined && c.shot !== this.lastShot;
+        this.lastShot = c.shot;
+        if (!c.move) break;
+        // A directed shot. The camera cuts to it, travels with what it frames (so that uneven frames do not slide
+        // the subject about, as they did under the follow camera), and makes its move.
+        if (cut) this.transition = 0;
+        if (c.move.kind === 'flyby' && c.move.anchor) {
+          // Standing still, turning with the hull: nothing to ease, so nothing to lag.
+          this.desiredPos.copy(c.move.anchor);
+          this.desiredLook.copy(from.position);
+          this.riding = false;
+          return this.apply(dt, true);
+        }
+        const pivot = this.pivot.copy(this.desiredLook);
+        travel(this.desiredPos, this.desiredLook, c.move, c.age);
+        return this.apply(dt, false, { id: `shot-${c.shot ?? 0}`, position: pivot, velocity: from.velocity, heading: from.heading, size: from.size }, cut);
       }
       case 'free': {
         this.freePos.lerp(this.freeGoal, 1 - Math.exp(-Math.max(0, dt) * 10));
@@ -328,14 +417,20 @@ export class CameraRig {
    * in the frame whatever the frames do, and the easing is spent on what should be eased (an orbit drag, the hull
    * turning, the move in from another camera).
    */
-  private apply(dt: number, instant: boolean, ride?: CameraSubject): void {
+  private apply(dt: number, instant: boolean, ride?: CameraSubject, cut = false): void {
     const cam = this.camera;
     if (this.transition > 0) this.transition = Math.max(0, this.transition - dt / 0.9);
     // Slower blend while transitioning, snappier otherwise.
     const k = instant && this.transition === 0 ? 1 : 1 - Math.exp(-dt * (this.transition > 0 ? 4 : 9));
     if (ride) {
-      // Coming from another camera or another hull: start from where the camera is, measured from this hull.
-      if (!this.riding || this.anchorId !== ride.id) {
+      if (cut) {
+        // A cut: the camera is at the new shot at once.
+        this.relPos.copy(this.desiredPos).sub(ride.position);
+        this.relLook.copy(this.desiredLook).sub(ride.position);
+        this.riding = true;
+        this.anchorId = ride.id;
+      } else if (!this.riding || this.anchorId !== ride.id) {
+        // Coming from another camera or another hull: start from where the camera is, measured from this hull.
         this.relPos.copy(cam.position).sub(ride.position);
         this.relLook.copy(this.currentLook).sub(ride.position);
         this.riding = true;
