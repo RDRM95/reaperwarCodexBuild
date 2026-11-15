@@ -19,6 +19,19 @@ import { CameraRig, type CameraSubject } from '@/rendering/cameras';
  * Nothing at a steady rate, which is why it only showed when the frame rate fell. A hull half that size: 4.1 % and
  * 5.4 %. A dreadnought, slow and seen from far off: 0.2 % and 0.3 %. The heading was also read at the simulation's
  * twenty steps a second rather than between them, which swung the camera a further 0.07 % round a turning frigate.
+ *
+ * In the running game there was a second cause, there at any frame rate: camera shake. A hull dying near the camera
+ * knocked it by up to 3 units, at any distance. That is nothing from 900 units up and half the distance to a frigate
+ * followed from six. Measured in the Battle of Earth following a Thanix frigate from the side (same battle, same
+ * random sequence; change in the hull's speed across the picture from one frame to the next, % of the frame's width a
+ * second, and the same for its distance):
+ *
+ *   frames                           across, before → after    distance, before → after
+ *   steady 1/60 s                    1.36 → 0.19               36.4 → 3.4
+ *   1/30 s with every third 1/12 s   4.45 → 0.22               33.0 → 2.4
+ *   1/45 s with every seventh 1/8 s  4.05 → 0.12               27.0 → 1.9
+ *
+ * With shake switched off in both: 0.25 → 0.00, 3.37 → 0.09, 3.21 → 0.05 across.
  */
 const V = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
 const SPEED = 15;
@@ -93,6 +106,34 @@ describe('the follow camera rides with its ship', () => {
     const smooth = fly('follow', steady).distance.at(-1)!;
     const laggy = fly('follow', () => 1 / 15).distance.at(-1)!;
     expect(Math.abs(smooth - laggy)).toBeLessThan(1e-6);
+  });
+
+  it('a knock is at most 3 % of the way to what the camera looks at: it was 3 units at any distance', () => {
+    const hull: CameraSubject = { id: 'ship', position: V(0, 0, 0), velocity: V(0, 0, 0), heading: V(0, 0, 1), size: SIZE };
+    const knock = (rig: CameraRig, update: () => void): number => {
+      for (let i = 0; i < 400; i++) update();
+      const rest = rig.camera.position.clone();
+      let worst = 0;
+      for (let i = 0; i < 200; i++) {
+        rig.addShake(1);
+        update();
+        worst = Math.max(worst, rig.camera.position.distanceTo(rest));
+      }
+      return worst;
+    };
+    const close = new CameraRig(16 / 9);
+    close.setMode('follow');
+    const closeKnock = knock(close, () => close.update(1 / 60, { subject: hull, fleetCentre: V(0, 0, 0) }));
+    const reach = close.camera.position.length();
+    expect(reach).toBeLessThan(10); // a frigate is followed from a few units away
+    // Knocks add up while the shake lasts and ease out at nine a second; three units a frame went far past this.
+    expect(closeKnock).toBeLessThan(reach * 0.25);
+    expect(closeKnock).toBeGreaterThan(0); // the camera still shakes
+
+    // The tactical camera, 900 units out, is knocked as it always was: by up to 3 units a frame.
+    const far = new CameraRig(16 / 9);
+    const farKnock = knock(far, () => far.update(1 / 60, { fleetCentre: V(0, 0, 0) }));
+    expect(farKnock).toBeGreaterThan(1.5);
   });
 
   it('a turn is still eased: the camera swings round behind a turning hull rather than snapping', () => {

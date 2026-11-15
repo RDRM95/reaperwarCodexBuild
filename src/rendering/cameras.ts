@@ -312,8 +312,14 @@ export class CameraRig {
       this.currentLook.lerp(this.desiredLook, k);
     }
     if (this.shake > 0) {
-      const s = this.shake * 3;
-      cam.position.add(new THREE.Vector3((Math.random() - 0.5) * s, (Math.random() - 0.5) * s, (Math.random() - 0.5) * s));
+      // Up to 3 units, and never more than 3 % of the way to what the camera is looking at. The knock was 3 units at
+      // any distance: nothing from 900 units up, and half the distance to a frigate followed from six units, so a
+      // hull dying somewhere near threw a close camera about for half a second.
+      const s = this.shake * Math.min(3, cam.position.distanceTo(this.currentLook) * 0.03);
+      const knock = this.tmp.set((Math.random() - 0.5) * s, (Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
+      cam.position.add(knock);
+      // A knock moves the camera and is then eased out, riding or not: it is kept, not redrawn every frame.
+      if (ride) this.relPos.add(knock);
       this.shake = Math.max(0, this.shake - dt * 2.5);
     }
     cam.lookAt(this.currentLook);
