@@ -476,6 +476,7 @@ export class BattleController {
     }
     const alpha = this.paused ? 1 : Math.min(1, this.accumulator / SIM_DT);
     if (probe) simMs = lap();
+    this.view.timeScale = this.paused ? 0 : this.speed;
     this.view.update(dtReal, alpha);
     if (probe) updateMs = lap();
     this.view.render();

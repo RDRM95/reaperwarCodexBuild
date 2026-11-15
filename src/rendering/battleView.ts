@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { Rng } from '@/core/rng';
-import { cinematicPair, cinematicWing } from './director';
+import { cinematicWing, planShot, type ShotKind } from './director';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import type { BattleLike } from '@/simulation/battleLike';
 import { SIM_DT } from '@/simulation/battle';
 import type { BattleEvent, ShipState } from '@/simulation/types';
 import { getFaction } from '@/data/factions';
-import { CameraRig, type CameraSubject, type CinematicFrame } from './cameras';
+import { CameraRig, type CameraSubject, type CinematicFrame, type ShotMove } from './cameras';
 import { EffectsSystem } from './effects';
 import { buildEnvironment, disposeEnvironment, type EnvironmentBuild } from './environment';
 import { KM } from './geometry';
@@ -91,7 +91,12 @@ export class BattleView {
 
   /** Cinematic director state. */
   private directorRng = new Rng(1);
-  private cine: { fromId?: string; toId?: string; age: number; hold: number; wreck?: boolean; members?: string[] } = { age: 0, hold: 0 };
+  private cine: { fromId?: string; toId?: string; age: number; hold: number; wreck?: boolean; members?: string[]; kind?: ShotKind; move?: ShotMove; shot: number } = { age: 0, hold: 0, shot: 0 };
+  /** Battle seconds that pass in one real second (0 while paused), set by the controller: the director plans a
+   * flyby by where a hull will be in real time. */
+  timeScale = 1;
+  /** Shots shown so far; each new one has the next number, which is how the camera knows to cut. */
+  private shotNumber = 0;
   private cineShot = 0;
   private projectileTrack?: { id: number };
   private nextBeamShieldAt = new Map<string, number>();
@@ -198,7 +203,8 @@ export class BattleView {
 
     this.selectedIds.clear();
     this.followId = undefined;
-    this.cine = { age: 0, hold: 0 };
+    this.cine = { age: 0, hold: 0, shot: 0 };
+    this.shotNumber = 0;
     this.cineShot = 0;
     this.directorRng = new Rng(`director-${sim.config.seed}`);
     // Frame the player's fleet.
@@ -617,7 +623,8 @@ export class BattleView {
             const target = e.targetId ? this.sim.getShip(e.targetId) : undefined;
             if (shooter?.role === 'reaper_capital' && weapon?.def.id === 'reaper_capital_beam' &&
                 weapon.beamHit && target?.alive) {
-              this.cine = { fromId: shooter.id, toId: target.id, age: 0, hold: 6 };
+              this.cine = { fromId: shooter.id, toId: target.id, age: 0, hold: 6, kind: 'beam', shot: ++this.shotNumber,
+                move: { kind: 'arc', side: this.directorRng.next() < 0.5 ? 1 : -1, hold: 6 } };
             }
           }
           if(this.rig.mode==='gunnery'&&e.shipId===this.followId){
@@ -687,7 +694,9 @@ export class BattleView {
           }
           if (v && this.rig.mode === 'cinematic' && this.cine.age >= 5 && (e.role === 'dreadnought' || e.role === 'reaper_capital' || e.role === 'carrier')) {
             // Cinematic director jumps to capital ship deaths.
-            this.cine = { fromId: e.shipId, toId: undefined, age: 0, hold: 7, wreck: true };
+            // Drawing back from the wreck as it breaks up.
+            this.cine = { fromId: e.shipId, toId: undefined, age: 0, hold: 7, wreck: true, shot: ++this.shotNumber,
+              move: { kind: 'pull', side: this.directorRng.next() < 0.5 ? 1 : -1, hold: 7 } };
           }
           break;
         }
@@ -783,14 +792,19 @@ export class BattleView {
       const t = this.cine.toId ? sim.getShip(this.cine.toId) : undefined;
       const fs = this.subjectFor(f);
       if (fs) {
-        cinematic = { from: fs, to: this.subjectFor(t && t.alive ? t : undefined), age: this.cine.age };
+        cinematic = { from: fs, to: this.subjectFor(t && t.alive ? t : undefined), age: this.cine.age, move: this.cine.move, shot: this.cine.shot };
         const members = (this.cine.members ?? []).map(id => sim.getShip(id)).filter((s): s is ShipState => !!s && s.alive && !s.escaped);
         if (members.length >= 3) {
+          // Where the hulls are drawn, between simulation steps: taken at the steps, the group's centre moved twenty
+          // times a second and the camera with it.
+          const a = this.alpha;
+          const at = (ship: ShipState): THREE.Vector3 => this.tmpA.set(ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * a,
+            ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * a, ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * a).multiplyScalar(KM);
           const centre = new THREE.Vector3();
-          for (const ship of members) centre.add(this.tmpA.set(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM));
+          for (const ship of members) centre.add(at(ship));
           centre.multiplyScalar(1 / members.length);
           let radius = fs.size;
-          for (const ship of members) radius = Math.max(radius, this.tmpA.set(ship.pos.x, ship.pos.y, ship.pos.z).multiplyScalar(KM).distanceTo(centre) + ship.lengthKm * KM * 0.6);
+          for (const ship of members) radius = Math.max(radius, at(ship).distanceTo(centre) + ship.lengthKm * KM * 0.6);
           cinematic.group = { centre, radius, heading: fs.heading };
         }
       }
@@ -834,11 +848,23 @@ export class BattleView {
   }
 
   private pickCinematicShot(): void {
-    const pair = cinematicPair(this.sim.ships, this.directorRng, this.cine.fromId);
-    if (!pair) return;
-    const wide = this.cineShot++ % 3 === 0 && this.sim.ships.filter(s => s.alive && !s.escaped && s.role !== 'fighter').length >= 24;
-    this.cine = { ...pair, age: 0, hold: 11 + this.directorRng.next() * 7,
-      members: wide ? cinematicWing(this.sim.ships, pair.fromId) : undefined };
+    const plan = planShot(this.sim.ships, this.directorRng, { fromId: this.cine.fromId, move: this.cine.move?.kind, kind: this.cine.kind, count: this.cineShot++ }, this.timeScale);
+    if (!plan) return;
+    const members = plan.wide ? cinematicWing(this.sim.ships, plan.fromId) : [];
+    const move: ShotMove = { kind: plan.move, side: plan.side, hold: plan.hold };
+    if (plan.move === 'flyby') {
+      // The camera stands beside where the hull will be halfway through the shot, a little above its level.
+      const subject = this.subjectFor(this.sim.getShip(plan.fromId));
+      if (subject) {
+        const across = new THREE.Vector3().crossVectors(subject.heading, new THREE.Vector3(0, 1, 0));
+        if (across.lengthSq() < 1e-6) across.set(1, 0, 0);
+        across.normalize();
+        move.anchor = subject.position.clone().addScaledVector(subject.velocity, this.timeScale * plan.hold * 0.5)
+          .addScaledVector(across, plan.side * (subject.size * 1.6 + 2)).add(new THREE.Vector3(0, subject.size * 0.35 + 0.6, 0));
+      } else move.kind = 'arc';
+    }
+    this.cine = { fromId: plan.fromId, toId: plan.toId, age: 0, hold: plan.hold, kind: plan.kind, move, shot: ++this.shotNumber,
+      members: members.length ? members : undefined };
   }
 
   // ------------------------------------------------------------ picking
