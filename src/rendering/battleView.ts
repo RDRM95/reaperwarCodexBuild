@@ -115,6 +115,8 @@ export class BattleView {
   private readonly farColourCache = new Map<string, readonly [number, number, number]>();
   /** Draw calls of the last rendered frame. */
   drawCalls = 0;
+  /** Triangles of the scene pass in the last frame. */
+  triangles = 0;
   /** Called when a staged death reaches its breakup (render units), so the explosion is heard when it is seen. */
   onBreakup?: (role: string, position: THREE.Vector3) => void;
   /** Post-processing chain when bloom is on; the scene renders straight to the canvas otherwise. */
@@ -868,10 +870,12 @@ export class BattleView {
     if (this.bloom) {
       this.bloom.render();
       this.drawCalls = this.bloom.sceneDrawCalls();
+      this.triangles = this.bloom.sceneTriangles();
       return;
     }
     this.renderer.render(this.scene, this.rig.camera);
     this.drawCalls = this.renderer.info.render.calls;
+    this.triangles = this.renderer.info.render.triangles;
   }
 
   dispose(): void {
