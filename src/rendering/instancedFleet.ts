@@ -1,3 +1,4 @@
+import { attitudeOffset } from './attitude';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ShipState } from '@/simulation/types';
@@ -23,7 +24,6 @@ export class InstancedFleet {
   private readonly quat = new THREE.Quaternion();
   private readonly matrix = new THREE.Matrix4();
   private readonly fwd = new THREE.Vector3(0, 0, 1);
-  private readonly bankQuat = new THREE.Quaternion();
   private readonly trailScale = new THREE.Vector3(1,1,1);
   private trailsEnabled = true;
   configure(quality: 'low'|'medium'|'high'|'ultra'): void { this.trailsEnabled = quality !== 'low'; }
@@ -103,7 +103,11 @@ export class InstancedFleet {
     return { capacity, parts };
   }
 
-  begin(ships: readonly ShipState[]): void {
+  /** Battle time of the frame being filled, for hull rolls (see attitude.ts). */
+  private seconds = 0;
+
+  begin(ships: readonly ShipState[], seconds = 0): void {
+    this.seconds = seconds;
     // Hulls only leave the battle; newly launched fighters and reinforcements
     // append to the stable ship array. Batch capacity therefore only needs
     // recounting when a new battle replaces the array or new ships are added.
@@ -154,7 +158,9 @@ export class InstancedFleet {
     const factor=ship.role==='fighter'?.36:ship.role==='frigate'?.12:
       ship.role==='cruiser'?.025:ship.role==='reaper_destroyer'?.015:0;
     const bank=Math.max(-factor,Math.min(factor,turn*3.5));
-    if(bank!==0)this.quat.multiply(this.bankQuat.setFromAxisAngle(this.fwd,bank));
+    // A Reaper holds its own roll and trim: the same ones the detailed model of the same hull is drawn at.
+    const offset=attitudeOffset(ship,this.seconds,bank);
+    if(offset)this.quat.multiply(offset);
     this.matrix.compose(this.pos, this.quat, IDENTITY);
     for (const part of batch.parts) {
       if (lod === 'reduced' && part.detail) continue;
