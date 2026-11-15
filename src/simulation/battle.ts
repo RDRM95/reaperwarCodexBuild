@@ -96,6 +96,8 @@ const DEFAULT_ORDERS: FleetOrders = {
  * randomness comes from a seeded RNG; given identical config the event log
  * is identical, which is what makes replays and canon-vs-AU comparisons valid.
  */
+const NO_SHIPS: readonly ShipState[] = [];
+
 export class BattleSimulation implements AiContext {
   readonly config: BattleConfig;
   readonly rng: Rng;
@@ -513,7 +515,15 @@ export class BattleSimulation implements AiContext {
     return this.observePrimaryBattery(ship, fleet, enemies);
   }
 
-  private observePrimaryBattery(ship: ShipState, fleet: FleetState, enemies: readonly ShipState[]): PrimaryBatteryStatus | undefined {
+  /**
+   * `counts` asks only for how many mounts are ready and how many are reloading, which is all a fleet's readout
+   * shows. A mount that is reloading, overheated, out of ammunition or leaving is not ready whatever it could hit,
+   * so its firing solution is not worked out; the others search through `nearby`, the index of where the ships are
+   * that the simulation's own firing uses. Without it a gun with no target in reach walked every enemy: a hundred
+   * and forty-four dreadnoughts closing on a thousand hulls made that 86 % of the interface's refresh (5.7 of
+   * 6.7 ms under the profiler, four times a second, and again in the simulation thread for every snapshot it sends).
+   */
+  private observePrimaryBattery(ship: ShipState, fleet: FleetState, enemies: readonly ShipState[], counts = false, nearby?: () => WeaponTargetField): PrimaryBatteryStatus | undefined {
     const mounts = ship.weapons.filter(w => isCommandedBattery(ship, w));
     if (!mounts.length) return undefined;
     const shipId = ship.id;
@@ -522,10 +532,6 @@ export class BattleSimulation implements AiContext {
     const volleyRemaining = this.primaryVolleys.remaining(this.time, ship.fleetId);
     let ready = 0, cooling = 0;
     const observations = mounts.map(w => {
-      const origin = weaponWorldOffset(ship, w);
-      const solution = weaponTarget(ship, fleet, w, getShip, enemies);
-      const intended = solution ?? batteryIntent(ship, fleet, getShip, enemies);
-      const targetDistance = intended ? distance(origin, intended.pos) : undefined;
       const cooldown = Math.max(0, w.cooldown / (0.4 + 0.6 * ship.subsystems.weapons));
       let reason: PrimaryBatteryReason = 'ready';
       if (!ship.alive) reason = 'destroyed';
@@ -534,7 +540,12 @@ export class BattleSimulation implements AiContext {
       else if (w.ammo !== undefined && w.ammo <= 0) reason = 'out_of_ammo';
       else if (ship.overheated && w.def.heat > 0) reason = 'overheated';
       else if (cooldown > 0) { reason = 'cooling'; cooling++; }
-      else if (!solution) {
+      if (counts && reason !== 'ready') return { reason, cooldown, range: w.def.range, distance: undefined, targetId: undefined };
+      const origin = weaponWorldOffset(ship, w);
+      const solution = weaponTarget(ship, fleet, w, getShip, enemies, nearby?.());
+      const intended = solution ?? (counts ? undefined : batteryIntent(ship, fleet, getShip, enemies));
+      const targetDistance = intended ? distance(origin, intended.pos) : undefined;
+      if (reason === 'ready' && !solution) {
         if (!intended) reason = 'no_target';
         else if (targetDistance! > w.def.range) reason = 'out_of_range';
         else reason = 'aligning';
@@ -565,12 +576,16 @@ export class BattleSimulation implements AiContext {
     const result: FleetBatteryStatus = { fleetId, ready: 0, cooling: 0, total: 0,
       volleyRemaining: this.primaryVolleys.remaining(this.time, fleetId), held: fleet?.orders.primaryFire === 'hold' };
     if (!fleet) return result;
-    // One shared enemy snapshot per fleet read, without a persistent cache:
-    // paused commands and inspection can change state without advancing a tick.
-    const enemies = this.ships.filter(s => s.side !== fleet.spec.side && s.alive && !s.escaped);
+    // The index the last step fired from: its snapshot allows for a step's travel, the guns check each hull where it
+    // is now, and nothing moves between steps, so a search through it finds what that step's firing would. Before
+    // the first step there is none, and one of where the ships are now is built when the first gun needs it.
+    let field = this.weaponTargetField;
+    const nearby = () => (field ??= new WeaponTargetField(this.ships, 0));
     for (const ship of this.ships) {
-      if (ship.fleetId !== fleetId || !ship.alive || ship.escaped) continue;
-      const status = this.observePrimaryBattery(ship, fleet, enemies);
+      // Only an organic dreadnought carries a commanded battery (isCommandedBattery).
+      if (ship.fleetId !== fleetId || ship.role !== 'dreadnought' || !ship.alive || ship.escaped) continue;
+      // The search goes through the index, so the list of every enemy is not drawn up.
+      const status = this.observePrimaryBattery(ship, fleet, NO_SHIPS, true, nearby);
       if (!status) continue;
       result.ready += status.ready;
       result.cooling += status.cooling;

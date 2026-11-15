@@ -2,9 +2,48 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 13 Nov 2026, 19:15 UTC — Reaper capital barriers and conventional fire
+## State on 15 Nov 2026, 15:30 UTC — the owner's requests of 15 Nov (cameras, interface, frame rate)
 
 Read this section first. Everything below it is older.
+
+**Rules in force, unchanged:** the sandbox is retired (owner's hard rule of 12 Nov); private reference imagery is never committed; software rendering is not hardware proof.
+
+**Merged since the section below:** #85 `6c54d0b` (Reaper capital barriers and conventional fire). The owner merged #27 as `5a42c21`. On `reaperwar`, the after-action report fix went to `main` as `55f10b8` (its PR #4); its launcher was not republished (needs a version bump to 0.12.6).
+
+**Owner's requests of 15 Nov, in their words:** more work on the first-person modes, effects and quality; a unique HUD and UI for each faction; a cinematic camera that moves; a free camera movable in any direction with the mouse; remove the text cursor that blinks on a click; remove the REF button at the side of the screen; a theatre mode; an intelligent auto-director camera; the Reaper body may be misaligned, upside down or too small for its legs; any optimisation for Ultra settings ("this is so good i could use it for youtube content"). Then: Reapers all tilt alike and look copied, vary it; fleets should engage like a real fleet, battlegroups may try different tactics, nothing that costs action or ruins what exists; **priority: higher frame rate**. Then: the follow-ship camera judders with the ships' movement, worse at low frame rates.
+
+**Done and merged (all deployed with the base):**
+
+| PR | Commit | What |
+|---|---|---|
+| #87 | `a5142ba` | No text caret on click; the REF tab is gone (the inspector still opens with Alt+R) |
+| #88 | `cd82d66` | Each Reaper holds its own roll and trim (`src/rendering/attitude.ts`) |
+| #89 | `ee58e7f` | In-game benchmark: Settings → Graphics → Benchmark, or `?benchmark=standard` / `?benchmark=large`; reports frame rate, lows, and main-thread work by part, as text to copy |
+| #90 | `77eda29` | Every battle is batched, not only those of 150 ships and more (Battle of Earth 356 → 110 draw calls) |
+| #91 | `b933d49` | Follow camera holds its ship steady at uneven frame rates; camera shake bounded by distance |
+| #92 | `c021b8e` | The mouse reaches the battle (it never did in this build); free camera flown by mouse; theatre mode (T) |
+
+**Follow camera (#91):** two causes. The camera eased its own position toward a point beside a moving hull, so its lag changed with frame length; it now rides with the hull and eases only its place relative to it. And camera shake was 3 units at any distance (half the way to a frigate followed from six units); it is now at most 3 % of the way to what the camera looks at. In the running game, following a frigate from the side, frame-to-frame change in the hull's speed across the picture: 1.36 → 0.19 at a steady 60, 4.45 → 0.22 and 4.05 → 0.12 with hitching frames. Tests: `tests/follow-camera-steady.test.ts`.
+
+**In this change (interface refresh):** in a battle of two thousand ships the interface's four-times-a-second refresh was the largest main-thread cost after the simulation. Most of it was the "guns ready" readout, which worked out a firing solution for every commanded gun by walking every enemy. It now skips guns that cannot be ready and searches the index the simulation's own firing uses; the Reaper assessment is one walk of the ships instead of twelve. Figures are identical (`tests/battery-readout.test.ts`). The refresh at 1,881 ships: 6.1 → 0.9 ms; at 2,132 ships with the battle stepping: 8.5 → 1.9 ms; small battles unchanged at 0.5 to 0.8 ms (software-rendered machine; the ratio is what carries over).
+
+**Found, not yet done:**
+
+- Reaper capital model: orientation is sound (limbs forward, mantle aft, limbs hang below). The body is too small for the legs, as the owner suspected: measured on the 2 km hull, the body is 1,060 m long and 278 m wide, the limbs 1,343 m long and spread over 725 m. Being reworked (see below).
+- In the Reaper intelligence panel "THREAT: ELEVATED" overlaps the line beside it.
+- The simulation runs on the drawing thread unless Settings → Simulation thread is set to Worker (the local-hardware profile sets it). On the drawing thread every step lands in one frame in three at 60 frames a second, which is itself uneven frame time.
+
+**Found by #92, worth knowing:** in this build the interface layer took every pointer event over the battle (`#ui > *` outranked `.hud { pointer-events: none }`), so the camera could not be turned or zoomed with the mouse and a ship could not be clicked, from the first commit until #92. `reaperwar` fixed the same thing on 6 Nov. `e2e/mouse-camera.spec.ts` now holds it.
+
+**In progress at the time of writing, on their own branches:** the moving cinematic camera and the director (`feat/moving-director-20261115`: every shot has a camera move, shots change by a cut, the director prefers a kill about to happen, then a Reaper's beam, then capitals in a fight); the Reaper capital's proportions (`feat/reaper-body-20261115`: mantle half as broad again and a third taller, limbs 0.7 of their length, the Reaper view moved onto the brow of the hood).
+
+**Still to do from the 15 Nov requests:** first-person effects and quality beyond the Reaper view; a HUD for each faction; battlegroup tactics (measure with `scripts/combat-activity.ts`; nothing that lowers the share of hulls firing).
+
+**Needs the owner:** a benchmark result from the RTX 5090 (nothing here can measure it: the folder list for the owner's computer has come back empty every time it was asked); the beam-armour-per-tick decision below; whether to bump `reaperwar` to 0.12.6.
+
+## State on 13 Nov 2026, 19:15 UTC — Reaper capital barriers and conventional fire
+
+Everything below this line is older than the section above.
 
 **Rules in force, unchanged:** the sandbox (`RDRM95/reaper-war-sandbox`) is retired by the owner's hard rule of 12 Nov; no work there. Private reference imagery is never committed. Software rendering is not hardware proof.
 

@@ -539,8 +539,8 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     const s = sim();
     syncKillScores();
     clock.replaceChildren(fmtTime(s.time), el('small', {}, `${ctrl.paused ? 'PAUSED' : `${ctrl.speed}× SPEED`} · ${ctrl.isReplay ? 'REPLAY · ' : ''}SEED ${s.config.seed} · ${ctrl.view.drawCalls} DRAWS`));
-    const a = s.ships.filter((x) => x.side === 'A' && x.alive && !x.escaped && x.role !== 'fighter').length;
-    const b = s.ships.filter((x) => x.side === 'B' && x.alive && !x.escaped && x.role !== 'fighter').length;
+    let a = 0, b = 0;
+    for (const x of s.ships) if (x.alive && !x.escaped && x.role !== 'fighter') { if (x.side === 'A') a++; else b++; }
     statusLine.textContent = `ALLIED ${a} · HOSTILE ${b} · ${CAMERA_MODE_LABELS[ctrl.view.rig.mode].toUpperCase()} CAM`;
     renderControls();
     if (ctrl.hudLevel === 'full') {
