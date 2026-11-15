@@ -317,12 +317,15 @@ export class BattleView {
     const cam = this.rig.camera.position;
     const lodOn = this.settings.lod !== false;
     const reach = detailReach(this.settings.quality);
-    const useInstancing = sim.ships.length >= 150;
+    // Every battle is batched: a hull is drawn as its own detailed model only near the camera or when it is
+    // selected, followed or in a cinematic shot; the rest are copies in one draw call per part of each class.
+    // Battles under 150 ships used to draw every hull as its own model wherever it was: the Battle of Earth
+    // (71 hulls) took 356 draw calls where the Final Battle (278) took 134.
     let far = 0;
     let articulatedHeroes = 0;
     let nearVisuals = 0;
     this.lodCounts = { full: 0, reduced: 0, point: 0 };
-    if (useInstancing) this.instances.begin(sim.ships, sim.time);
+    this.instances.begin(sim.ships, sim.time);
     this.emitterLights.begin();
     this.ensureFarCapacity(sim.ships.length);
     this.rig.camera.updateMatrixWorld();
@@ -348,7 +351,7 @@ export class BattleView {
       const priority = this.selectedIds.has(ship.id) || this.followId === ship.id ||
         this.cine.fromId === ship.id || this.cine.toId === ship.id ||
         (this.cine.members?.includes(ship.id) ?? false);
-      const level = useInstancing && priority ? 'full' : lodLevelSquared(distanceSquared, lengthUnits, ship.role, lodOn, reach);
+      const level = priority ? 'full' : lodLevelSquared(distanceSquared, lengthUnits, ship.role, lodOn, reach);
       this.lodCounts[level]++;
       this.sphere.center.set(px, py, pz);
       this.sphere.radius = lengthUnits * .8 + 2;
@@ -374,12 +377,12 @@ export class BattleView {
         }
         continue;
       }
-      if (useInstancing && !onScreen && !priority) {
+      if (!onScreen && !priority) {
         if (previous) previous.built.group.visible = false;
         continue;
       }
       const nearbyRange = Math.max(75, lengthUnits * 22);
-      const hero = !useInstancing || priority ||
+      const hero = priority ||
         (distanceSquared <= nearbyRange * nearbyRange && nearVisuals < this.MAX_HERO_VISUALS);
       if (!hero) {
         if (previous) previous.built.group.visible = false;
@@ -435,7 +438,7 @@ export class BattleView {
         }
       }
     }
-    if (useInstancing) this.instances.end();
+    this.instances.end();
     this.emitterLights.end();
     const farGeom = this.farPoints.geometry;
     farGeom.setDrawRange(0, far);
