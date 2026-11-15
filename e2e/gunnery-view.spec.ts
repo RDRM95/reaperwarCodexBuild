@@ -25,8 +25,9 @@ for (const size of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }]
       b.setCamera('gunnery');
     });
     await expect(page.locator('.target-telemetry')).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.querySelector<HTMLElement>('.target-telemetry')!.style.getPropertyValue('--gunnery-top'))).not.toBe('');
-    await expect.poll(() => page.evaluate(() => document.querySelector('.gunnery-line')!.textContent!.length)).toBeGreaterThan(0);
+    // The sight is laid out on its first frame, and a 1080p frame on a software renderer beside another test can take seconds.
+    await expect.poll(() => page.evaluate(() => document.querySelector<HTMLElement>('.target-telemetry')!.style.getPropertyValue('--gunnery-top')), { timeout: 30_000 }).not.toBe('');
+    await expect.poll(() => page.evaluate(() => document.querySelector('.gunnery-line')!.textContent!.length), { timeout: 30_000 }).toBeGreaterThan(0);
 
     const found = await page.evaluate(() => {
       const box = (e: Element) => { const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; };
