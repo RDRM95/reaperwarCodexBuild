@@ -11,6 +11,9 @@ import { expect, test } from '@playwright/test';
 declare global { interface Window { reaperwar: any } } // eslint-disable-line @typescript-eslint/no-explicit-any
 
 test('theatre mode shows the battle alone, its controls come and go with the mouse, and leaving puts everything back', async ({ page }) => {
+  // A long test: it waits out the control strip's rest, the bars' slide and three glides of the free camera, all of
+  // which take as long as the frames do. It runs in 70 to 100 s here and passed 120 s on one slow CI runner.
+  test.slow();
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.goto('/');
   await page.click('[data-menu="quick-battle"]');
