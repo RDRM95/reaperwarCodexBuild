@@ -50,6 +50,7 @@ test('the interface is the console of the fleet in command, and changes with the
   await page.evaluate(() => {
     const app = window.reaperwar, config = app.battle.config;
     config.perspectiveSide = config.perspectiveSide === 'A' ? 'B' : 'A';
+    for (const fleet of config.fleets) fleet.playerControlled = fleet.side === config.perspectiveSide;
     app.startBattle(config);
   });
   await expect(page.locator('.hud[data-faction="reaper"]')).toBeVisible();

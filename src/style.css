@@ -514,7 +514,6 @@ body.theatre-idle, body.theatre-idle * { cursor: none !important; }
 .hud[data-faction='geth'] .panel { border-style: dashed; backdrop-filter: none; }
 .hud[data-faction='geth'] .panel::before { background: var(--blue); opacity: 0.35; height: 1px; }
 .hud[data-faction='geth'] .panel-title { letter-spacing: 0.5em; font-size: 10px; }
-.hud[data-faction='geth'] .btn { letter-spacing: 0.22em; }
 /* Cerberus: black and white with a hazard stripe. */
 .hud[data-faction='cerberus'] .panel::before { height: 4px; opacity: 1; background: repeating-linear-gradient(-45deg, var(--blue) 0 8px, #0e0c0a 8px 16px); }
 .hud[data-faction='cerberus'] .panel-title { color: var(--cyan); letter-spacing: 0.34em; }
