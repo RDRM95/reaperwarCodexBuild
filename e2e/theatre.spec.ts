@@ -69,17 +69,15 @@ test('theatre mode shows the battle alone, its controls come and go with the mou
     const d = c.getWorldDirection(c.position.clone());
     return { x: c.position.x, y: c.position.y, z: c.position.z, dx: d.x, dy: d.y, dz: d.z };
   });
-  /** The camera once it has come to rest (it glides to where it is sent). */
+  /** The camera once it has come to rest: it glides to where it is sent, and frames are slow on a software renderer. */
   const atRest = async () => {
-    let last = await camera();
-    await expect.poll(async () => {
-      await page.waitForTimeout(400);
-      const now = await camera();
-      const moved = Math.hypot(now.x - last.x, now.y - last.y, now.z - last.z);
-      last = now;
-      return moved;
-    }, { timeout: 30_000 }).toBeLessThan(0.01);
-    return last;
+    await expect.poll(() => page.evaluate(() => {
+      const r = window.reaperwar.battle.view.rig;
+      return r.freePos.distanceTo(r.freeGoal) as number;
+    }), { timeout: 60_000 }).toBeLessThan(0.001);
+    // One more frame, so that the camera itself is where the rig has put it.
+    await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+    return camera();
   };
   const start = await atRest();
   await page.mouse.move(640, 300);
