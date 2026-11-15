@@ -18,6 +18,7 @@ import { engineGlowSize, farPointBrightness, muzzleFlashSize } from './visualWei
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
+import { attitudeOffset } from './attitude';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
 import { collectBreakupPieces } from './breakup';
 import { deathLight, deathList, deathPlan, isStagedDeath, type DeathPlan } from './deathSequence';
@@ -278,7 +279,9 @@ export class BattleView {
     const factor=s.role==='fighter'?.36:s.role==='frigate'?.12:
       s.role==='cruiser'?.025:s.role==='reaper_destroyer'?.015:0;
     const bank=THREE.MathUtils.clamp(turn*3.5+lateral*factor*.12,-factor,factor);
-    if(bank)g.rotateZ(bank);
+    // A Reaper holds its own roll and trim (attitude.ts): the same ones its batched copy is drawn at.
+    const offset=attitudeOffset(s,this.sim.time,bank);
+    if(offset)g.quaternion.multiply(offset);
   }
 
   // ------------------------------------------------------------- per frame
@@ -317,7 +320,7 @@ export class BattleView {
     let articulatedHeroes = 0;
     let nearVisuals = 0;
     this.lodCounts = { full: 0, reduced: 0, point: 0 };
-    if (useInstancing) this.instances.begin(sim.ships);
+    if (useInstancing) this.instances.begin(sim.ships, sim.time);
     this.emitterLights.begin();
     this.ensureFarCapacity(sim.ships.length);
     this.rig.camera.updateMatrixWorld();
