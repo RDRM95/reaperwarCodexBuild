@@ -281,7 +281,8 @@ export class BattleSimulation implements AiContext {
     cls.hardpoints.forEach((hp, hpIndex) => {
       const base = getWeapon(hp.weaponId);
       const nominal = applyRulesToWeapon(base, cls.faction, cls, rules, WEAPONS);
-      const def: EffectiveWeapon = { ...nominal, range: nominal.range * S, projectileSpeed: nominal.projectileSpeed * S };
+      const def: EffectiveWeapon = { ...nominal, range: nominal.range * S, projectileSpeed: nominal.projectileSpeed * S,
+        ...(nominal.blast ? { blast: { ...nominal.blast, radius: nominal.blast.radius * S } } : {}) };
       for (let m = 0; m < hp.count; m++) {
         weapons.push({
           index: wi++,
@@ -1160,6 +1161,40 @@ export class BattleSimulation implements AiContext {
     if (out.barriersCollapsed) this.emit({ t: this.time, type: 'barriers_down', shipId: target.id });
     if (out.subsystem) this.emit({ t: this.time, type: 'subsystem_disabled', shipId: target.id, subsystem: out.subsystem.name, level: out.subsystem.level });
     if (out.destroyed) this.destroyShip(target, shooter);
+    if (weapon.blast && weapon.damage > 0) this.detonate(shooter, target, weapon, damage / weapon.damage, pos);
+  }
+
+  /**
+   * A round with a `blast` has struck `struck` at `pos`. Every other enemy hull whose plating is within the blast
+   * radius of that point takes the blast's damage, falling with the square of the distance to nothing at the edge,
+   * and loses armour in the same proportion; the hull struck, if it is still there, loses the full share of its
+   * armour. `share` is how much of the round arrived (a glancing hit delivers part of it). Only the enemy is
+   * caught: the round is fired into their formation, and a fleet does not fire it where its own ships are.
+   * Hulls are taken in ship order, so a seeded battle resolves the same way every time.
+   */
+  private detonate(shooter: ShipState, struck: ShipState, weapon: EffectiveWeapon, share: number, pos: Vec3): void {
+    const blast = weapon.blast!;
+    if (struck.alive) struck.armour = Math.max(0, struck.armour * (1 - blast.armourShred * share));
+    const caught: { ship: ShipState; index: number; gap: number }[] = [];
+    const consider = (ship: ShipState, index: number) => {
+      if (ship === struck || !ship.alive || ship.escaped) return;
+      const gap = Math.max(0, distance(pos, ship.pos) - ship.radiusKm);
+      if (gap < blast.radius) caught.push({ ship, index, gap });
+    };
+    // The index is by hull centres; the largest hull is thirty kilometres long.
+    if (this.weaponTargetField) this.weaponTargetField.forRange(shooter.side, pos, blast.radius + 16, consider);
+    else this.enemiesOf(shooter.side).forEach(consider);
+    caught.sort((a, b) => a.index - b.index);
+    let destroyed = 0;
+    for (const { ship, gap } of caught) {
+      const reach = (1 - gap / blast.radius) ** 2 * share;
+      ship.armour = Math.max(0, ship.armour * (1 - blast.armourShred * reach));
+      const out = applyDamage(ship, blast.damage * reach, weapon, this.rng, this.time);
+      shooter.stats.damageDealt += out.hullDamage + out.barrierDamage;
+      if (out.barriersCollapsed) this.emit({ t: this.time, type: 'barriers_down', shipId: ship.id });
+      if (out.destroyed) { destroyed++; this.destroyShip(ship, shooter); }
+    }
+    this.emit({ t: this.time, type: 'blast', shipId: shooter.id, weaponId: weapon.id, pos: clone(pos), radius: blast.radius, caught: caught.length, destroyed });
   }
 
   // ------------------------------------------------------------ projectiles

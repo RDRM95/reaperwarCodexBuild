@@ -58,6 +58,12 @@ export interface WeaponDef {
   magazine?: number;
   /** Point-defence lasers fire in heat-limited bursts: `shots` before a `recovery`-second pause. */
   burst?: { shots: number; recovery: number };
+  /**
+   * A round that gives up its energy over a volume when it strikes: every enemy hull within `radius` km of the
+   * impact takes `damage` at the centre, falling with the square of the distance to nothing at the edge, and loses
+   * `armourShred` of its armour at the centre, falling the same way. The hull struck takes the round itself.
+   */
+  blast?: { radius: number; damage: number; armourShred: number };
   /** Whether this weapon can target fighters/missiles. */
   antiSmall: boolean;
   /** Prefer firing at larger targets. */

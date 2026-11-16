@@ -14,7 +14,7 @@ import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
 import { InstancedFleet } from './instancedFleet';
 import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
 import { detailReach } from '@/core/hardwareProfile';
-import { engineGlowSize, farPointBrightness, muzzleFlashSize } from './visualWeight';
+import { engineGlowSize, farPointBrightness, muzzleFlashSize, tracerColour } from './visualWeight';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -655,6 +655,11 @@ export class BattleView {
           };
           const pov = this.rig.mode === 'gunnery' && ship.id === this.followId;
           this.effects.muzzleFlash(pose.position, pose.direction, muzzleFlashSize(w.def.damage, pov), ship.faction === 'reaper');
+          if (w.def.blast) {
+            // A gun whose round carries a blast: the discharge is in the round's colour and is felt.
+            this.effects.lanceDischarge(pose.position, pose.direction, muzzleFlashSize(w.def.damage, pov), tracerColour(w.def));
+            this.rig.addShake(pov ? 0.22 : 0.07);
+          }
           if (big && this.rig.mode === 'projectile') this.projectileTrack = { id: this.sim.projectiles[this.sim.projectiles.length - 1]?.id ?? 0 };
           break;
         }
@@ -664,6 +669,14 @@ export class BattleView {
           const pos = new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM);
           if (v && e.barrierDamage > 3) this.effects.barriers.hit(t!.id, t!.classId, v.built.group, pos, e.barrierDamage);
           this.effects.impact(pos, e.barrierDamage, e.hullDamage, v ? v.built.lengthUnits * 0.55 : 2, () => (v && !v.removed ? v.built.group.position : undefined), e.damageType, e.glancing);
+          break;
+        }
+        case 'blast': {
+          const shooter = this.sim.getShip(e.shipId);
+          const weapon = shooter?.weapons.find((w) => w.def.id === e.weaponId)?.def;
+          const from = shooter ? new THREE.Vector3(e.pos.x - shooter.pos.x, e.pos.y - shooter.pos.y, e.pos.z - shooter.pos.z) : new THREE.Vector3(0, 0, 1);
+          this.effects.kineticBlast(new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM), e.radius * KM, tracerColour(weapon), from);
+          this.rig.addShake(0.16);
           break;
         }
         case 'hades_detonation': {

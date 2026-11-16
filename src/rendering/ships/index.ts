@@ -11,6 +11,7 @@ import { buildHarbinger, buildReaperAscendant, buildReaperCapital, buildReaperDe
 import { buildReaperOculus } from './oculus';
 import { buildSalarianCruiser, buildSalarianDreadnought, buildSalarianFighter, buildStgFrigate } from './salarian';
 import { buildTurianCruiser, buildTurianDreadnought, buildTurianFighter, buildTurianFrigate } from './turian';
+import { buildAllianceTitan, buildTurianImperator } from './hyperDreadnought';
 import type { BuiltShip } from './types';
 import { buildChaosDesolator, buildChaosMurder, buildCovenantCas, buildCovenantCcs, buildImperiumLunar, buildImperiumRetribution, buildUnscInfinity, buildUnscMarathon } from './crossover';
 import { buildPastCycleCruiser, buildPastCycleDreadnought, buildPlayerCivCruiser, buildPlayerCivDreadnought, buildProtheanCruiser, buildProtheanDreadnought, buildSkynetHarvester, buildSkynetHunter } from './auHumanity';
@@ -29,12 +30,14 @@ const BUILDERS: Record<string, () => BuiltShip> = {
   alliance_omaha: buildAllianceOmaha,
   alliance_valkyrie: buildAllianceValkyrie,
   alliance_aegis_command: buildAllianceAegis,
+  alliance_titan: buildAllianceTitan,
   alliance_carrier: buildAllianceCarrier,
   alliance_cruiser: buildAllianceCruiser,
   alliance_frigate: () => buildAllianceFrigate(false),
   alliance_frigate_thanix: () => buildAllianceFrigate(true),
   alliance_fighter: buildAllianceFighter,
   turian_dreadnought: buildTurianDreadnought,
+  turian_imperator: buildTurianImperator,
   turian_cruiser: buildTurianCruiser,
   turian_frigate: buildTurianFrigate,
   turian_fighter: buildTurianFighter,

@@ -93,3 +93,19 @@ export function explosionSize(lengthUnits: number): number {
 export function explosionSmoke(size: number): number {
   return size > 4 ? 10 : size < 1 ? 1 : 4;
 }
+
+/** The colour of an ordinary slug in flight: amber, as tracer burns. */
+export const TRACER_AMBER = 0xffd080;
+
+/**
+ * The colour a round is drawn in. A round with a blast is thrown several times faster than any other slug, fast
+ * enough that what trails it is not burning tracer but ionised gas: it is drawn from blue to violet with its speed
+ * (kilometres a second on the catalogue's scale), the KRONOS Lance at the violet end. Every other round is amber.
+ */
+export function tracerColour(weapon?: { blast?: unknown; projectileSpeed?: number }): number {
+  if (!weapon?.blast) return TRACER_AMBER;
+  const fast = Math.min(1, Math.max(0, ((weapon.projectileSpeed ?? 0) / 0.4 - 100) / 50));
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * fast);
+  // From 0x8fb8ff (a hundred kilometres a second) to 0xc79bff (a hundred and fifty).
+  return (mix(0x8f, 0xc7) << 16) | (mix(0xb8, 0x9b) << 8) | 0xff;
+}
