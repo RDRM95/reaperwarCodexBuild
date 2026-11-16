@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { getShipTemplate, hasModel, instantiateShip } from '@/rendering/ships';
 
 const entries = [
-  ['unsc_marathon', 11.70], ['unsc_infinity', 56.94], ['covenant_ccs', 17.82], ['covenant_cas', 53.47],
+  ['unsc_marathon', 11.92], ['unsc_infinity', 56.94], ['covenant_ccs', 17.82], ['covenant_cas', 53.47],
   ['imperium_lunar', 50], ['imperium_retribution', 80], ['chaos_murder', 50], ['chaos_desolator', 75],
 ] as const;
 
