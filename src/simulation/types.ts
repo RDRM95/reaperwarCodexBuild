@@ -291,6 +291,8 @@ export type BattleEvent =
   | { t: number; type: 'ship_deployed'; shipId: string; classId: string; faction: FactionId; side: Side; name: string }
   | { t: number; type: 'fleet_arrived'; fleetId: string }
   | { t: number; type: 'hades_detonation'; shipId: string; targetId: string; weaponId: string; internalDamage: number; payloadDamage: number; pos: Vec3 }
+  /** A round with a blast went off at `pos`: `caught` enemy hulls besides the one struck were inside `radius`, `destroyed` of them were destroyed. */
+  | { t: number; type: 'blast'; shipId: string; weaponId: string; pos: Vec3; radius: number; caught: number; destroyed: number }
   | { t: number; type: 'primary_volley_issued'; fleetId: string; side: Side }
   | { t: number; type: 'weapon_fired'; shipId: string; weaponId: string; targetId: string; weaponIndex: number; kind: string }
   | { t: number; type: 'projectile_impact'; shipId: string; targetId: string; damage: number; damageType: DamageType; barrierDamage: number; hullDamage: number; pos: Vec3; glancing?: boolean }

@@ -1,4 +1,4 @@
-import { explosionSize, explosionSmoke, impactSize, impactSparks, pointDefenceBrightness, tracerShown, tracerSize } from './visualWeight';
+import { explosionSize, explosionSmoke, impactSize, impactSparks, pointDefenceBrightness, tracerColour, tracerShown, tracerSize } from './visualWeight';
 import * as THREE from 'three';
 import { Rng } from '@/core/rng';
 import { KM } from './geometry';
@@ -77,7 +77,7 @@ export class EffectsSystem {
   private readonly sparkTextures = [this.flashTex, this.fireTex, this.smokeTex, this.blueTex, this.redTex];
   private readonly sparkBatches = [...this.sparkTextures.map(texture => new SparkBatch(texture)), new SparkBatch(this.blueTex, false)];
   private readonly sparkColour = new THREE.Color();
-  private nuclearRings: { mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; life: number; size: number }[] = [];
+  private nuclearRings: { mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; life: number; size: number; span: number }[] = [];
   private ringPool: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
   private readonly nuclearRingGeometry = new THREE.TorusGeometry(1, 0.025, 5, 64);
   get nuclearRingCount(): number { return this.nuclearRings.length; }
@@ -85,6 +85,7 @@ export class EffectsSystem {
   // Tracers (instanced).
   private readonly tracerMax = 1024;
   private readonly tracerMesh: THREE.InstancedMesh;
+  private readonly tracerColour = new THREE.Color();
   private readonly tracerDummy = new THREE.Object3D();
 
   // Beams.
@@ -119,7 +120,8 @@ export class EffectsSystem {
   constructor() {
     this.beamGeometry.rotateX(Math.PI / 2);
     const tracerGeo = new THREE.BoxGeometry(0.1, 0.1, 1);
-    const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffd080, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+    // White, tinted for each round: amber for a slug, blue to violet for a round with a blast (see tracerColour).
+    const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
     this.tracerMesh = new THREE.InstancedMesh(tracerGeo, tracerMat, this.tracerMax);
     this.tracerMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.tracerMesh.frustumCulled = false;
@@ -209,8 +211,9 @@ export class EffectsSystem {
       const mesh = this.ringPool.pop() ?? new THREE.Mesh(this.nuclearRingGeometry, new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
       mesh.visible = true; mesh.position.copy(position); mesh.scale.setScalar(size * 0.4);
       mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), heading.clone().normalize());
-      this.group.add(mesh); this.nuclearRings.push({ mesh, life: 0.85, size });
-      this.flashLight.position.copy(position); this.flashLight.intensity = Math.max(this.flashLight.intensity, size * 6); this.flashLightLife = 0.2;
+      mesh.material.color.setHex(0xcfeaff);
+      this.group.add(mesh); this.nuclearRings.push({ mesh, life: 0.85, size, span: 0.85 });
+      this.flashLight.position.copy(position); this.flashLight.color.setHex(0xffb070); this.flashLight.intensity = Math.max(this.flashLight.intensity, size * 6); this.flashLightLife = 0.2;
     }
     for (let i = 0; i < (payloadDamage >= 200 ? 10 : 3); i++) {
       const jet = new THREE.Vector3(this.rng.gaussian(), this.rng.gaussian(), this.rng.gaussian()).normalize();
@@ -218,6 +221,48 @@ export class EffectsSystem {
       this.spark(origin, jet.multiplyScalar(size * 1.8).add(velocity), 1.0 + this.rng.next() * 1.4, size * 0.22, size * 0.04, this.fireTex, 0xffd6a0);
       if (i < 3) this.spark(origin, velocity.clone().add(new THREE.Vector3(0, size * 0.18, 0)), 2.0 + this.rng.next(), size * 0.4, size * 1.6, this.smokeTex, 0x8f99a6);
     }
+  }
+
+  /** The discharge of a gun whose round carries a blast: a flash in the round's own colour and a ring thrown back off the muzzle. */
+  lanceDischarge(position: THREE.Vector3, direction: THREE.Vector3, size: number, colour: number): void {
+    this.spark(position, direction.clone().multiplyScalar(size * 3), 0.22, size * 0.9, size * 2.6, this.flashTex, 0xffffff);
+    this.spark(position, direction.clone().multiplyScalar(size * 1.2), 0.5, size * 0.6, size * 3.4, this.blueTex, colour);
+    if (this.nuclearRings.length < 12) this.shockRing(position, direction, size * 0.5, 0.6, colour);
+    this.flashLight.position.copy(position); this.flashLight.color.setHex(colour); this.flashLight.intensity = Math.max(this.flashLight.intensity, 40 * size); this.flashLightLife = 0.5;
+  }
+
+  /**
+   * A round with a blast going off: `radius` is the blast's reach in render units. A white core, a ball of the
+   * round's colour that swells to the blast's edge, two shock rings at right angles that run out to it, and
+   * incandescent fragments. Drawn from the shared spark batches and the ring pool, so it costs no draw call.
+   */
+  kineticBlast(position: THREE.Vector3, radius: number, colour: number, travel = new THREE.Vector3(0, 0, 1)): void {
+    // The flash: for a quarter of a second a white ball wider than the blast itself, then the fireball.
+    this.addSpark(this.sparkBatches.length - 1, position, new THREE.Vector3(), 0.28, radius * 1.6, radius * 1.2, radius * 2.6, 0xffffff);
+    this.addSpark(this.sparkBatches.length - 1, position, new THREE.Vector3(), 0.7, radius * 0.8, radius * 0.5, radius * 1.5, 0xffffff);
+    this.spark(position, new THREE.Vector3(), 1.3, radius * 0.9, radius * 2.4, this.blueTex, colour);
+    this.spark(position, new THREE.Vector3(), 2.6, radius * 0.7, radius * 2.8, this.blueTex, colour);
+    this.spark(position, new THREE.Vector3(), 4.0, radius * 0.5, radius * 2.2, this.smokeTex, 0x6a5a8c);
+    const axis = travel.clone().normalize();
+    const across = new THREE.Vector3(0, 1, 0).cross(axis);
+    if (across.lengthSq() < 1e-6) across.set(1, 0, 0);
+    this.shockRing(position, axis, radius / 4.9, 1.5, colour);
+    this.shockRing(position, across.normalize(), radius / 4.9 * 0.8, 1.9, 0xffffff);
+    for (let i = 0; i < 40; i++) {
+      const out = new THREE.Vector3(this.rng.gaussian(), this.rng.gaussian(), this.rng.gaussian()).normalize();
+      this.spark(position.clone().addScaledVector(out, radius * 0.05), out.multiplyScalar(radius * (0.35 + this.rng.next() * 0.5)), 1.4 + this.rng.next() * 1.6, radius * 0.11, radius * 0.015, this.fireTex, i % 3 ? colour : 0xffffff);
+    }
+    this.flashLight.position.copy(position); this.flashLight.color.setHex(colour); this.flashLight.intensity = Math.max(this.flashLight.intensity, 14 * radius); this.flashLightLife = 1.4;
+  }
+
+  /** A ring from the pool, facing along `axis`, that runs out to 4.9 times `size` over `span` seconds. */
+  private shockRing(position: THREE.Vector3, axis: THREE.Vector3, size: number, span: number, colour: number): void {
+    if (this.nuclearRings.length >= 12) return;
+    const mesh = this.ringPool.pop() ?? new THREE.Mesh(this.nuclearRingGeometry, new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    mesh.material.color.setHex(colour);
+    mesh.visible = true; mesh.position.copy(position); mesh.scale.setScalar(size * 0.4);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis.clone().normalize());
+    this.group.add(mesh); this.nuclearRings.push({ mesh, life: span, size, span });
   }
 
   /** Explosion scaled to the ship. Returns duration in seconds. */
@@ -288,7 +333,7 @@ export class EffectsSystem {
   // --------------------------------------------------------- per-frame sync
 
   /** Update tracers from simulation projectiles (positions in km). */
-  setTracers(items: readonly { id?: number; pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; big?: boolean; weapon?: { damage: number } }[], alpha: number, dt: number): void {
+  setTracers(items: readonly { id?: number; pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; big?: boolean; weapon?: { damage: number; blast?: unknown; projectileSpeed?: number } }[], alpha: number, dt: number): void {
     let n = 0;
     const dir = new THREE.Vector3();
     const stride=Math.max(1,Math.ceil(items.length/this.tracerMax));
@@ -318,10 +363,12 @@ export class EffectsSystem {
       const w = size.width*superHeavy;
       this.tracerDummy.scale.set(w, w, len);
       this.tracerDummy.updateMatrix();
+      this.tracerMesh.setColorAt(n, this.tracerColour.setHex(tracerColour(it.weapon)));
       this.tracerMesh.setMatrixAt(n++, this.tracerDummy.matrix);
     }
     this.tracerMesh.count = n;
     this.tracerMesh.instanceMatrix.needsUpdate = true;
+    if (this.tracerMesh.instanceColor) this.tracerMesh.instanceColor.needsUpdate = true;
   }
 
   setMissiles(items: readonly { pos: { x: number; y: number; z: number }; vel: { x: number; y: number; z: number }; alive?: boolean }[], alpha: number, dt: number): void {
@@ -421,8 +468,8 @@ export class EffectsSystem {
     for (const ring of this.nuclearRings) {
       ring.life -= dt;
       if (ring.life <= 0) { this.group.remove(ring.mesh); ring.mesh.visible = false; this.ringPool.push(ring.mesh); continue; }
-      ring.mesh.scale.setScalar(ring.size * (0.4 + (1 - ring.life / 0.85) * 4.5));
-      ring.mesh.material.opacity = 0.7 * ring.life / 0.85;
+      ring.mesh.scale.setScalar(ring.size * (0.4 + (1 - ring.life / ring.span) * 4.5));
+      ring.mesh.material.opacity = 0.7 * ring.life / ring.span;
       rings.push(ring);
     }
     this.nuclearRings = rings;

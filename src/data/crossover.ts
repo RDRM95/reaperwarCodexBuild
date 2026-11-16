@@ -135,11 +135,11 @@ function hull(p: HullInput): ShipClassDef {
 export const CROSSOVER_SHIPS: Record<string, ShipClassDef> = {
   unsc_marathon: hull({
     id: 'unsc_marathon', name: 'Marathon-class heavy cruiser', shortName: 'Marathon', faction: 'unsc', role: 'cruiser',
-    lengthM: 1170, hull: 13000, armour: 150, barriers: 0, barrierRegen: 0,
+    lengthM: 1192, hull: 13000, armour: 150, barriers: 0, barrierRegen: 0,
     maxSpeed: 0.72, acceleration: 0.15, turnRate: 5, sensorRange: 160, signature: 1.9, ecm: 0.18, crewQuality: 1,
     hardpoints: [hp('unsc_mac', [0, 0, 500], 0, 2), hp('unsc_archer', [100, 0, 0], 90, 3), hp('unsc_archer', [-100, 0, 0], -90, 3), hp('crossover_point_defence', [0, 70, 0], 0, 6)],
     pointValue: 950,
-    description: 'Halo crossover. An armoured MAC cruiser with missile support and no energy shields. The 1,170 m length is an illustrative class-scale conversion; yields and every combat value are AU estimates.',
+    description: 'Halo crossover. An armoured MAC cruiser with missile support and no energy shields. 1,192 m is the length Halo sources give the class; yields and every combat value are AU estimates.',
   }),
   unsc_infinity: hull({
     id: 'unsc_infinity', name: 'Infinity-class supercarrier', shortName: 'Infinity', faction: 'unsc', role: 'carrier',
