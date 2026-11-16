@@ -21,6 +21,9 @@ export interface GunCamState {
   /** When the cut was made, and when the gun fired after it. */
   since?: number;
   firedAt?: number;
+  /** Set when a cut was given up without a shot: no new cut until that gun has reloaded, or the picture would cut
+   * in and give up over and over on a gun that stays loaded with nothing in its arc. */
+  waitForReload?: boolean;
 }
 
 export interface GunCamInput {
@@ -40,7 +43,8 @@ const WITH_A_SHIP = new Set(['follow', 'chase', 'cockpit']);
 /** One step. Mutates `state`; returns the camera change to make, if any. */
 export function gunCamStep(state: GunCamState, input: GunCamInput): GunCamAction {
   if (state.from === undefined) {
-    if (!WITH_A_SHIP.has(input.mode) || !input.gun) return undefined;
+    if (!input.gun || input.gun.ready > GUN_CAM_LEAD) state.waitForReload = false;
+    if (!WITH_A_SHIP.has(input.mode) || !input.gun || state.waitForReload) return undefined;
     if (input.gun.reload < SLOW_GUN_SECONDS || !input.gun.hasTarget || input.gun.ready > GUN_CAM_LEAD) return undefined;
     state.from = input.mode; state.since = input.now; state.firedAt = undefined;
     return { cut: 'gunnery' };
@@ -51,6 +55,7 @@ export function gunCamStep(state: GunCamState, input: GunCamInput): GunCamAction
   const done = state.firedAt !== undefined ? input.now - state.firedAt >= GUN_CAM_HOLD : input.now - (state.since ?? input.now) >= GUN_CAM_PATIENCE || !input.gun;
   if (!done) return undefined;
   const back = state.from;
+  state.waitForReload = state.firedAt === undefined;
   state.from = undefined; state.since = undefined; state.firedAt = undefined;
   return { back };
 }

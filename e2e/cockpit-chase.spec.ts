@@ -78,13 +78,36 @@ test('the cockpit, the fixed chase cameras and the automatic gun camera in a run
   expect((await view(page)).chase).toBe(2);
 
   // 4. The automatic gun camera, on a ship with a main cannon: a Reaper capital, whose beam reloads in nine seconds.
-  await page.evaluate(() => { const b = window.reaperwar.battle; const r = b.sim.ships.filter((s: any) => s.alive && s.role === 'reaper_capital').sort((x: any, y: any) => (x.targetId ? 0 : 1) - (y.targetId ? 0 : 1))[0]; b.view.followId = r.id; b.setCamera('follow'); }); // eslint-disable-line @typescript-eslint/no-explicit-any
+  // The battle stays paused and the gun is set a second and a half from ready with its target in range, so the
+  // test does not depend on how a battle happens to go on a slow machine.
+  const gun = (ready: number) => page.evaluate((ready) => {
+    const b = window.reaperwar.battle, r = b.sim.getShip(b.view.gunneryLockedShipId ?? b.view.followId);
+    const mount = r.weapons.find((w: any) => w.def.kind === 'reaper_beam' && w.def.antiCapital); // eslint-disable-line @typescript-eslint/no-explicit-any
+    mount.cooldown = ready;
+    return mount.def.cooldown as number;
+  }, ready);
+  await page.evaluate(() => {
+    const b = window.reaperwar.battle, r = b.sim.ships.find((s: any) => s.alive && s.role === 'reaper_capital'); // eslint-disable-line @typescript-eslint/no-explicit-any
+    const prey = b.sim.ships.find((s: any) => s.alive && s.side !== r.side && s.role !== 'fighter'); // eslint-disable-line @typescript-eslint/no-explicit-any
+    r.targetId = prey.id;
+    prey.pos = { x: r.pos.x + r.heading.x * 8, y: r.pos.y + r.heading.y * 8, z: r.pos.z + r.heading.z * 8 }; prey.prevPos = { ...prey.pos };
+    b.view.followId = r.id; b.setCamera('follow');
+  });
+  expect(await gun(30)).toBeGreaterThanOrEqual(8);
   await page.keyboard.press('g');
   await expect(page.locator('[data-action="auto-gun-cam"]')).toHaveClass(/active/);
   expect(await page.evaluate(() => window.reaperwar.battle.autoGunCam)).toBe(true);
-  await page.click('[data-action="pause"]');
-  await expect.poll(async () => (await view(page)).mode, { timeout: 120_000, message: 'cuts to the gun sight' }).toBe('gunnery');
-  await expect.poll(async () => (await view(page)).mode, { timeout: 120_000, message: 'and back' }).toBe('follow');
+  // Reloading: no cut.
+  await page.waitForTimeout(1500);
+  expect((await view(page)).mode).toBe('follow');
+  // Nearly ready: the view cuts to the gun sight by itself.
+  await gun(0.8);
+  await expect.poll(async () => (await view(page)).mode, { timeout: 30_000, message: 'cuts to the gun sight' }).toBe('gunnery');
+  // The battle is paused, so the gun does not fire: after its patience the view goes back to where it was...
+  await expect.poll(async () => (await view(page)).mode, { timeout: 40_000, message: 'and back' }).toBe('follow');
+  // ...and does not cut in again while that gun still has not fired.
+  await page.waitForTimeout(3000);
+  expect((await view(page)).mode).toBe('follow');
   await page.keyboard.press('g');
   expect(await page.evaluate(() => window.reaperwar.battle.autoGunCam)).toBe(false);
   expect(errors).toEqual([]);

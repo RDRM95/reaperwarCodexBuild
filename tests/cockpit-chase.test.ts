@@ -186,6 +186,11 @@ describe('the automatic gun camera', () => {
     expect(run(waiting, 0, 'chase')).toEqual({ cut: 'gunnery' });
     expect(run(waiting, GUN_CAM_PATIENCE - 0.1, 'gunnery')).toBeUndefined();
     expect(run(waiting, GUN_CAM_PATIENCE + 0.1, 'gunnery')).toEqual({ back: 'chase' });
+    // The gun is still loaded and still has not fired: the view does not cut in again and again.
+    for (const t of [8, 9, 20, 60]) expect(run(waiting, t, 'chase')).toBeUndefined();
+    // Once it has fired and is reloading, the next shot gets its cut.
+    expect(run(waiting, 61, 'chase', slow(40))).toBeUndefined();
+    expect(run(waiting, 100, 'chase', slow(1))).toEqual({ cut: 'gunnery' });
     const taken: GunCamState = {};
     expect(run(taken, 0, 'follow')).toEqual({ cut: 'gunnery' });
     // The player chose the tactical camera during the cut: it is not pulled back.

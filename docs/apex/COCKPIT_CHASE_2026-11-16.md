@@ -46,7 +46,7 @@ it came from. Rules:
   between two cameras. That includes the NOVA Array, the KRONOS Lance, the Aegis and Omaha guns and a Reaper's
   main beam, and leaves out an ordinary dreadnought's four-second gun.
 - No cut without a target in range.
-- If the gun does not fire within 7 s the view goes back.
+- If the gun does not fire within 7 s the view goes back, and does not cut in again until that gun has reloaded.
 - If you take the camera somewhere else during a cut, it is not pulled back.
 
 Both new cameras are also in theatre mode's strip.
