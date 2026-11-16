@@ -9,11 +9,13 @@ import { BattleSimulation, SIM_DT } from '@/simulation/battle';
 import type { BattleLike } from '@/simulation/battleLike';
 import { RemoteBattle } from '@/simulation/remoteBattle';
 import type { FromWorker } from '@/simulation/simWorkerCore';
-import type { BattleConfig, BattleEvent, BattleResult, FleetOrders } from '@/simulation/types';
+import { BATTLESPACE_SCALE } from '@/simulation/constants';
+import type { BattleConfig, BattleEvent, BattleResult, FleetOrders, ShipState } from '@/simulation/types';
 import { PRESETS, getPreset } from '@/timelines/presets';
 import { cloneRules, type RuleSet } from '@/timelines/rules';
 import type { ComparisonReport } from '@/scenarios/comparison';
 import { buildScenario } from '@/scenarios';
+import { assignAreaTargets, isArea, meanLevel, rectBetween, type ScreenRect } from './areaOrders';
 import { clear, el } from './dom';
 import { BENCHMARK_MEASURE_SECONDS, BENCHMARK_SCENES, BENCHMARK_WARM_UP_BATTLE_SECONDS, formatBenchmark, summariseBenchmark, type BenchmarkReport, type BenchmarkScene, type FrameSample } from './benchmark';
 import { applyUiScale, normaliseUiScale } from './tvDisplay';
@@ -89,6 +91,11 @@ export class BattleController {
   private disposed = false;
   private keys = new Set<string>();
   private dragging: { button: number; x: number; y: number; moved: boolean } | null = null;
+  /** A rectangle being dragged on the battle to mark ships: where it started and where the pointer is. */
+  private area: { button: number; from: { x: number; y: number }; to: { x: number; y: number } } | null = null;
+  private readonly areaBox = document.createElement('div');
+  /** While on, a plain left-drag marks an area; otherwise it takes Shift or Ctrl. Toggled with B. */
+  areaMode = false;
   private hudTimer = 0;
   /** Where the pointer last rested over the battle, until the next frame has looked up what is under it. */
   private hoverAt?: { x: number; y: number; width: number; height: number };
@@ -141,6 +148,9 @@ export class BattleController {
     this.hud = createHud(app, this);
     this.gunneryOverlay = new TargetTelemetry(app.ui);
     this.theatre = new Theatre(app.ui, this);
+    this.areaBox.className = 'select-box';
+    this.areaBox.style.display = 'none';
+    app.ui.appendChild(this.areaBox);
     this.resize();
     this.bindInput();
     this.loop = this.loop.bind(this);
@@ -325,6 +335,80 @@ export class BattleController {
     this.app.playUi('ui_confirm');
     const t = this.sim.getShip(targetId);
     this.hud.toast(`ATTACK: ${(t?.name ?? targetId).toUpperCase()}`);
+  }
+
+  /** Whether a press with these keys starts an area and not a camera drag. The free camera keeps Shift for its speed. */
+  private startsArea(e: PointerEvent): boolean {
+    if (e.pointerType === 'touch' || this.view.rig.mode === 'gunnery' || (e.button !== 0 && e.button !== 2)) return false;
+    return e.ctrlKey || (e.shiftKey && this.view.rig.mode !== 'free') || (this.areaMode && e.button === 0);
+  }
+
+  /** Our own hulls on the field, fighters aside: what an area can select and what can be ordered about. */
+  private ownHull(ship: ShipState): boolean {
+    return ship.side === this.config.perspectiveSide && ship.role !== 'fighter';
+  }
+
+  /** Select the ships of ours inside a dragged area. `add` keeps what was selected. */
+  selectArea(rect: ScreenRect, width: number, height: number, add = false): number {
+    const inside = this.view.shipsInRect(rect, width, height, (s) => this.ownHull(s));
+    if (!add) this.view.selectedIds.clear();
+    for (const ship of inside) this.view.selectedIds.add(ship.id);
+    this.hud.refresh();
+    if (inside.length) { this.app.playUi('ui_click'); this.hud.toast(`SELECTED: ${inside.length} SHIP${inside.length === 1 ? '' : 'S'}`); }
+    return inside.length;
+  }
+
+  /**
+   * Order an attack on the enemy ships inside a dragged area. The selection attacks them, or every ship of ours
+   * if nothing is selected, shared out so that the marked group is engaged as a group.
+   */
+  attackArea(rect: ScreenRect, width: number, height: number): number {
+    const targets = this.view.shipsInRect(rect, width, height, (s) => s.side !== this.config.perspectiveSide && s.role !== 'fighter');
+    if (!targets.length) return 0;
+    const selected = [...this.view.selectedIds].map((id) => this.sim.getShip(id)).filter((s): s is ShipState => !!s && s.alive && !s.escaped && this.ownHull(s));
+    const attackers = selected.length ? selected : this.sim.ships.filter((s) => s.alive && !s.escaped && this.ownHull(s));
+    for (const [targetId, shipIds] of assignAreaTargets(attackers, targets)) this.sim.orderShipsAttack(shipIds, targetId);
+    this.app.playUi('ui_confirm');
+    this.hud.toast(`ATTACK: ${targets.length} TARGET${targets.length === 1 ? '' : 'S'} · ${attackers.length} SHIP${attackers.length === 1 ? '' : 'S'}`);
+    return targets.length;
+  }
+
+  /**
+   * Order the fleets of the selected ships to a point of the screen, taken on those ships' own level. They move
+   * there and hold: the order is the fleet's "defend position". Returns the point (simulation units) or nothing if
+   * there is no selection or the point is off the level (above the horizon).
+   */
+  moveSelectionTo(x: number, y: number, width: number, height: number): { x: number; y: number; z: number } | undefined {
+    const selected = [...this.view.selectedIds].map((id) => this.sim.getShip(id)).filter((s): s is ShipState => !!s && s.alive && !s.escaped && this.ownHull(s));
+    if (!selected.length) return undefined;
+    const point = this.view.pointOnLevel(x, y, width, height, meanLevel(selected));
+    if (!point) return undefined;
+    const fleets = new Set(selected.map((s) => s.fleetId).filter((id) => this.playerFleetIds.includes(id)));
+    if (!fleets.size) return undefined;
+    // Orders take positions in catalogue kilometres; the simulation scales them.
+    const position = { x: point.x / BATTLESPACE_SCALE, y: point.y / BATTLESPACE_SCALE, z: point.z / BATTLESPACE_SCALE };
+    for (const id of fleets) this.sim.issueOrders(id, { order: 'defend_position', position });
+    this.app.playUi('ui_confirm');
+    this.hud.refresh();
+    this.hud.toast(`MOVE: ${fleets.size} FLEET${fleets.size === 1 ? '' : 'S'}`);
+    return point;
+  }
+
+  /** A brief ring on the screen where an order was placed. */
+  private ping(x: number, y: number, kind: 'move' | 'attack'): void {
+    const mark = document.createElement('div');
+    mark.className = `order-ping ${kind}`;
+    mark.style.left = `${x}px`; mark.style.top = `${y}px`;
+    this.areaBox.parentElement?.appendChild(mark);
+    window.setTimeout(() => mark.remove(), 700);
+  }
+
+  private drawArea(): void {
+    const a = this.area;
+    if (!a) { this.areaBox.style.display = 'none'; return; }
+    const r = rectBetween(a.from, a.to);
+    this.areaBox.className = `select-box ${a.button === 2 ? 'attack' : 'select'}`;
+    Object.assign(this.areaBox.style, { display: isArea(r) ? 'block' : 'none', left: `${r.left}px`, top: `${r.top}px`, width: `${r.right - r.left}px`, height: `${r.bottom - r.top}px` });
   }
 
   select(id: string | undefined, additive = false): void {
@@ -559,6 +643,12 @@ export class BattleController {
           return;
         }
       }
+      if (this.startsArea(e)) {
+        const rect = c.getBoundingClientRect(), at = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        this.area = { button: e.button, from: at, to: { ...at } };
+        c.setPointerCapture(e.pointerId);
+        return;
+      }
       this.dragging = { button: e.button, x: e.clientX, y: e.clientY, moved: false };
       c.setPointerCapture(e.pointerId);
     };
@@ -578,6 +668,11 @@ export class BattleController {
           pinchCentre = { x: cx, y: cy };
           return;
         }
+      }
+      if (this.area) {
+        this.area.to = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        this.drawArea();
+        return;
       }
       if (this.dragging) {
         const dx = e.clientX - this.dragging.x;
@@ -604,12 +699,25 @@ export class BattleController {
           pinchCentre = null;
         }
       }
-      if (!this.dragging) return;
-      const d = this.dragging;
-      this.dragging = null;
-      c.releasePointerCapture(e.pointerId);
-      if (d.moved) return;
       const rect = c.getBoundingClientRect();
+      let pressed = this.dragging;
+      if (this.area) {
+        const a = this.area, r = rectBetween(a.from, a.to);
+        this.area = null;
+        this.drawArea();
+        c.releasePointerCapture(e.pointerId);
+        if (isArea(r)) {
+          if (a.button === 0) this.selectArea(r, rect.width, rect.height, e.ctrlKey);
+          else if (this.attackArea(r, rect.width, rect.height)) this.ping((r.left + r.right) / 2, (r.top + r.bottom) / 2, 'attack');
+          return;
+        }
+        // Too short to be an area: it was a click, with the keys it was pressed with.
+        pressed = { button: a.button, x: e.clientX, y: e.clientY, moved: false };
+      } else if (pressed) c.releasePointerCapture(e.pointerId);
+      if (!pressed) return;
+      const d = pressed;
+      this.dragging = null;
+      if (d.moved) return;
       const hit = this.view.pick(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height);
       if (d.button === 0) {
         this.select(hit?.id, e.shiftKey);
@@ -620,6 +728,9 @@ export class BattleController {
           this.select(hit.id);
           this.view.rig.setMode('follow');
           this.hud.refresh();
+        } else if (!hit && this.moveSelectionTo(e.clientX - rect.left, e.clientY - rect.top, rect.width, rect.height)) {
+          // Right-click on open space: the selection's fleets go there.
+          this.ping(e.clientX - rect.left, e.clientY - rect.top, 'move');
         }
       }
     };
@@ -677,6 +788,12 @@ export class BattleController {
         break;
       case 't':
         if (!e.repeat && this.view.rig.mode !== 'gunnery') this.setTheatre(!this.theatre.active);
+        break;
+      case 'b':
+        if (!e.repeat) {
+          this.areaMode = !this.areaMode;
+          this.hud.toast(this.areaMode ? 'AREA SELECT ON · LEFT-DRAG MARKS SHIPS' : 'AREA SELECT OFF');
+        }
         break;
       case 'o':
         if (!e.repeat) this.toggleOverlay();
@@ -777,6 +894,7 @@ export class BattleController {
     document.body.classList.remove('hud-none');
     this.gunneryOverlay.root.remove();
     this.theatre.dispose();
+    this.areaBox.remove();
     this.view.dispose();
     this.worker?.terminate();
     this.overlay.resize(1, 1, 1);

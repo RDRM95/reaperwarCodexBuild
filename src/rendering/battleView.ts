@@ -15,6 +15,7 @@ import { InstancedFleet } from './instancedFleet';
 import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
 import { detailReach } from '@/core/hardwareProfile';
 import { engineGlowSize, farPointBrightness, muzzleFlashSize } from './visualWeight';
+import { pointOnLevel, rectContains, type ScreenRect } from '@/ui/areaOrders';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -901,6 +902,29 @@ export class BattleView {
       if (d < radiusPx + 6 && d < bestD) { bestD = d; best = ship; }
     }
     return best;
+  }
+
+  /** The living, present ships whose centres are drawn inside a rectangle of the screen and that pass `keep`. */
+  shipsInRect(rect: ScreenRect, width: number, height: number, keep: (ship: ShipState) => boolean): ShipState[] {
+    const cam = this.rig.camera, found: ShipState[] = [];
+    for (const ship of this.sim.ships) {
+      if (!ship.alive || ship.escaped || !keep(ship) || this.visuals.get(ship.id)?.removed) continue;
+      const p = this.tmpA.set(
+        (ship.prevPos.x + (ship.pos.x - ship.prevPos.x) * this.alpha) * KM,
+        (ship.prevPos.y + (ship.pos.y - ship.prevPos.y) * this.alpha) * KM,
+        (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * this.alpha) * KM).project(cam);
+      if (p.z > 1 || p.z < -1) continue;
+      if (rectContains(rect, { x: (p.x * .5 + .5) * width, y: (-p.y * .5 + .5) * height })) found.push(ship);
+    }
+    return found;
+  }
+
+  /** Where a point of the screen falls on the level plane at height `level` (simulation units), if it does. */
+  pointOnLevel(x: number, y: number, width: number, height: number, level: number): { x: number; y: number; z: number } | undefined {
+    const cam = this.rig.camera;
+    const direction = this.tmpA.set((x / width) * 2 - 1, -(y / height) * 2 + 1, 0.5).unproject(cam).sub(cam.position).normalize();
+    const hit = pointOnLevel(cam.position, direction, level * KM, cam.far);
+    return hit && { x: hit.x / KM, y: hit.y / KM, z: hit.z / KM };
   }
 
   /** Project a world position (km) to screen; returns undefined when behind the camera. */
