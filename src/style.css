@@ -536,3 +536,46 @@ body.theatre-idle, body.theatre-idle * { cursor: none !important; }
 .order-ping { position: absolute; z-index: 6; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid var(--cyan, #4fa3ff); animation: order-ping 0.7s ease-out forwards; }
 .order-ping.attack { border-color: #ff5a4a; }
 @keyframes order-ping { from { transform: scale(0.6); opacity: 1; } to { transform: scale(4.5); opacity: 0; } }
+
+/* The first-person view (src/ui/screens/cockpitOverlay.ts). `#ui > *` takes the pointer; this must not. */
+#ui > .cockpit { pointer-events: none; }
+.cockpit { position: absolute; inset: 0; z-index: 4; overflow: hidden; --cockpit: #6fc2ff; color: var(--cockpit); font-family: var(--mono, monospace); font-size: 12px; letter-spacing: 0.08em; text-shadow: 0 0 6px rgba(0, 0, 0, 0.9); }
+.cockpit[data-faction="turian"] { --cockpit: #9fe0ff; }
+.cockpit[data-faction="cerberus"] { --cockpit: #ffb14a; }
+.cockpit[data-faction="geth"] { --cockpit: #8fffd0; }
+.cockpit[data-faction="quarian"] { --cockpit: #c9a6ff; }
+.cockpit[data-faction="salarian"] { --cockpit: #7fffa8; }
+.cockpit[data-faction="asari"] { --cockpit: #b9a8ff; }
+.cockpit[data-style="optic"] { --cockpit: #ff5a4a; }
+.cockpit-read { position: absolute; white-space: pre; line-height: 1.5; }
+.cockpit-read.left { left: 9%; bottom: 17%; }
+.cockpit-read.right { right: 9%; bottom: 17%; text-align: right; }
+.cockpit-read.target { left: 50%; bottom: 8%; transform: translateX(-50%); text-align: center; }
+.cockpit-title { position: absolute; left: 50%; top: 9%; transform: translateX(-50%); font-size: 11px; opacity: 0.8; }
+.cockpit-reticle { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border: 1px solid var(--cockpit); border-radius: 50%; opacity: 0.75; }
+.cockpit-reticle::before, .cockpit-reticle::after { content: ''; position: absolute; background: var(--cockpit); }
+.cockpit-reticle::before { left: 50%; top: -9px; bottom: -9px; width: 1px; }
+.cockpit-reticle::after { top: 50%; left: -9px; right: -9px; height: 1px; }
+.cockpit-bracket { position: absolute; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 1px solid var(--cockpit); clip-path: polygon(0 0, 30% 0, 30% 8%, 8% 8%, 8% 30%, 0 30%, 0 70%, 8% 70%, 8% 92%, 30% 92%, 30% 100%, 0 100%, 0 0, 100% 0, 100% 30%, 92% 30%, 92% 8%, 70% 8%, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% 92%, 92% 92%, 92% 70%, 100% 70%, 100% 100%, 0 100%); }
+/* A canopy: two struts from the sill to the top of the frame, and the sill itself. */
+.cockpit[data-style="canopy"] .cockpit-frame { position: absolute; inset: 0; background:
+  linear-gradient(104deg, transparent 0 19.2%, rgba(8, 12, 18, 0.94) 19.4% 21.2%, transparent 21.4%),
+  linear-gradient(-104deg, transparent 0 19.2%, rgba(8, 12, 18, 0.94) 19.4% 21.2%, transparent 21.4%),
+  radial-gradient(120% 34% at 50% 108%, rgba(8, 12, 18, 0.96) 0 72%, transparent 73%); }
+.cockpit[data-style="canopy"] .cockpit-frame::after { content: ''; position: absolute; left: 12%; right: 12%; bottom: 11.5%; height: 1px; background: var(--cockpit); opacity: 0.35; }
+/* A bridge: a deep sill, a brow, and two mullions. */
+.cockpit[data-style="bridge"] .cockpit-frame { position: absolute; inset: 0; background:
+  linear-gradient(to bottom, rgba(8, 12, 18, 0.95) 0 5.5%, transparent 5.7% 86%, rgba(8, 12, 18, 0.95) 86.2%),
+  linear-gradient(to right, transparent 0 27.6%, rgba(8, 12, 18, 0.9) 27.8% 28.6%, transparent 28.8% 71.2%, rgba(8, 12, 18, 0.9) 71.4% 72.2%, transparent 72.4%); }
+.cockpit[data-style="bridge"] .cockpit-read.left, .cockpit[data-style="bridge"] .cockpit-read.right { bottom: 3%; }
+.cockpit[data-style="bridge"] .cockpit-read.target { bottom: auto; top: 12.5%; }
+/* An optic: the eye's own round field, red, with a slow sweep. */
+.cockpit[data-style="optic"] .cockpit-frame { position: absolute; inset: 0; background:
+  radial-gradient(circle at 50% 50%, transparent 0 34vh, rgba(120, 12, 6, 0.22) 44vh, rgba(10, 2, 2, 0.93) 52vh),
+  repeating-linear-gradient(to bottom, rgba(255, 60, 40, 0.05) 0 1px, transparent 1px 4px); }
+.cockpit[data-style="optic"] .cockpit-reticle { width: 120px; height: 120px; margin: -60px 0 0 -60px; border-style: dashed; animation: cockpit-sweep 14s linear infinite; }
+.cockpit[data-style="optic"] .cockpit-read.left { left: 50%; bottom: auto; top: 24%; transform: translateX(-34vh); }
+.cockpit[data-style="optic"] .cockpit-read.right { right: 50%; bottom: auto; top: 24%; transform: translateX(34vh); }
+.cockpit[data-style="optic"] .cockpit-read.target { bottom: 22%; }
+.cockpit[data-style="optic"] .cockpit-title { top: 20%; }
+@keyframes cockpit-sweep { to { transform: rotate(360deg); } }

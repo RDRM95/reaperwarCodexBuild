@@ -25,6 +25,8 @@ export const THEATRE_CAMERAS: { mode: CameraMode; label: string; title: string }
   { mode: 'follow', label: 'Follow', title: 'Stay with one ship; drag to look round it, wheel to close in' },
   { mode: 'free', label: 'Free', title: 'Fly anywhere: drag to look, wheel to fly along the view, middle-drag to slide, WASD and Q/E, Shift for speed' },
   { mode: 'tactical', label: 'Orbit', title: 'Orbit the battle: drag to turn, wheel to zoom' },
+  { mode: 'chase', label: 'Chase', title: 'A fixed place behind one ship; again for the next position' },
+  { mode: 'cockpit', label: 'Cockpit', title: 'From the seat of one ship, or of a fighter in flight; again for the next fighter' },
 ];
 
 /** Seconds the pointer may rest before the strip and the pointer are put away. */

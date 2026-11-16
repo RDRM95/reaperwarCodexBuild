@@ -95,6 +95,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   const speedRow = el('div', { class: 'row hud-speed' });
   const cameraRow = el('div', { class: 'row' });
   const watchBtn = el('button', { class: 'btn small', 'data-action': 'watch-battle', onclick: () => ctrl.toggleWatch() }, 'Watch battle');
+  const gunCamBtn = el('button', { class: 'btn small', 'data-action': 'auto-gun-cam', title: 'While with one ship (follow, chase or cockpit), cut to its main gun for each shot and back. Main cannons only. Key G', onclick: () => ctrl.toggleAutoGunCam() }, 'Gun cam (G)');
   const theatreBtn = el('button', { class: 'btn small', 'data-action': 'theatre', title: 'Theatre mode: the battle and nothing else, with cinema bars (T)', onclick: () => ctrl.setTheatre(true) }, 'Theatre (T)');
   const overlayBtn = el('button', { class: 'btn small', 'data-action': 'toggle-overlay', title: 'Toggle tactical overlay (O)', onclick: () => ctrl.toggleOverlay() }, 'Overlay: on (O)');
   const shipList = el('div', { class: 'ship-list scroll' });
@@ -158,7 +159,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
       statusLine,
     ]),
     el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, title('simulation')), speedRow, el('button', { class: 'btn small hud-panels-toggle', 'data-action': 'toggle-panels', style: { marginTop: '6px' }, onclick: () => root.classList.toggle('panels-open') }, 'Panels')]),
-    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, title('camera')), cameraRow, el('div', { class: 'row', style: { marginTop: '6px' } }, [watchBtn, theatreBtn, overlayBtn])]),
+    el('div', { class: 'panel' }, [el('div', { class: 'panel-title' }, title('camera')), cameraRow, el('div', { class: 'row', style: { marginTop: '6px' } }, [watchBtn, theatreBtn, overlayBtn, gunCamBtn])]),
     el('div', { class: 'spacer' }),
     el('div', { class: 'panel orange hud-timeline', style: { maxWidth: '260px' } }, [el('div', { class: 'panel-title' }, title('timeline')), el('div', { style: { fontSize: '13px' } }, rules.name), el('div', { class: 'dim', style: { fontSize: '11px' } }, rules.tagline)]),
     el('button', { class: 'btn', 'data-action': 'menu', onclick: () => toggleMenu() }, 'Menu'),
@@ -184,7 +185,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
         rules.special.hadesRounds ? el('div', { class: 'dim', 'data-action': 'hades-payload-note', style: { fontSize: '10px' } }, 'HADES penetrators carry internal nuclear warheads. Concentrated battery salvos create successive internal detonations after penetration.') : null,
         el('div', { class: 'dim', style: { fontSize: '10px' } }, 'Scope applies to spinal fire only. Movement and other orders command all player fleets. Secondary weapons and point defence remain active.'),
       ]),
-      el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Shift-drag: select an area (Ctrl-drag adds; B makes a plain drag select) · Right-click enemy: attack · Shift-right-drag: attack every enemy in an area · Right-click open space: move the selection’s fleets there · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD · O: tactical overlay'),
+      el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Shift-drag: select an area (Ctrl-drag adds; B makes a plain drag select) · Right-click enemy: attack · Shift-right-drag: attack every enemy in an area · Right-click open space: move the selection’s fleets there · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–0: cameras · G: auto gun camera · H: hide HUD · O: tactical overlay'),
     ]),
     el('div', { class: 'panel red', style: { flex: '1', minHeight: '100px', overflow: 'auto' } }, [el('div', { class: 'panel-title' }, title('intel')), intelBox]),
   ]);
@@ -479,7 +480,9 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     ctrl.setSpeed(i);
   } }, `${sp}×`));
   speedRow.append(pauseBtn, ...speedBtns);
-  const cameraBtns = (Object.keys(CAMERA_MODE_LABELS) as CameraMode[]).map((m, i) => el('button', { class: 'btn small', 'data-camera': m, title: `Key ${i + 1}`, onclick: () => ctrl.setCamera(m) }, CAMERA_MODE_LABELS[m]));
+  const cameraBtns = (Object.keys(CAMERA_MODE_LABELS) as CameraMode[]).map((m, i) => el('button', { class: 'btn small', 'data-camera': m,
+    title: m === 'cockpit' ? 'Key 9. From the seat of the followed ship, or of a fighter in flight; again for the next fighter'
+      : m === 'chase' ? 'Key 0. A fixed place behind the followed ship; again for the next position' : `Key ${i + 1}`, onclick: () => ctrl.setCamera(m) }, CAMERA_MODE_LABELS[m]));
   cameraRow.append(...cameraBtns);
 
   const renderControls = () => {
@@ -488,6 +491,8 @@ export function createHud(app: App, ctrl: BattleController): Hud {
     overlayBtn.setAttribute('aria-pressed', String(ctrl.overlay.visible));
     watchBtn.textContent = ctrl.view.rig.mode === 'cinematic' && ctrl.hudLevel !== 'full' ? 'Return to command' : 'Watch battle';
     watchBtn.classList.toggle('active', ctrl.view.rig.mode === 'cinematic' && ctrl.hudLevel !== 'full');
+    gunCamBtn.classList.toggle('active', ctrl.autoGunCam);
+    gunCamBtn.setAttribute('aria-pressed', String(ctrl.autoGunCam));
     pauseBtn.classList.toggle('active', ctrl.paused);
     pauseBtn.textContent = ctrl.paused ? '▶' : '❚❚';
     speedBtns.forEach((b, i) => b.classList.toggle('active', i === ctrl.speedIndex && !ctrl.paused));
