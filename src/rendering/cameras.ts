@@ -1,11 +1,20 @@
 import * as THREE from 'three';
+import { CHASE_VIEWS, COCKPIT_FOV, type Seat } from './cockpit';
 
 /**
  * Battle camera rig. All modes write a desired position/look target; the rig
  * smooths toward them so switching modes produces a transition rather than a
  * cut. Positions are in render units.
  */
-export type CameraMode = 'tactical' | 'cinematic' | 'follow' | 'free' | 'projectile' | 'reaper' | 'command' | 'gunnery';
+/** The hull's own right and up, from where it points: level with the horizon across, as a ship is flown. */
+function hullFrame(heading: THREE.Vector3): { right: THREE.Vector3; up: THREE.Vector3 } {
+  const right = new THREE.Vector3().crossVectors(heading, new THREE.Vector3(0, 1, 0));
+  if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
+  right.normalize();
+  return { right, up: new THREE.Vector3().crossVectors(right, heading).normalize() };
+}
+
+export type CameraMode = 'tactical' | 'cinematic' | 'follow' | 'free' | 'projectile' | 'reaper' | 'command' | 'gunnery' | 'cockpit' | 'chase';
 
 export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
   tactical: 'Tactical',
@@ -16,6 +25,8 @@ export const CAMERA_MODE_LABELS: Record<CameraMode, string> = {
   reaper: 'Reaper',
   command: 'Command',
   gunnery: 'First-person gunnery',
+  cockpit: 'Cockpit',
+  chase: 'Chase',
 };
 
 /**
@@ -36,6 +47,8 @@ export interface CameraSubject {
   velocity: THREE.Vector3;
   heading: THREE.Vector3;
   size: number;
+  /** Where the cockpit camera sits in this hull (see cockpit.ts). */
+  seat?: Seat;
 }
 
 /**
@@ -209,11 +222,21 @@ export class CameraRig {
     this.mode = mode;
     if (mode !== 'gunnery') {
       this.gunneryZoomed = false;
-      this.camera.fov = 50;
+      this.camera.fov = mode === 'cockpit' ? COCKPIT_FOV : 50;
       this.camera.updateProjectionMatrix();
     }
     // Optical gunnery must stay physically attached to the firing mount.
-    this.transition = mode === 'gunnery' ? 0 : 1;
+    // And an eye in a seat is in it at once: a cockpit view that flew in from where the last camera was would pass
+    // through the hull on its way.
+    this.transition = mode === 'gunnery' || mode === 'cockpit' ? 0 : 1;
+  }
+
+  /** Which fixed chase position is in use (see CHASE_VIEWS). */
+  chaseIndex = 0;
+  /** Step to the next fixed chase position; returns its name. */
+  nextChaseView(): string {
+    this.chaseIndex = (this.chaseIndex + 1) % CHASE_VIEWS.length;
+    return CHASE_VIEWS[this.chaseIndex].name;
   }
 
   toggleGunneryZoom(): void {
@@ -228,7 +251,7 @@ export class CameraRig {
 
   // --- Input hooks (called by the controller).
   orbit(dx: number, dy: number): void {
-    if (this.mode === 'gunnery') return; // Reticle is not a steering command.
+    if (this.mode === 'gunnery' || this.mode === 'cockpit' || this.mode === 'chase') return; // Fixed views: the mouse does not steer them.
     if (this.mode === 'free') {
       this.freeYaw -= dx * 0.003;
       this.freePitch = THREE.MathUtils.clamp(this.freePitch - dy * 0.003, -1.5, 1.5);
@@ -323,6 +346,27 @@ export class CameraRig {
         const off = new THREE.Vector3(Math.sin(a) * Math.cos(this.pitch), Math.sin(this.pitch) + 0.25, Math.cos(a) * Math.cos(this.pitch)).normalize().multiplyScalar(dist);
         this.desiredPos.copy(s.position).add(off);
         this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.6);
+        return this.apply(dt, false, s);
+      }
+      case 'cockpit': {
+        const s = opts.subject;
+        if (!s) return this.fallback(dt, opts.fleetCentre);
+        // In the seat: fixed to the hull, looking where it points. Nothing is eased; a pilot's eye does not lag.
+        const frame = hullFrame(s.heading);
+        const seat = s.seat ?? { forward: 0.2, up: 0.085 };
+        this.desiredPos.copy(s.position).addScaledVector(s.heading, s.size * seat.forward).addScaledVector(frame.up, s.size * seat.up);
+        this.desiredLook.copy(this.desiredPos).addScaledVector(s.heading, s.size * 4 + 400);
+        instant = true;
+        break;
+      }
+      case 'chase': {
+        const s = opts.subject;
+        if (!s) return this.fallback(dt, opts.fleetCentre);
+        // A fixed place behind the hull, in the hull's own frame: it turns, climbs and dives with the ship.
+        const frame = hullFrame(s.heading), view = CHASE_VIEWS[this.chaseIndex % CHASE_VIEWS.length];
+        this.desiredPos.copy(s.position).addScaledVector(s.heading, -(s.size * view.back + 1.5))
+          .addScaledVector(frame.up, s.size * view.up + 0.5).addScaledVector(frame.right, s.size * view.side);
+        this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 2.5);
         return this.apply(dt, false, s);
       }
       case 'reaper': {
@@ -517,7 +561,7 @@ export class CameraRig {
     const d = cam.position.distanceTo(this.currentLook);
     // The Reaper view rides on its own hull, a few tenths of a unit from it on a destroyer: it needs a near plane to
     // match, or the hull it rides on is cut away.
-    cam.near = this.mode === 'gunnery' ? 0.06 : this.mode === 'reaper' ? THREE.MathUtils.clamp(d * 0.002, 0.03, 0.2) : THREE.MathUtils.clamp(d * 0.002, 0.2, 50);
+    cam.near = this.mode === 'gunnery' || this.mode === 'cockpit' ? 0.02 : this.mode === 'reaper' ? THREE.MathUtils.clamp(d * 0.002, 0.03, 0.2) : THREE.MathUtils.clamp(d * 0.002, 0.2, 50);
     cam.updateProjectionMatrix();
   }
 

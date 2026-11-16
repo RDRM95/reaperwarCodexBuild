@@ -43,6 +43,9 @@ import { applyCivilizationBattleResult, beginCivilizationBattle, cancelCivilizat
 import type { CivilizationInput, CivilizationOrigin, CivilizationState } from '@/civilization/types';
 import { buildCustomBattle, type CustomBattleInput, type CustomFleetInput } from '@/scenarios';
 import { TargetTelemetry } from './screens/gunneryOverlay';
+import { CockpitOverlay } from './screens/cockpitOverlay';
+import { gunCamStep, type GunCamState } from './gunCam';
+import { CHASE_VIEWS } from '@/rendering/cockpit';
 import { Theatre } from './screens/theatre';
 import { primaryGunneryMount,isMainGunShot } from '@/rendering/gunnery';
 
@@ -78,6 +81,11 @@ export class BattleController {
   readonly overlay: TacticalOverlay;
   hud: Hud;
   readonly gunneryOverlay:TargetTelemetry;
+  readonly cockpitOverlay: CockpitOverlay;
+  /** The automatic gun camera (see gunCam.ts): on or off, where it is in a cut, and whether the gun has just fired. Toggled with G. */
+  autoGunCam = false;
+  private gunCam: GunCamState = {};
+  private gunCamFired = false;
   readonly theatre: Theatre;
   private lastGunTarget?:string;
   private lastGunReady=false;
@@ -147,6 +155,7 @@ export class BattleController {
     };
     this.hud = createHud(app, this);
     this.gunneryOverlay = new TargetTelemetry(app.ui);
+    this.cockpitOverlay = new CockpitOverlay(app.ui);
     this.theatre = new Theatre(app.ui, this);
     this.areaBox.className = 'select-box';
     this.areaBox.style.display = 'none';
@@ -213,7 +222,24 @@ export class BattleController {
     this.paused = !this.paused;
     this.hud.refresh();
   }
+  /** Our fighters in flight (an Oculus, when we command the Reapers), in ship order. */
+  private flyingFighters(): ShipState[] {
+    return this.sim.ships.filter((s) => s.alive && !s.escaped && s.role === 'fighter' && s.side === this.config.perspectiveSide && !s.rearming);
+  }
+
   setCamera(mode: CameraMode): void {
+    if (mode === 'cockpit') {
+      // The seat is the followed ship's. With no ship followed it is a fighter's, if one is flying; asking for the
+      // cockpit again while in it moves to the next fighter.
+      const current = this.view.followId ? this.sim.getShip(this.view.followId) : undefined;
+      const fighters = this.flyingFighters();
+      if (this.view.rig.mode === 'cockpit' && fighters.length) {
+        const i = fighters.findIndex((f) => f.id === current?.id);
+        this.view.followId = fighters[(i + 1) % fighters.length].id;
+      } else if (!current?.alive && fighters.length) this.view.followId = fighters[0].id;
+    }
+    if (mode === 'chase' && this.view.rig.mode === 'chase') this.hud.toast(`CHASE: ${this.view.rig.nextChaseView().toUpperCase()}`);
+    else if (mode === 'chase') this.hud.toast(`CHASE: ${CHASE_VIEWS[this.view.rig.chaseIndex % CHASE_VIEWS.length].name.toUpperCase()} · AGAIN FOR THE NEXT`);
     if(mode==='gunnery'){
       const current=this.view.followId?this.sim.getShip(this.view.followId):undefined;
       if(!current?.alive||!primaryGunneryMount(current)){
@@ -229,9 +255,32 @@ export class BattleController {
     }
     this.view.rig.setMode(mode);
     this.gunneryOverlay.show(mode==='gunnery');
+    this.cockpitOverlay.show(mode === 'cockpit');
     this.hud.root.classList.toggle('gunnery-mode',mode==='gunnery');
     this.hud.refresh();
   }
+  /** The automatic gun camera's step for this frame: cut to the followed ship's gun sight for its shot, and back. */
+  private stepGunCam(): void {
+    const id = this.view.gunneryLockedShipId ?? this.view.followId;
+    const ship = id ? this.sim.getShip(id) : undefined;
+    const mount = ship?.alive && !ship.escaped ? primaryGunneryMount(ship) : undefined;
+    const target = ship?.targetId ? this.sim.getShip(ship.targetId) : undefined;
+    const inRange = !!ship && !!mount && !!target?.alive && !target.escaped
+      && Math.hypot(target.pos.x - ship.pos.x, target.pos.y - ship.pos.y, target.pos.z - ship.pos.z) <= mount.def.range && (mount.ammo === undefined || mount.ammo > 0);
+    const action = gunCamStep(this.gunCam, { now: performance.now() / 1000, mode: this.view.rig.mode, fired: this.gunCamFired,
+      gun: mount ? { reload: mount.def.cooldown, ready: Math.max(0, mount.cooldown), hasTarget: inRange } : undefined });
+    this.gunCamFired = false;
+    if (!action) return;
+    this.setCamera('cut' in action ? action.cut : action.back as CameraMode);
+  }
+
+  toggleAutoGunCam(): void {
+    this.autoGunCam = !this.autoGunCam;
+    this.gunCam = {}; this.gunCamFired = false;
+    this.hud.toast(this.autoGunCam ? 'AUTO GUN CAMERA ON · CUTS TO THE MAIN GUN FOR ITS SHOT' : 'AUTO GUN CAMERA OFF');
+    this.hud.refresh();
+  }
+
   /** Cycles full HUD → minimal (top bar only) → none (clean frame for recordings). */
   hudLevel: 'full' | 'minimal' | 'none' = 'full';
   toggleHud(): void {
@@ -260,7 +309,7 @@ export class BattleController {
       const camera = this.view.rig.mode;
       this.beforeTheatre = { hudLevel: this.hudLevel, camera };
       while (this.hudLevel !== 'none') this.toggleHud();
-      if (camera !== 'free' && camera !== 'follow' && camera !== 'cinematic') this.setCamera('cinematic');
+      if (camera !== 'free' && camera !== 'follow' && camera !== 'cinematic' && camera !== 'chase' && camera !== 'cockpit') this.setCamera('cinematic');
     }
     this.theatre.show(on);
     if (!on && this.beforeTheatre) {
@@ -447,6 +496,10 @@ export class BattleController {
   }
 
   private onSimEvent(e: BattleEvent): void {
+    if (this.autoGunCam && e.type === 'weapon_fired' && e.shipId === (this.view.gunneryLockedShipId ?? this.view.followId)) {
+      const shooter = this.sim.getShip(e.shipId);
+      if (shooter && isMainGunShot(shooter, e.weaponIndex)) this.gunCamFired = true;
+    }
     if(this.view.rig.mode==='gunnery'){
       const id=this.view.gunneryLockedShipId??this.view.followId;
       this.gunneryOverlay.notify(e,id,this.sim);
@@ -565,6 +618,8 @@ export class BattleController {
     if (probe) updateMs = lap();
     this.view.render();
     if (probe) renderMs = lap();
+    if (this.view.rig.mode === 'cockpit') this.cockpitOverlay.update({ getShip: (id) => this.sim.getShip(id), project: (pos, w, h) => this.view.project(pos, w, h) }, this.view.followId, performance.now());
+    if (this.autoGunCam) this.stepGunCam();
     if(this.view.rig.mode==='gunnery'){
       const id=this.view.gunneryLockedShipId??this.view.followId;
       this.gunneryOverlay.update(this.sim,this.view,id);
@@ -819,6 +874,18 @@ export class BattleController {
       case '7':
         this.setCamera('command');
         break;
+      case '8':
+        if (!e.repeat) this.setCamera('gunnery');
+        break;
+      case '9':
+        if (!e.repeat) this.setCamera('cockpit');
+        break;
+      case '0':
+        if (!e.repeat) this.setCamera('chase');
+        break;
+      case 'g':
+        if (!e.repeat) this.toggleAutoGunCam();
+        break;
       case 'tab':
         e.preventDefault();
         this.selectFleet();
@@ -893,6 +960,7 @@ export class BattleController {
     this.hud.root.remove();
     document.body.classList.remove('hud-none');
     this.gunneryOverlay.root.remove();
+    this.cockpitOverlay.root.remove();
     this.theatre.dispose();
     this.areaBox.remove();
     this.view.dispose();

@@ -16,6 +16,7 @@ import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
 import { detailReach } from '@/core/hardwareProfile';
 import { engineGlowSize, farPointBrightness, muzzleFlashSize, tracerColour } from './visualWeight';
 import { pointOnLevel, rectContains, type ScreenRect } from '@/ui/areaOrders';
+import { seatFor } from './cockpit';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -745,6 +746,7 @@ export class BattleView {
       heading: new THREE.Vector3(ship.prevHeading.x + (ship.heading.x - ship.prevHeading.x) * a, ship.prevHeading.y + (ship.heading.y - ship.prevHeading.y) * a,
         ship.prevHeading.z + (ship.heading.z - ship.prevHeading.z) * a).normalize(),
       size: v?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
+      seat: seatFor(ship.role, ship.faction),
     };
   }
 
@@ -763,7 +765,7 @@ export class BattleView {
     const sim = this.sim;
     const fleetCentre = this.sideCentre(sim.config.perspectiveSide);
     let subject: CameraSubject | undefined;
-    if (this.rig.mode === 'follow') {
+    if (this.rig.mode === 'follow' || this.rig.mode === 'cockpit' || this.rig.mode === 'chase') {
       const id = this.followId ?? [...this.selectedIds][0];
       const ship = id ? sim.getShip(id) : undefined;
       subject = this.subjectFor(ship && ship.alive ? ship : undefined);
