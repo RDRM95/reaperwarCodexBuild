@@ -527,3 +527,12 @@ body.theatre-idle, body.theatre-idle * { cursor: none !important; }
 .hud[data-faction='reaper'] .panel-title { letter-spacing: 0.44em; }
 .hud[data-faction='reaper'] .hud-clock { color: var(--blue); }
 
+
+/* An area dragged on the battle (src/ui/areaOrders.ts): a frame, and a ring where an order lands. Neither takes the
+   pointer: `#ui > *` would otherwise put them between the mouse and the battle. */
+#ui > .select-box, #ui > .order-ping { pointer-events: none; }
+.select-box { position: absolute; z-index: 6; border: 1px solid var(--cyan, #4fa3ff); background: color-mix(in srgb, var(--cyan, #4fa3ff) 12%, transparent); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45) inset; }
+.select-box.attack { border-color: #ff5a4a; background: rgba(255, 90, 74, 0.12); }
+.order-ping { position: absolute; z-index: 6; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid var(--cyan, #4fa3ff); animation: order-ping 0.7s ease-out forwards; }
+.order-ping.attack { border-color: #ff5a4a; }
+@keyframes order-ping { from { transform: scale(0.6); opacity: 1; } to { transform: scale(4.5); opacity: 0; } }

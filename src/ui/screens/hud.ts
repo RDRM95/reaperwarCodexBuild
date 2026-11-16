@@ -184,7 +184,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
         rules.special.hadesRounds ? el('div', { class: 'dim', 'data-action': 'hades-payload-note', style: { fontSize: '10px' } }, 'HADES penetrators carry internal nuclear warheads. Concentrated battery salvos create successive internal detonations after penetration.') : null,
         el('div', { class: 'dim', style: { fontSize: '10px' } }, 'Scope applies to spinal fire only. Movement and other orders command all player fleets. Secondary weapons and point defence remain active.'),
       ]),
-      el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Right-click enemy: attack · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD · O: tactical overlay'),
+      el('div', { class: 'dim', style: { fontSize: '10px', marginTop: '6px' } }, 'Left-click: select · Shift: multi-select · Shift-drag: select an area (Ctrl-drag adds; B makes a plain drag select) · Right-click enemy: attack · Shift-right-drag: attack every enemy in an area · Right-click open space: move the selection’s fleets there · Right-click ally: follow · Double-click: focus camera · Tab: select fleet · Space: pause · [ ]: speed · 1–7: cameras · H: hide HUD · O: tactical overlay'),
     ]),
     el('div', { class: 'panel red', style: { flex: '1', minHeight: '100px', overflow: 'auto' } }, [el('div', { class: 'panel-title' }, title('intel')), intelBox]),
   ]);
