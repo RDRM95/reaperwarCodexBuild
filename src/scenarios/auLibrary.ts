@@ -400,6 +400,18 @@ export const AU_CHAPTERS:readonly AUChapter[]=[
     b:f('reaper','Unexpected colony contact','capital_column','reaper_capital=14,reaper_destroyer=48')
   },
   {
+    id:'apex_titan_line',
+    name:'APEX — The Titan Line',
+    subtitle:'Hyper-dreadnoughts meet a Reaper battle line',
+    era:'2188 CE · Apex AU',category:'apex',rules:'prime_apex',
+    environment:'deep_space',distance:170,maxDuration:560,
+    description:'Two Alliance Titan-class hyper-dreadnoughts and a Hierarchy Imperator, each longer than a Sovereign, stand behind a conventional screen against a Reaper line. A KRONOS round destroys the capital ship it strikes and breaks the ships round it; there are five to a Titan. Fictional Apex designs; the outcome is not scripted.',
+    objective:'Spend the hyper-dreadnoughts’ rounds on the Reaper capital line before it closes.',
+    a:f('alliance','Titan battle group','line_abreast','alliance_titan=2,alliance_dreadnought=10,alliance_cruiser=40,alliance_frigate_thanix=70'),
+    extraA:[f('turian','Hierarchy siege group','strike_wedge','turian_imperator=1,turian_dreadnought=6,turian_cruiser=20,turian_frigate=30')],
+    b:f('reaper','Reaper battle line','strike_wedge','reaper_capital=40,reaper_destroyer=120')
+  },
+  {
     id:'iron_dawn_twelve_reapers',
     name:'IRON DAWN — Twelve Reapers',
     subtitle:'A hostile first contact meets an independent military superpower',

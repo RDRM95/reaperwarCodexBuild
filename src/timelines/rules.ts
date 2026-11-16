@@ -303,6 +303,8 @@ export function applyRulesToWeapon(
   return {
     ...w,
     damage,
+    // A blast is part of its round: whatever the rules do to the round's damage, they do to its blast.
+    ...(w.blast ? { blast: { ...w.blast, damage: w.blast.damage * (w.damage > 0 ? damage / w.damage : 1) } } : {}),
     penetration: isMA ? w.penetration * t.massAcceleratorPenetration : w.penetration,
     range: isMA ? w.range * t.massAcceleratorRange : w.range,
     cooldown: (rules.strictLore && w.id === 'alliance_dn_main' ? 2 : w.cooldown) / t.fireRate,

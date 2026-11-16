@@ -6,7 +6,7 @@ import type { ShipState } from './types';
  * Ordinary dreadnoughts (including Destiny Ascension) do not qualify. */
 const PROTECTED_AU_HULLS = new Set([
   'normandy_valkyrie', 'alliance_super_dreadnought', 'turian_super_dreadnought',
-  'alliance_omaha', 'alliance_aegis_command', 'alliance_valkyrie',
+  'alliance_omaha', 'alliance_aegis_command', 'alliance_valkyrie', 'alliance_titan', 'turian_imperator',
 ]);
 
 export function isProtectedAuHull(ship: Pick<ShipState,'classId'>): boolean {
