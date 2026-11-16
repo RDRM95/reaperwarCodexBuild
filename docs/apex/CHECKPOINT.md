@@ -10,14 +10,16 @@ Read this section first. The two below it (15 Nov) are merged and deployed. Ever
 
 **A separate thing the owner is doing:** they asked for, and were given, a prompt for a fresh thread to build a new simulator from the ground up on an engine of its choosing, using this repository as reference only and pushing nothing to it. That work does not touch this repository.
 
-**Done in this change: hyper-dreadnoughts** (`docs/apex/HYPER_DREADNOUGHTS_2026-11-16.md`).
+**Done, merged as #100 (`65d6def`): hyper-dreadnoughts** (`docs/apex/HYPER_DREADNOUGHTS_2026-11-16.md`).
 - Two AU classes: `alliance_titan` (Titan, 5,200 m, the KRONOS Lance: 520,000 a round, five rounds, 60 s) and `turian_imperator` (Imperator, 4,400 m, two siege rails: 60,000 a round, eighteen a rail, 30 s), each with heavy railgun turrets (`hyper_railgun`). Models in `src/rendering/ships/hyperDreadnought.ts`.
 - **New mechanic, `blast`** (a property of a weapon, `src/data/types.ts`; resolved in `BattleSimulation.detonate`): a round that strikes damages every other enemy hull within its radius, falling with the square of the distance, and strips armour in the same proportion. Enemy only. Reported as a `blast` event. Only these two rounds carry one.
 - A round with a blast is drawn blue to violet with its speed, not tracer amber (`tracerColour`, `src/rendering/visualWeight.ts`); its discharge and detonation (`lanceDischarge`, `kineticBlast` in `src/rendering/effects.ts`) take the same colour and add no draw call.
 - New scenario `apex_titan_line`: over three seeds the allies win two, narrowly, and the Reapers one.
 - One KRONOS round destroys a fresh Sovereign under all three rule sets. The capital-rounds rule of 15 Nov covers both guns without change.
 
-**Still to do from the list, roughly in this order:** ship scale audit against canon; drag-select of an area for fleet move and attack; fighter and Oculus first-person view with a cockpit or optic HUD, fixed chase cameras, automatic switch to the gunnery and main-cannon views; the Reaper's look (the owner still finds it a bit off and has not said where); Halo likeness and weapon effects; more AU vessels for the other factions; a Sol system map and map quality; HUD and UI overhaul.
+**Done after it: ship scale** (`docs/apex/SHIP_SCALE_2026-11-16.md`). Catalogue lengths agree with canon wherever canon states one, except the Marathon-class cruiser (1,170 → 1,192 m, corrected). Twenty models were not drawn at their catalogue length (the Destiny Ascension 14 % short, twelve hulls 3 to 7 % long); every hull is now scaled as a whole to the length it states, to within half a percent (`fitToLength`, `src/rendering/ships/index.ts`). The simulation always used the catalogue length. Piloted fighters are drawn at twice their catalogue length: unchanged, now pinned by `tests/ship-scale.test.ts`. Left to the owner: Harbinger at 2,400 m (not confirmed from canon here), and whether fighters should be true size.
+
+**Still to do from the list, roughly in this order:** drag-select of an area for fleet move and attack; fighter and Oculus first-person view with a cockpit or optic HUD, fixed chase cameras, automatic switch to the gunnery and main-cannon views; the Reaper's look (the owner still finds it a bit off and has not said where); Halo likeness and weapon effects; more AU vessels for the other factions; a Sol system map and map quality; HUD and UI overhaul.
 
 **Still open with the owner from 15 Nov:** whether to lower the destroyer's barrier regeneration (80 → 37 a second); whether a blast should also catch the firing side's ships.
 
