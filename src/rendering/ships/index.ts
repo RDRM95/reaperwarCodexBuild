@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SHIP_CLASSES } from '@/data/ships';
 import { buildNormandySR1 } from './normandySR1';
 import { buildAxiomAncient, buildAxiomWarden, buildExileArk, buildExileRaider, buildCompactSiege, buildCompactGunship } from './expansion';
 import { buildAllianceCarrier, buildAllianceCruiser, buildAllianceDreadnought, buildAllianceFighter, buildAllianceFrigate, buildAllianceAegis, buildAllianceOmaha, buildAllianceValkyrie } from './alliance';
@@ -81,6 +82,36 @@ const BUILDERS: Record<string, () => BuiltShip> = {
   skynet_harvester: buildSkynetHarvester,
 };
 
+/** A model is drawn at its stated length to within this share of it. */
+export const LENGTH_TOLERANCE = 0.005;
+
+/**
+ * Hold a model to the length it states. A builder lays a hull out in proportions of a length L and says the ship
+ * is L long, but a bow, a drive block or a fin can run past the ends: twelve hulls were drawn 3 to 7 % longer than
+ * their catalogue length, and the Destiny Ascension (a fan broader than most hulls are long) 14 % shorter. Every
+ * part is scaled about the model's origin by the same factor, so proportions, markers and materials are as built.
+ */
+export function fitToLength(built: BuiltShip): BuiltShip {
+  built.group.updateMatrixWorld(true);
+  const drawn = new THREE.Box3().setFromObject(built.group).getSize(new THREE.Vector3()).z;
+  if (!(drawn > 0) || Math.abs(drawn - built.lengthUnits) <= built.lengthUnits * LENGTH_TOLERANCE) return built;
+  const k = built.lengthUnits / drawn;
+  const scaled = new Set<THREE.BufferGeometry>();
+  built.group.traverse((o) => {
+    if (o !== built.group) o.position.multiplyScalar(k);
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh && mesh.geometry && !scaled.has(mesh.geometry)) {
+      // A builder may hand out a geometry it keeps for another class: scale a copy.
+      mesh.geometry = mesh.geometry.clone().scale(k, k, k);
+      scaled.add(mesh.geometry);
+    }
+  });
+  for (const node of built.engineNodes) node.multiplyScalar(k);
+  built.muzzle?.multiplyScalar(k);
+  built.group.updateMatrixWorld(true);
+  return built;
+}
+
 /** Cache of template groups per class; instances are cloned (sharing geometry). */
 const templates = new Map<string, BuiltShip>();
 
@@ -89,7 +120,9 @@ export function getShipTemplate(classId: string): BuiltShip {
   if (!t) {
     const builder = BUILDERS[classId];
     if (!builder) throw new Error(`No ship model builder for ${classId}`);
-    t = builder();
+    // A piloted fighter's exhaust discs stand a metre proud of a thirty-metre craft, and its own tests hold it to that.
+    const cls = SHIP_CLASSES[classId];
+    t = cls?.role === 'fighter' && cls.faction !== 'reaper' ? builder() : fitToLength(builder());
     templates.set(classId, t);
   }
   return t;

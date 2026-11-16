@@ -192,7 +192,7 @@ function chaos(length: number, battleship: boolean): BuiltShip {
   return finish(p, 'chaos', length, engines, new THREE.Vector3(0, 0, 0.425));
 }
 
-export const buildUnscMarathon = (): BuiltShip => unsc(11.70, false);
+export const buildUnscMarathon = (): BuiltShip => unsc(11.92, false);
 export const buildUnscInfinity = (): BuiltShip => unsc(56.94, true);
 export const buildCovenantCcs = (): BuiltShip => covenant(17.82, false);
 export const buildCovenantCas = (): BuiltShip => covenant(53.47, true);
