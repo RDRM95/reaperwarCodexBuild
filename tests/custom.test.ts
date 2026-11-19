@@ -51,6 +51,17 @@ describe('custom battles with united fleets', () => {
     expect(sim.ships.filter((s) => s.side === 'B' && s.faction === 'cerberus').length).toBeGreaterThan(0);
   });
 
+  it('rejects invalid saved hull and reinforcement counts before constructing the battle', () => {
+    for (const value of [Infinity, NaN, -3, 1.5]) {
+      expect(() => buildCustomBattle({
+        ...base, sideA: { ...base.sideA, counts: { alliance_cruiser: value } },
+      })).toThrow(/Invalid ship count/);
+      expect(() => buildCustomBattle({
+        ...base, reinforcementTime: 30, reinforcementCounts: { turian_cruiser: value },
+      })).toThrow(/Invalid reinforcement count/);
+    }
+  });
+
   it('has no hull cap', () => {
     const cfg = buildCustomBattle({ ...base, sideA: { ...base.sideA, counts: { alliance_frigate: 240 } } });
     expect(cfg.fleets[0].ships[0].count).toBe(240);
