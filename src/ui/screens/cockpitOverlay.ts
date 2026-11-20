@@ -66,7 +66,17 @@ export class CockpitOverlay {
   /** `now` is in milliseconds. The bracket follows its target every frame; the words change ten times a second. */
   update(host: CockpitHost, shipId: string | undefined, now: number): void {
     const ship = shipId ? host.getShip(shipId) : undefined;
-    if (!ship) return;
+    if (!ship || !ship.alive || ship.escaped) {
+      // The followed ship may disappear during auto-succession or after the last allied loss.
+      // Do not leave the previous ship's name, health or target bracket on screen.
+      this.bracket.style.display = 'none';
+      this.title.textContent = '';
+      this.left.textContent = '';
+      this.right.textContent = '';
+      this.target.textContent = '';
+      this.nextAt = 0;
+      return;
+    }
     const target = ship.targetId ? host.getShip(ship.targetId) : undefined;
     const live = target?.alive && !target.escaped ? target : undefined;
     const at = live ? host.project(live.pos, this.root.clientWidth, this.root.clientHeight) : undefined;
