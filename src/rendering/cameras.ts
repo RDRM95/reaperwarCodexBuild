@@ -6,13 +6,20 @@ import { CHASE_VIEWS, COCKPIT_FOV, type Seat } from './cockpit';
  * smooths toward them so switching modes produces a transition rather than a
  * cut. Positions are in render units.
  */
-/** The hull's own right and up, from where it points: level with the horizon across, as a ship is flown. */
-function hullFrame(heading: THREE.Vector3): { right: THREE.Vector3; up: THREE.Vector3 } {
-  const right = new THREE.Vector3().crossVectors(heading, new THREE.Vector3(0, 1, 0));
+/**
+ * The hull's own right and up, from where it points. Without `up` they are level with the horizon across, as a
+ * ship is flown; with it (the up the hull is drawn with, see `drawnUp` in attitude.ts) they are the hull's own,
+ * whatever its roll.
+ */
+function hullFrame(heading: THREE.Vector3, up?: THREE.Vector3): { right: THREE.Vector3; up: THREE.Vector3 } {
+  const right = new THREE.Vector3().crossVectors(heading, up ?? new THREE.Vector3(0, 1, 0));
   if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
   right.normalize();
   return { right, up: new THREE.Vector3().crossVectors(right, heading).normalize() };
 }
+
+/** How far the head turns from straight ahead in a seat, in radians: to either side, up, and down. */
+export const GLANCE_LIMIT = { yaw: THREE.MathUtils.degToRad(78), up: THREE.MathUtils.degToRad(32), down: THREE.MathUtils.degToRad(24) } as const;
 
 export type CameraMode = 'tactical' | 'cinematic' | 'follow' | 'free' | 'projectile' | 'reaper' | 'command' | 'gunnery' | 'cockpit' | 'chase';
 
@@ -49,6 +56,11 @@ export interface CameraSubject {
   size: number;
   /** Where the cockpit camera sits in this hull (see cockpit.ts). */
   seat?: Seat;
+  /**
+   * The hull's own up as it is drawn, of length one and at right angles to `heading`. A camera in or on the hull
+   * (the cockpit, the Reaper view) takes its place from it. Without it the hull is taken to be level.
+   */
+  up?: THREE.Vector3;
 }
 
 /**
@@ -129,6 +141,9 @@ export function travel(position: THREE.Vector3, look: THREE.Vector3, move: ShotM
   position.copy(about).add(offset);
 }
 const UP = new THREE.Vector3(0, 1, 0);
+/** How fast the picture's up follows the hull's in a seat, and the head its glance (each a rate a second). */
+const SEAT_ROLL_RATE = 3.5;
+const GLANCE_RATE = 9;
 
 /**
  * Chase and orbit distances in hull lengths, by hull size (render units). Small hulls keep the roomy framing they
@@ -196,6 +211,15 @@ export class CameraRig {
   /** The shot the cinematic camera last showed, to know a cut when it comes. */
   private lastShot: number | undefined;
   private readonly tmp = new THREE.Vector3();
+  /** In a seat: the head's turn from straight ahead (radians; yaw to starboard, pitch up), eased toward where it is asked to look. */
+  glanceYaw = 0;
+  glancePitch = 0;
+  private glanceYawGoal = 0;
+  private glancePitchGoal = 0;
+  /** In a seat: the up the picture is held to, eased after the hull's own, and the hull it belongs to. */
+  readonly seatUp = new THREE.Vector3(0, 1, 0);
+  private seatedIn: string | undefined;
+  private seated = false;
 
   constructor(aspect: number) {
     this.camera = new THREE.PerspectiveCamera(50, aspect, 1, 600_000);
@@ -229,6 +253,18 @@ export class CameraRig {
     // And an eye in a seat is in it at once: a cockpit view that flew in from where the last camera was would pass
     // through the hull on its way.
     this.transition = mode === 'gunnery' || mode === 'cockpit' ? 0 : 1;
+    this.seated = false;
+    this.glanceYaw = this.glancePitch = this.glanceYawGoal = this.glancePitchGoal = 0;
+    this.camera.up.set(0, 1, 0);
+  }
+
+  /**
+   * In a seat, look aside: `yaw` and `pitch` from −1 to 1 of the head's reach (starboard and up are positive).
+   * Zero looks ahead again. The head turns; the seat does not move and the hull is not steered.
+   */
+  glance(yaw: number, pitch: number): void {
+    this.glanceYawGoal = THREE.MathUtils.clamp(yaw, -1, 1) * GLANCE_LIMIT.yaw;
+    this.glancePitchGoal = pitch >= 0 ? Math.min(1, pitch) * GLANCE_LIMIT.up : Math.max(-1, pitch) * GLANCE_LIMIT.down;
   }
 
   /** Which fixed chase position is in use (see CHASE_VIEWS). */
@@ -351,11 +387,33 @@ export class CameraRig {
       case 'cockpit': {
         const s = opts.subject;
         if (!s) return this.fallback(dt, opts.fleetCentre);
-        // In the seat: fixed to the hull, looking where it points. Nothing is eased; a pilot's eye does not lag.
-        const frame = hullFrame(s.heading);
+        // In the seat: fixed to the hull, looking where it points. The eye's place is not eased; a pilot's eye
+        // does not lag. The seat is in the hull as it is drawn: by the battle's level it was above a level hull and
+        // under the keel of one drawn rolled over.
+        const frame = hullFrame(s.heading, s.up);
         const seat = s.seat ?? { forward: 0.2, up: 0.085 };
         this.desiredPos.copy(s.position).addScaledVector(s.heading, s.size * seat.forward).addScaledVector(frame.up, s.size * seat.up);
-        this.desiredLook.copy(this.desiredPos).addScaledVector(s.heading, s.size * 4 + 400);
+        // The picture's up follows the hull's. It is eased, so a hull whose drawn roll swings as it comes about
+        // turns the picture over a second, not in a frame; in a new seat it is right at once.
+        if (!this.seated || this.seatedIn !== s.id) { this.seatUp.copy(frame.up); this.seated = true; this.seatedIn = s.id; }
+        else {
+          this.seatUp.lerp(frame.up, 1 - Math.exp(-Math.max(0, dt) * SEAT_ROLL_RATE));
+          this.seatUp.addScaledVector(s.heading, -this.seatUp.dot(s.heading));
+          // Exactly opposite: the way round is not defined, so take one.
+          if (this.seatUp.lengthSq() < 1e-6) this.seatUp.copy(frame.right);
+          this.seatUp.normalize();
+        }
+        // The head: eased toward where it is asked to look, about the picture's own up and across.
+        const ease = 1 - Math.exp(-Math.max(0, dt) * GLANCE_RATE);
+        this.glanceYaw += (this.glanceYawGoal - this.glanceYaw) * ease;
+        this.glancePitch += (this.glancePitchGoal - this.glancePitch) * ease;
+        if (Math.abs(this.glanceYaw - this.glanceYawGoal) < 1e-4) this.glanceYaw = this.glanceYawGoal;
+        if (Math.abs(this.glancePitch - this.glancePitchGoal) < 1e-4) this.glancePitch = this.glancePitchGoal;
+        const across = this.tmp.crossVectors(s.heading, this.seatUp).normalize();
+        const cp = Math.cos(this.glancePitch), reach = s.size * 4 + 400;
+        this.desiredLook.copy(this.desiredPos).addScaledVector(s.heading, reach * cp * Math.cos(this.glanceYaw))
+          .addScaledVector(across, reach * cp * Math.sin(this.glanceYaw)).addScaledVector(this.seatUp, reach * Math.sin(this.glancePitch));
+        cam.up.copy(this.seatUp);
         instant = true;
         break;
       }
@@ -376,13 +434,15 @@ export class CameraRig {
         // over its front lip, so the hood lies under the camera and the limbs reach into the frame with the fight
         // beyond them. The camera used to sit over the aft blade; with a mantle of its proper size the hood stood
         // between that camera and everything ahead of it.
-        const right = new THREE.Vector3().crossVectors(s.heading, new THREE.Vector3(0, 1, 0));
-        if (right.lengthSq() < 1e-6) right.set(1, 0, 0);
-        right.normalize();
+        // The brow is the hull's own: each Reaper holds a roll of its own, and by the battle's level the camera of a
+        // hull rolled well over stood off its flank instead of on its hood. The picture itself stays level.
+        const { right, up } = hullFrame(s.heading, s.up);
         const w = capitalScale(s.size), a = REAPER_VIEW.destroyer, b = REAPER_VIEW.capital;
         const at = (key: keyof typeof a): number => s.size * (a[key] + (b[key] - a[key]) * w);
-        this.desiredPos.copy(s.position).addScaledVector(s.heading, at('forward')).addScaledVector(right, at('right')).add(new THREE.Vector3(0, at('up'), 0));
-        this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.9).add(new THREE.Vector3(0, -at('lookDown'), 0));
+        this.desiredPos.copy(s.position).addScaledVector(s.heading, at('forward')).addScaledVector(right, at('right'))
+          .add(s.up ? up.clone().multiplyScalar(at('up')) : new THREE.Vector3(0, at('up'), 0));
+        this.desiredLook.copy(s.position).addScaledVector(s.heading, s.size * 0.9)
+          .add(s.up ? up.clone().multiplyScalar(-at('lookDown')) : new THREE.Vector3(0, -at('lookDown'), 0));
         return this.apply(dt, false, s);
       }
       case 'projectile': {
@@ -487,6 +547,8 @@ export class CameraRig {
   }
 
   private fallback(dt: number, centre: THREE.Vector3): void {
+    this.camera.up.set(0, 1, 0);
+    this.seated = false;
     this.focus.lerp(centre, 0.05);
     this.desiredLook.copy(this.focus);
     const off = new THREE.Vector3(Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), Math.cos(this.yaw) * Math.cos(this.pitch)).multiplyScalar(this.distance);
@@ -552,7 +614,9 @@ export class CameraRig {
     cam.lookAt(this.currentLook);
     // Optical magnification changes the lens only. Ease in tangent space so
     // the target reaches an exact 2x scale without moving the mounted camera.
-    const targetTangent = Math.tan(THREE.MathUtils.degToRad(25)) /
+    // A seat keeps its wider lens: every mode was eased to 50 degrees here, so the cockpit's 66 lasted a third of a
+    // second after the cut.
+    const targetTangent = Math.tan(THREE.MathUtils.degToRad((this.mode === 'cockpit' ? COCKPIT_FOV : 50) / 2)) /
       (this.mode === 'gunnery' && this.gunneryZoomed ? 2 : 1);
     const tangent = THREE.MathUtils.lerp(Math.tan(THREE.MathUtils.degToRad(cam.fov / 2)),
       targetTangent, 1 - Math.exp(-Math.max(0, dt) * 12));

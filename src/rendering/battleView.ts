@@ -20,7 +20,7 @@ import { seatFor } from './cockpit';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
-import { attitudeOffset } from './attitude';
+import { attitudeOffset, drawnUp, turnBank } from './attitude';
 import { animateReaperRig, captureReaperRig, isArticulatedReaper, selectReaperRigDetail, type ReaperRig } from './reaperMotion';
 import { collectBreakupPieces } from './breakup';
 import { deathLight, deathList, deathPlan, isStagedDeath, type DeathPlan } from './deathSequence';
@@ -286,12 +286,7 @@ export class BattleView {
 
     // Controlled ME-style turns: fighter banking, mild escort corrections,
     // and heavy Reapers/dreadnoughts staying essentially level.
-    const turn=s.prevHeading.x*s.heading.z-s.prevHeading.z*s.heading.x;
-    const right=this.tmpB.set(this.tmpA.z,0,-this.tmpA.x);
-    const lateral=s.vel.x*right.x+s.vel.z*right.z;
-    const factor=s.role==='fighter'?.36:s.role==='frigate'?.12:
-      s.role==='cruiser'?.025:s.role==='reaper_destroyer'?.015:0;
-    const bank=THREE.MathUtils.clamp(turn*3.5+lateral*factor*.12,-factor,factor);
+    const bank=turnBank(s,this.tmpA.x,this.tmpA.z);
     // A Reaper holds its own roll and trim (attitude.ts): the same ones its batched copy is drawn at.
     const offset=attitudeOffset(s,this.sim.time,bank);
     if(offset)g.quaternion.multiply(offset);
@@ -733,6 +728,10 @@ export class BattleView {
     if (!ship) return undefined;
     const v = this.visuals.get(ship.id);
     const a = this.alpha;
+    // The heading between simulation steps, as the hull itself is drawn: taken at the steps, a turning hull
+    // swung the chase camera round it twenty times a second.
+    const heading = new THREE.Vector3(ship.prevHeading.x + (ship.heading.x - ship.prevHeading.x) * a, ship.prevHeading.y + (ship.heading.y - ship.prevHeading.y) * a,
+      ship.prevHeading.z + (ship.heading.z - ship.prevHeading.z) * a).normalize();
     return {
       id: ship.id,
       position: new THREE.Vector3(
@@ -741,12 +740,10 @@ export class BattleView {
         (ship.prevPos.z + (ship.pos.z - ship.prevPos.z) * a) * KM
       ),
       velocity: new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM),
-      // The heading between simulation steps, as the hull itself is drawn: taken at the steps, a turning hull
-      // swung the chase camera round it twenty times a second.
-      heading: new THREE.Vector3(ship.prevHeading.x + (ship.heading.x - ship.prevHeading.x) * a, ship.prevHeading.y + (ship.heading.y - ship.prevHeading.y) * a,
-        ship.prevHeading.z + (ship.heading.z - ship.prevHeading.z) * a).normalize(),
+      heading,
       size: v?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
       seat: seatFor(ship.role, ship.faction),
+      up: drawnUp(ship, heading, this.sim.time, new THREE.Vector3()),
     };
   }
 

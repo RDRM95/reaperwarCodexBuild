@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { CAMERA_MODE_LABELS, CameraRig, type CameraSubject } from '@/rendering/cameras';
+import { CAMERA_MODE_LABELS, CameraRig, GLANCE_LIMIT, type CameraSubject } from '@/rendering/cameras';
 import { CHASE_VIEWS, COCKPIT_FOV, cockpitStyle, seatFor } from '@/rendering/cockpit';
 import { buildCustomBattle } from '@/scenarios';
 import { BattleSimulation } from '@/simulation/battle';
@@ -197,5 +197,96 @@ describe('the automatic gun camera', () => {
     expect(run(taken, 1, 'tactical')).toBeUndefined();
     expect(taken.from).toBeUndefined();
     expect(run(taken, 30, 'tactical')).toBeUndefined();
+  });
+});
+
+/**
+ * 25 Nov 2026. Three faults in the seat, found while giving it an interior:
+ *  - the cockpit's wider lens lasted a third of a second: every camera was eased to 50 degrees each frame;
+ *  - the seat was placed by the battle's level, but a hull is drawn by the shortest turn to its heading plus its
+ *    bank and any held roll, so the seat of a hull drawn rolled over was under its keel;
+ *  - the head could not turn.
+ */
+describe('the seat is in the hull as it is drawn', () => {
+  it('keeps its wider lens for as long as it is used', () => {
+    const rig = rigIn('cockpit'), s = subject();
+    step(rig, s, 240);
+    expect(rig.camera.fov).toBeCloseTo(COCKPIT_FOV, 6);
+    rig.setMode('chase');
+    step(rig, s, 240);
+    expect(rig.camera.fov).toBeCloseTo(50, 6);
+  });
+
+  it('sits above the hull’s own back whatever the hull’s roll, with the picture’s up the hull’s', () => {
+    const heading = new THREE.Vector3(0.3, -0.2, -1).normalize();
+    for (const roll of [0.4, 1.6, 3.0, -2.2]) {
+      const level = new THREE.Vector3().crossVectors(new THREE.Vector3().crossVectors(heading, new THREE.Vector3(0, 1, 0)), heading).normalize();
+      const up = level.clone().applyAxisAngle(heading, roll);
+      const rig = rigIn('cockpit'), s = { ...subject(heading, 9.5, 'dreadnought'), up };
+      step(rig, s);
+      const offset = rig.camera.position.clone().sub(s.position);
+      expect(offset.dot(up)).toBeCloseTo(s.size * s.seat!.up, 6);
+      expect(offset.dot(heading)).toBeCloseTo(s.size * s.seat!.forward, 6);
+      expect(new THREE.Vector3(0, 1, 0).applyQuaternion(rig.camera.quaternion).dot(up)).toBeGreaterThan(0.999999);
+      expect(forward(rig).dot(heading)).toBeGreaterThan(0.999999);
+      // Another camera afterwards is level again.
+      rig.setMode('chase');
+      step(rig, s, 300);
+      expect(new THREE.Vector3(1, 0, 0).applyQuaternion(rig.camera.quaternion).y).toBeCloseTo(0, 6);
+    }
+  });
+
+  it('when the hull’s drawn roll swings, the eye stays in its seat and the picture turns over a second, not in a frame', () => {
+    const heading = new THREE.Vector3(0, 0, 1), rig = rigIn('cockpit');
+    const s = { ...subject(heading, 9.5, 'dreadnought'), up: new THREE.Vector3(0, 1, 0) };
+    step(rig, s, 10);
+    const over = { ...s, up: new THREE.Vector3(1, 0, 0) }; // a quarter turn at once
+    step(rig, over);
+    expect(rig.camera.position.clone().sub(s.position).dot(over.up)).toBeCloseTo(s.size * s.seat!.up, 6);
+    const pictureUp = () => new THREE.Vector3(0, 1, 0).applyQuaternion(rig.camera.quaternion);
+    expect(pictureUp().angleTo(s.up)).toBeLessThan(THREE.MathUtils.degToRad(8));
+    step(rig, over, 180);
+    expect(pictureUp().angleTo(over.up)).toBeLessThan(THREE.MathUtils.degToRad(1));
+    // Turned right over between two frames: still finite, and it arrives.
+    step(rig, { ...s, up: new THREE.Vector3(-1, 0, 0) }, 400);
+    expect(pictureUp().angleTo(new THREE.Vector3(-1, 0, 0))).toBeLessThan(THREE.MathUtils.degToRad(1));
+  });
+
+  it('the head turns within its reach and comes back; the seat does not move', () => {
+    const rig = rigIn('cockpit'), s = subject(new THREE.Vector3(0.2, 0.1, 1), 9.5, 'dreadnought');
+    step(rig, s);
+    const seat = rig.camera.position.clone();
+    rig.glance(1, 0);
+    step(rig, s, 120);
+    expect(rig.camera.position.distanceTo(seat)).toBeLessThan(1e-9);
+    const right = new THREE.Vector3().crossVectors(s.heading, new THREE.Vector3(0, 1, 0)).normalize();
+    expect(forward(rig).dot(right)).toBeCloseTo(Math.sin(GLANCE_LIMIT.yaw), 3);
+    expect(GLANCE_LIMIT.yaw).toBeLessThan(Math.PI / 2);
+    rig.glance(-1, 1);
+    step(rig, s, 120);
+    expect(forward(rig).dot(right)).toBeLessThan(-0.5);
+    expect(forward(rig).y).toBeGreaterThan(s.heading.y);
+    rig.glance(0, 0);
+    step(rig, s, 240);
+    expect(forward(rig).dot(s.heading)).toBeGreaterThan(0.999999);
+    // Asked for more than its reach, it stops at its reach; and a new camera starts looking ahead.
+    rig.glance(5, -5);
+    step(rig, s, 240);
+    expect(rig.glanceYaw).toBeCloseTo(GLANCE_LIMIT.yaw, 6);
+    expect(rig.glancePitch).toBeCloseTo(-GLANCE_LIMIT.down, 6);
+    rig.setMode('follow'); rig.setMode('cockpit');
+    step(rig, s);
+    expect(forward(rig).dot(s.heading)).toBeGreaterThan(0.999999);
+  });
+
+  it('the Reaper view stands on the hood of a Reaper that holds a roll', () => {
+    const heading = new THREE.Vector3(0, 0, 1), up = new THREE.Vector3(0, 1, 0).applyAxisAngle(heading, 2.4);
+    const rig = new CameraRig(16 / 9);
+    rig.setMode('reaper');
+    const s: CameraSubject = { id: 'r', position: new THREE.Vector3(), velocity: new THREE.Vector3(), heading, size: 20, up };
+    step(rig, s, 600);
+    // Above the hull's own back by the brow's height, not above the battle's level.
+    expect(rig.camera.position.dot(up)).toBeCloseTo(20 * 0.178, 2);
+    expect(new THREE.Vector3(1, 0, 0).applyQuaternion(rig.camera.quaternion).y).toBeCloseTo(0, 6);
   });
 });

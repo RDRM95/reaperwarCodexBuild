@@ -79,3 +79,35 @@ export function attitudeOffset(ship: Pick<ShipState, 'id' | 'role' | 'faction'>,
   if (roll === 0 && trim.yaw === 0 && trim.pitch === 0) return null;
   return OFFSET.setFromEuler(EULER.set(trim.pitch, trim.yaw, roll, 'YXZ'));
 }
+
+/**
+ * The roll a turning hull is drawn at, in radians: fighters bank hard, escorts a little, dreadnoughts and Reaper
+ * capitals not at all. `hx`, `hz` are the hull's heading as it is drawn (between simulation steps).
+ */
+export function turnBank(s: Pick<ShipState, 'role' | 'prevHeading' | 'heading' | 'vel'>, hx: number, hz: number): number {
+  const turn = s.prevHeading.x * s.heading.z - s.prevHeading.z * s.heading.x;
+  // Speed across the heading, to the hull's level right (hz, 0, −hx).
+  const lateral = s.vel.x * hz - s.vel.z * hx;
+  const factor = s.role === 'fighter' ? .36 : s.role === 'frigate' ? .12 :
+    s.role === 'cruiser' ? .025 : s.role === 'reaper_destroyer' ? .015 : 0;
+  return THREE.MathUtils.clamp(turn * 3.5 + lateral * factor * .12, -factor, factor);
+}
+
+const AHEAD = new THREE.Vector3(0, 0, 1);
+const DRAWN = new THREE.Quaternion();
+/**
+ * Which way a hull's own "up" points as it is drawn, at right angles to `heading` (the hull's drawn heading, of
+ * length one). A camera that sits in or on a hull must use this, not the level of the battle: a hull is drawn by
+ * the shortest turn from "ahead" to its heading, then its bank and any held roll, so a frigate that has come about
+ * can be drawn far from level (measured in the Battle of Earth: up to 175 degrees). A seat placed "above" such a
+ * hull by the battle's level is under its keel.
+ */
+export function drawnUp(ship: Pick<ShipState, 'id' | 'role' | 'faction' | 'prevHeading' | 'heading' | 'vel'>, heading: THREE.Vector3, seconds: number, out: THREE.Vector3): THREE.Vector3 {
+  DRAWN.setFromUnitVectors(AHEAD, heading);
+  const offset = attitudeOffset(ship, seconds, turnBank(ship, heading.x, heading.z));
+  if (offset) DRAWN.multiply(offset);
+  out.set(0, 1, 0).applyQuaternion(DRAWN);
+  // A Reaper's trim holds its bow a few degrees off its heading: keep only what is across the heading.
+  out.addScaledVector(heading, -out.dot(heading));
+  return out.lengthSq() > 1e-9 ? out.normalize() : out.set(0, 1, 0);
+}
