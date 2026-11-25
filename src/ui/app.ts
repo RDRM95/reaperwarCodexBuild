@@ -82,6 +82,8 @@ export class BattleController {
   hud: Hud;
   readonly gunneryOverlay:TargetTelemetry;
   readonly cockpitOverlay: CockpitOverlay;
+  /** The tactical overlay's cut-out while on a modelled bridge (a CSS clip-path), to set it only when it changes. */
+  private overlayClip = '';
   /** The automatic gun camera (see gunCam.ts): on or off, where it is in a cut, and whether the gun has just fired. Toggled with G. */
   autoGunCam = false;
   private gunCam: GunCamState = {};
@@ -618,6 +620,7 @@ export class BattleController {
     if (probe) updateMs = lap();
     this.view.render();
     if (probe) renderMs = lap();
+    if (this.view.rig.mode === 'cockpit') this.cockpitOverlay.root.dataset.interior = this.view.interiorActive ? 'modelled' : 'flat';
     if (this.view.rig.mode === 'cockpit') this.cockpitOverlay.update({ getShip: (id) => this.sim.getShip(id), project: (pos, w, h) => this.view.project(pos, w, h) }, this.view.followId, performance.now());
     if (this.autoGunCam) this.stepGunCam();
     if(this.view.rig.mode==='gunnery'){
@@ -645,6 +648,9 @@ export class BattleController {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     this.overlay.draw(this.view, w, h, this.view.rig.mode);
+    // On a modelled bridge the labels belong in its windows, not on its walls.
+    const clip = this.view.windowClip(w, h);
+    if (clip !== this.overlayClip) { this.overlayClip = clip; this.app.overlayCanvas.style.clipPath = clip; }
     if (probe) overlayMs = lap();
     this.hudTimer -= dtReal;
     this.hud.tick(dtReal, this.pendingEvents);
@@ -671,6 +677,9 @@ export class BattleController {
       const s = (k.has('d') ? 1 : 0) - (k.has('a') ? 1 : 0);
       const u = (k.has('r') || k.has('e') ? 1 : 0) - (k.has('f') || k.has('q') ? 1 : 0);
       if (f || s || u) this.view.rig.freeMove(f, s, u, dt, k.has('shift'));
+    } else if (this.view.rig.mode === 'cockpit') {
+      // In a seat the arrow keys turn the head, and it looks ahead again when they are let go.
+      this.view.rig.glance((k.has('arrowright') ? 1 : 0) - (k.has('arrowleft') ? 1 : 0), (k.has('arrowup') ? 1 : 0) - (k.has('arrowdown') ? 1 : 0));
     } else if (this.view.rig.mode === 'tactical' || this.view.rig.mode === 'command') {
       const f = (k.has('w') ? 1 : 0) - (k.has('s') ? 1 : 0);
       const s = (k.has('d') ? 1 : 0) - (k.has('a') ? 1 : 0);
@@ -820,6 +829,8 @@ export class BattleController {
     if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA' || (e.target as HTMLElement)?.tagName === 'SELECT') return;
     const k = e.key.toLowerCase();
     this.keys.add(k);
+    // The arrow keys turn the head in a seat: they must not also scroll a panel.
+    if (k.startsWith('arrow') && this.view.rig.mode === 'cockpit') e.preventDefault();
     if (k === 'shift') this.keys.add('shift');
     switch (k) {
       case ' ':
@@ -961,6 +972,7 @@ export class BattleController {
     document.body.classList.remove('hud-none');
     this.gunneryOverlay.root.remove();
     this.cockpitOverlay.root.remove();
+    this.app.overlayCanvas.style.clipPath = '';
     this.theatre.dispose();
     this.areaBox.remove();
     this.view.dispose();

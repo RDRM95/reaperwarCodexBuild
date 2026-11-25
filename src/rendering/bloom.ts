@@ -3,6 +3,8 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
 /**
  * Restrained HDR bloom. The scene is drawn into a half-float target, so emitters keep their real brightness
@@ -85,6 +87,14 @@ export interface BloomPipeline {
   sceneDrawCalls(): number;
   /** Triangles of the scene pass alone in the last frame. */
   sceneTriangles(): number;
+  /**
+   * A second scene drawn over the first before the bloom: a bridge the camera stands on, over the battle. It is
+   * drawn into a target of its own and laid over the battle by its alpha, so what it does not cover (its windows)
+   * shows the battle. Null takes it away; its target is kept for the next time until `releaseOverlay`.
+   */
+  setOverlay(overlay: { scene: THREE.Scene; camera: THREE.Camera } | null): void;
+  /** Free the overlay's target (it is as large as the scene's). Made again when an overlay is next set. */
+  releaseOverlay(): void;
   dispose(): void;
 }
 
@@ -108,14 +118,60 @@ export function createBloomPipeline(renderer: THREE.WebGLRenderer, scene: THREE.
   highPass.fragmentShader = EMITTER_HIGH_PASS;
   highPass.needsUpdate = true;
   const outputPass = new OutputPass();
+  // The overlay. It cannot be drawn into the scene's own target after the scene: that target is multisampled, and
+  // once it has been resolved for the next pass its samples may be thrown away, so a second scene drawn into it
+  // may find nothing under it. It has its own target, and one full-screen pass lays it over the resolved scene.
+  let overlay: { scene: THREE.Scene; camera: THREE.Camera } | null = null;
+  let overlayTarget: THREE.WebGLRenderTarget | undefined;
+  const clearWas = new THREE.Color();
+  const overlayPass = new Pass();
+  overlayPass.needsSwap = false;
+  overlayPass.enabled = false;
+  overlayPass.render = (r: THREE.WebGLRenderer): void => {
+    if (!overlay || !overlayTarget) return;
+    const alphaWas = r.getClearAlpha(), autoWas = r.autoClear;
+    r.getClearColor(clearWas);
+    r.setRenderTarget(overlayTarget);
+    r.setClearColor(0x000000, 0);
+    r.autoClear = false;
+    r.clear(true, true, true);
+    r.render(overlay.scene, overlay.camera);
+    r.setClearColor(clearWas, alphaWas);
+    r.autoClear = autoWas;
+  };
+  const layPass = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, tOverlay: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    // Where the overlay is solid its alpha is one and it replaces the scene; its glass and holograms add their
+    // light and leave the alpha as it was, so the scene shows through them.
+    fragmentShader: 'uniform sampler2D tDiffuse; uniform sampler2D tOverlay; varying vec2 vUv; void main() { vec4 over = texture2D(tOverlay, vUv); gl_FragColor = vec4(over.rgb + texture2D(tDiffuse, vUv).rgb * (1.0 - clamp(over.a, 0.0, 1.0)), 1.0); }',
+  });
+  layPass.enabled = false;
+  const sizeOverlay = (): void => {
+    const width = composer.renderTarget1.width, height = composer.renderTarget1.height;
+    // Four samples, two on a very large picture: the target is as large as the scene's.
+    const samples = Math.min(config.samples, width * height > 6_000_000 ? 2 : 4);
+    if (overlayTarget && (overlayTarget.width !== width || overlayTarget.height !== height)) { overlayTarget.dispose(); overlayTarget = undefined; }
+    overlayTarget ??= new THREE.WebGLRenderTarget(width, height, { type: THREE.HalfFloatType, samples, depthBuffer: true });
+    layPass.uniforms.tOverlay.value = overlayTarget.texture;
+  };
   composer.addPass(scenePass);
+  composer.addPass(overlayPass);
+  composer.addPass(layPass);
   composer.addPass(bloomPass);
   composer.addPass(outputPass);
   return {
     render: () => composer.render(),
-    setSize: (width, height) => composer.setSize(width, height),
+    setSize: (width, height) => { composer.setSize(width, height); if (overlay) sizeOverlay(); },
     sceneDrawCalls: () => sceneCalls,
     sceneTriangles: () => sceneTriangles,
-    dispose: () => { bloomPass.dispose(); outputPass.dispose(); composer.dispose(); },
+    setOverlay: (next) => {
+      if (next === overlay || (next && overlay && next.scene === overlay.scene && next.camera === overlay.camera)) return;
+      overlay = next;
+      overlayPass.enabled = layPass.enabled = overlay !== null;
+      if (overlay) sizeOverlay();
+    },
+    releaseOverlay: () => { if (!overlay) { overlayTarget?.dispose(); overlayTarget = undefined; } },
+    dispose: () => { overlayTarget?.dispose(); layPass.dispose(); bloomPass.dispose(); outputPass.dispose(); composer.dispose(); },
   };
 }

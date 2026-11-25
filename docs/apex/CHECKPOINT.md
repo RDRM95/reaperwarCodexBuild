@@ -2,9 +2,23 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
+## State on 25 Nov 2026 — the bridge; then the fleet combat and weapons brief
+
+Read this section first. Everything below it is older.
+
+**Recovered from the two sessions that had no local clone** (their draft PRs #104 and #105): the cockpit's words are cleared when its ship is lost (`cockpitOverlay.ts`, `tests/cockpit-ship-loss.test.ts`), and CI is pinned to `ubuntu-24.04` (Playwright 1.56 has no Chromium for the newer runner image). The reference-model workflow, which installs the same browser, is pinned too. Both PRs can be closed once this branch is merged.
+
+**The owner's request of 25 Nov, in their words:** "Prioritise improvements to spacecraft interiors, first-person views, camera positioning, lighting, materials and instrumentation." And of the interior: "its systems alliance ship not a plane cockpit".
+
+**Done** (`docs/apex/BRIDGE_INTERIOR_2026-11-25.md` has all of it): the Cockpit camera on a warship stands on a modelled bridge (`src/rendering/interior/`), drawn in a pass of its own over the battle, six draw calls, nothing when not in use. The seat's three faults are fixed: its lens, its frame (the hull's own up as drawn, `drawnUp` in `attitude.ts`) and its height (measured on each model, `seatFit.ts`). The arrow keys turn the head. A fighter's canopy and a Reaper's optic are as they were.
+
+**Worth knowing beyond this change:** every hull is drawn by the shortest turn from "ahead" to its heading, so a hull heading away from +z is drawn rolled, up to right over. Any camera that sits in or on a hull must use `drawnUp`, not the battle's level. The chase cameras do not (their tests define them level) and that was left alone.
+
+**Then, the same day, a second brief from the owner: "APEX — Fleet combat and weapons visual overhaul"** (long-range engagement, a coordinated opening volley, nuclear detonation effects, battery against penetrator, a weapon power hierarchy, audio and accessibility, performance held). Its state is in the section this one will be followed by, or in the notes it names.
+
 ## State on 16 Nov 2026, 00:45 UTC — the owner's list of 16 Nov; hyper-dreadnoughts first
 
-Read this section first. The two below it (15 Nov) are merged and deployed. Everything below those is older.
+The two sections below this one (15 Nov) are merged and deployed. Everything below those is older.
 
 **The owner's list of 16 Nov, in their words:** "ship likeness overall, expand halo ship likeness, weapon effects, feel, unique etc, improve map quality, sol system map, drag and select area for fleet movement and attack, optimise and overhaul hud and ui, autonomous improvements authorised, be creative to our scope, more unique au vessels, create hyper dreadnuaghts, ships that are byond super dreadnaughts, and equal to or bigger than reapers with very powerful, capital one shot, barrier deplete, armour destroying teraton yield, using them should be like a nuke, area of effect, the absolute nuclear equiv when it comes to mass round kinetic weapons, also unique colour due to the speed and nature of the weapon, massive railguns and spinal guns, and make some others, what fits in the au, expand on mechanics, improve, fix, full permission to be creative, reapers still look a bit off, although great on their own merit, and check size and scale of ships for canon accuracy, trident fight/oculus fps view, cockpit or unique optic hud, fixed chase cams, auto switch to new gunnary view, main canon view, weapon animation, effects, etc improve everything but mindful of performance costs".
 

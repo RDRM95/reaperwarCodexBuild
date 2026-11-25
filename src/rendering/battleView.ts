@@ -16,7 +16,9 @@ import { DETAIL_MESH_NAMES, lodLevelSquared, type LodLevel } from './lod';
 import { detailReach } from '@/core/hardwareProfile';
 import { engineGlowSize, farPointBrightness, muzzleFlashSize, tracerColour } from './visualWeight';
 import { pointOnLevel, rectContains, type ScreenRect } from '@/ui/areaOrders';
-import { seatFor } from './cockpit';
+import { cockpitStyle, seatFor, type Seat } from './cockpit';
+import { fitBridgeSeat, readHull } from './seatFit';
+import { InteriorView } from './interior/interiorView';
 import { weaponBeamOrigin, weaponFlashPose } from './weaponFlash';
 import { weaponWorldOffset } from '@/simulation/fireControl';
 import { primaryGunneryMount,isMainGunShot,gunneryFrame } from './gunnery';
@@ -64,9 +66,12 @@ export interface GraphicsSettings {
   bloom?: boolean;
   /** Distance-based level of detail (default on). */
   lod?: boolean;
+  /** A modelled bridge round the cockpit camera on a warship (default on). Off: the flat window frame. */
+  interiors?: boolean;
 }
 
 const INITIAL_FAR_POINTS = 2048;
+const INTERIOR_KEEP_SECONDS = 30;
 
 /** How wide the gun camera's own beam is drawn, as a share of its width from any other camera. */
 export const OWN_BEAM_IN_SIGHT = 0.4;
@@ -132,6 +137,15 @@ export class BattleView {
   /** Post-processing chain when bloom is on; the scene renders straight to the canvas otherwise. */
   private bloom?: BloomPipeline;
   lodCounts = { full: 0, reduced: 0, point: 0 };
+  /** The bridge the cockpit camera stands on: made the first time it is wanted. */
+  private interior?: InteriorView;
+  private interiorIdle = Infinity;
+  /** Where each class's bridge stands, measured on its model (seatFit.ts). */
+  private readonly bridgeSeats = new Map<string, Seat>();
+  /** Whether a modelled bridge is being drawn round the camera. */
+  get interiorActive(): boolean { return this.interior?.active ?? false; }
+  /** On a modelled bridge: its windows in a picture of this size, as a CSS `clip-path`. Empty otherwise. */
+  windowClip(width: number, height: number): string { return this.interior?.active ? this.interior.windowClip(width, height) : ''; }
 
   constructor(canvas: HTMLCanvasElement, sim: BattleLike, settings: GraphicsSettings) {
     this.settings = settings;
@@ -742,9 +756,47 @@ export class BattleView {
       velocity: new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM),
       heading,
       size: v?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
-      seat: seatFor(ship.role, ship.faction),
+      seat: this.rig.mode === 'cockpit' ? this.seatOf(ship) : seatFor(ship.role, ship.faction),
       up: drawnUp(ship, heading, this.sim.time, new THREE.Vector3()),
     };
+  }
+
+  /** The cockpit camera's seat in this ship: a warship's bridge stands on its hull's back, measured once for its class. */
+  private seatOf(ship: ShipState): Seat {
+    const table = seatFor(ship.role, ship.faction);
+    if (cockpitStyle(ship.role, ship.faction) !== 'bridge') return table;
+    let seat = this.bridgeSeats.get(ship.classId);
+    if (!seat) {
+      const template = getShipTemplate(ship.classId);
+      seat = fitBridgeSeat(readHull(template.group, template.lengthUnits), template.lengthUnits, table);
+      this.bridgeSeats.set(ship.classId, seat);
+    }
+    return seat;
+  }
+
+  /** The bridge round the cockpit camera: shown on a warship, lit and its instruments read each frame; gone otherwise. */
+  private syncInterior(dt: number, subject: CameraSubject | undefined): void {
+    const ship = this.rig.mode === 'cockpit' && subject?.id ? this.sim.getShip(subject.id) : undefined;
+    if (this.settings.interiors === false || !subject || !ship?.alive || ship.escaped || cockpitStyle(ship.role, ship.faction) !== 'bridge') {
+      if (this.interior?.active) { this.interior.hide(); this.bloom?.setOverlay(null); this.interiorIdle = 0; }
+      // The bridge's own picture is as large as the battle's: kept through a cut to the gun camera and back, let
+      // go once the camera has been elsewhere for half a minute.
+      else if (this.interior && this.interiorIdle < INTERIOR_KEEP_SECONDS && (this.interiorIdle += dt) >= INTERIOR_KEEP_SECONDS) this.bloom?.releaseOverlay();
+      return;
+    }
+    if (!this.interior) { this.interior = new InteriorView(); this.interior.setEnvironment(this.scene.environment); }
+    const room = this.interior;
+    room.show(ship);
+    // The sun, in the seat's own frame: x to starboard, y up, the bow at −z.
+    const up = this.rig.seatUp, right = this.tmpA.crossVectors(subject.heading, up).normalize(), sun = this.env.sunDirection;
+    const target = ship.targetId ? this.sim.getShip(ship.targetId) : undefined;
+    room.update(dt, {
+      ship, target: target?.alive && !target.escaped ? target : undefined, ships: this.sim.ships,
+      sun: this.tmpB.set(sun.dot(right), sun.dot(up), -sun.dot(subject.heading)),
+      glanceYaw: this.rig.glanceYaw, glancePitch: this.rig.glancePitch,
+      fov: this.rig.camera.fov, aspect: this.rig.camera.aspect, seconds: performance.now() / 1000,
+    });
+    this.bloom?.setOverlay(room);
   }
 
   sideCentre(side: 'A' | 'B'): THREE.Vector3 {
@@ -864,6 +916,7 @@ export class BattleView {
       this.rig.freeReach = Number.isFinite(nearest) ? Math.sqrt(nearest) : 600;
     }
     this.rig.update(dt, { subject, cinematic, projectile, gunnery, fleetCentre });
+    this.syncInterior(dt, subject);
   }
 
   private pickCinematicShot(): void {
@@ -964,10 +1017,19 @@ export class BattleView {
     this.renderer.render(this.scene, this.rig.camera);
     this.drawCalls = this.renderer.info.render.calls;
     this.triangles = this.renderer.info.render.triangles;
+    if (this.interior?.active) {
+      // The bridge, over the battle: a fresh depth buffer, so the ship's own hull cannot come through its deck.
+      const auto = this.renderer.autoClear;
+      this.renderer.autoClear = false;
+      this.renderer.clearDepth();
+      this.renderer.render(this.interior.scene, this.interior.camera);
+      this.renderer.autoClear = auto;
+    }
   }
 
   dispose(): void {
     this.bloom?.dispose();
+    this.interior?.dispose();
     this.effects.dispose();
     this.instances.dispose();
     this.glowTex.dispose();

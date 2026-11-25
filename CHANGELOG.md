@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — the bridge
+
+- The Cockpit camera on a warship stands on a modelled bridge: a commanding officer's deck and rail, a helm pit, crew stations, windows round the bow, in three sizes and seven navies' fittings. Its displays and tactical plot read the ship; its lamps answer damage and the ship's own guns. Six draw calls while in use, none otherwise. Settings → Graphics → Bridge interiors turns it off. See `docs/apex/BRIDGE_INTERIOR_2026-11-25.md`.
+- The arrow keys turn the head in the Cockpit camera; it looks ahead again when they are let go.
+- Fixed: the Cockpit camera's wider lens lasted a third of a second; its seat (and the Reaper view's brow) were placed by the battle's level instead of the hull's own, so they were off a hull drawn rolled; a warship's seat was inside four hull models and far above most others.
+- Fixed: the cockpit's words stayed on screen after its ship was lost.
+- The tactical overlay is cut to the bridge's windows while on a bridge.
+
 ## 0.14.0 — AU Worlds, persistent civilizations and fleet summaries
 
 - Added a separate AU Worlds hub with aligned Alliance/Cerberus, First Contact victors, the Prothean warning of 1800, independent FTL, Prothean victory, past cycles and an explicitly labelled HFY branch. Existing timelines remain available; ordinary new branches leave Reaper technology unchanged and use declared tradeoffs.

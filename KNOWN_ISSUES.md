@@ -8,6 +8,7 @@
 - Fighters are rendered at 2× scale for visibility.
 - Earth is at compressed scale; cloud layer is baked into the surface texture (no separate cloud sphere).
 - Manual fire commands are deterministic under identical command schedules, but the existing replay feature reruns the initial battle configuration and does not record/reapply interactive order history.
+- A warship's bridge (the Cockpit camera) is a modelled room with no crew and no shadows; fighters and Reapers keep their flat canopy and optic. Hulls heading away from "ahead" are drawn rolled, so from a bridge the planet may be overhead. Crossover and AU factions use the Alliance bridge.
 - Beam cylinders are flat-shaded; very close to the camera they look like ribbons.
 - Level of detail hides detail meshes and glow sprites by distance and draws far ships as points; there are no intermediate simplified hull meshes, so mid-range ships still cost two draw calls each (about 590 draw calls for a 206-ship Final Battle in the tactical view).
 

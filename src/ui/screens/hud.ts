@@ -481,7 +481,7 @@ export function createHud(app: App, ctrl: BattleController): Hud {
   } }, `${sp}×`));
   speedRow.append(pauseBtn, ...speedBtns);
   const cameraBtns = (Object.keys(CAMERA_MODE_LABELS) as CameraMode[]).map((m, i) => el('button', { class: 'btn small', 'data-camera': m,
-    title: m === 'cockpit' ? 'Key 9. From the seat of the followed ship, or of a fighter in flight; again for the next fighter'
+    title: m === 'cockpit' ? 'Key 9. From the seat of the followed ship (a warship: its bridge), or of a fighter in flight; again for the next fighter. Arrow keys look around'
       : m === 'chase' ? 'Key 0. A fixed place behind the followed ship; again for the next position' : `Key ${i + 1}`, onclick: () => ctrl.setCamera(m) }, CAMERA_MODE_LABELS[m]));
   cameraRow.append(...cameraBtns);
 

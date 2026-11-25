@@ -62,6 +62,10 @@ export function renderSettings(app: App): HTMLElement {
           p.graphics.lod = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();
         } }, [el('option', { value: 'on', selected: p.graphics.lod !== false }, 'On: distant ships simplify to hull and points'), el('option', { value: 'off', selected: p.graphics.lod === false }, 'Off: full detail at any distance')])]),
+        el('label', { class: 'field' }, ['Bridge interiors', el('select', { 'data-action': 'interiors', onchange: (e: Event) => {
+          p.graphics.interiors = (e.target as HTMLSelectElement).value === 'on';
+          void app.savePrefs();
+        } }, [el('option', { value: 'on', selected: p.graphics.interiors !== false }, 'On: the Cockpit camera stands on a modelled bridge'), el('option', { value: 'off', selected: p.graphics.interiors === false }, 'Off: a flat window frame')])]),
         el('label', { class: 'field' }, ['Tactical overlay', el('select', { 'data-action': 'overlay-enabled', onchange: (e: Event) => {
           p.showOverlay = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();
