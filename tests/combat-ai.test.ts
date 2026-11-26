@@ -4,7 +4,7 @@ import { buildCustomBattle } from '@/scenarios';
 import { BattleSimulation, SIM_DT } from '@/simulation/battle';
 import { slotToWorld } from '@/simulation/formations';
 import type { ShipState } from '@/simulation/types';
-import { shipEngagementRange } from '@/simulation/ai';
+import { engagementBand, shipEngagementRange } from '@/simulation/ai';
 
 /** Keep real firing, arcs and movement active without attrition ending a control experiment. */
 function harmless(sim: BattleSimulation): void {
@@ -115,7 +115,9 @@ describe('disciplined fleet combat regressions', () => {
       // A dreadnought now steps its firing station round the target by up to 14° (three-dimensional attack
       // bearings), so it holds up to the chord of that swing from its deployment slot: 2 × 17 km × sin 7° = 4.1 km.
       // Measured 1.87 to 3.70 km; this was 1.2 km while the line was a rigid row. It still stops there and fires.
-      expect(distance(ship.pos, slotToWorld(fleet.anchor, fleet.heading, ship.slot))).toBeLessThan(4.2);
+      // With the gun's reach at 74 km the line holds further off and the same swing is a longer chord: measured up
+      // to 4.74 km against the bound of 2 × 25 km × sin 7° = 6.1 km.
+      expect(distance(ship.pos, slotToWorld(fleet.anchor, fleet.heading, ship.slot))).toBeLessThan(2 * engagementBand(ship).preferred * Math.sin(7 * Math.PI / 180) + 0.1);
       expect(distance(ship.pos, positions[i])).toBeLessThan(0.5);
       expect(length(ship.vel)).toBeLessThan(ship.maxSpeed * 0.04);
       expect(ship.stats.shotsFired).toBeGreaterThan(0);

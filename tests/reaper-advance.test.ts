@@ -70,6 +70,8 @@ describe('Reaper capitals advance as individuals', () => {
     // edge of their range and cut their firing further.
     expect(now.alignment).toBeLessThan(0.62);
     expect(now.height).toBeGreaterThan(1.6);
-    expect(now.firing).toBeGreaterThan(0.75);
+    // 82 % until conventional guns out-ranged the beam (26 Nov 2026); 72 % since: a capital is fired on from 74 km
+    // and spends the first looks closing to its own 54.
+    expect(now.firing).toBeGreaterThan(0.66);
   });
 });

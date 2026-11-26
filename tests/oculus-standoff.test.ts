@@ -21,7 +21,12 @@ describe('deliberate capital gunnery and Oculus interceptors', () => {
     const band = engagementBand(dreadnought);
     expect(band.preferred).toBeLessThan(shipEngagementRange(dreadnought) * 0.90);
     expect(band.max).toBeLessThan(shipEngagementRange(dreadnought) * 0.95);
-    expect(WEAPONS.reaper_capital_beam.range).toBeGreaterThan(WEAPONS.alliance_dn_main.range);
+    // Until 26 Nov 2026 a Reaper's main beam out-ranged the dreadnought's gun (54 km against 50). The owner's brief
+    // of that day reverses it: conventional spinal guns open the battle from outside the beam's reach.
+    expect(WEAPONS.alliance_dn_main.range).toBeGreaterThan(WEAPONS.reaper_capital_beam.range * 1.3);
+    expect(WEAPONS.alliance_cruiser_main.range).toBeGreaterThan(WEAPONS.reaper_capital_beam.range);
+    expect(WEAPONS.alliance_cruiser_main.range).toBeLessThan(WEAPONS.alliance_dn_main.range);
+    expect(WEAPONS.alliance_frigate_main.range).toBeLessThan(WEAPONS.reaper_capital_beam.range);
     expect(WEAPONS.reaper_capital_beam.cooldown).toBeGreaterThan(WEAPONS.alliance_dn_main.cooldown);
     expect(SHIP_CLASSES.reaper_capital.turnRate.value).toBeLessThan(SHIP_CLASSES.alliance_dreadnought.turnRate.value);
   });

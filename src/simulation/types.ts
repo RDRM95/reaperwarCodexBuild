@@ -191,6 +191,8 @@ export interface ShipState {
   subsystems: Subsystems;
   alive: boolean;
   destroyedAt?: number;
+  /** The hull's place in its formation while its fleet has not yet joined the battle, where that is not `slot` (ai.ts, `openingSlot`). */
+  openingSlot?: Vec3;
   targetId?: string;
   /** Earliest automatic target change; invalid targets and player commands bypass it. */
   targetLockUntil?: number;
@@ -282,6 +284,19 @@ export interface FleetState {
   commsCooldown: number;
   /** Coordination penalty (Reaper command vulnerability). */
   coordinationPenalty: number;
+  /**
+   * Whether the fleet has joined the battle: one of its warships has fired on a ship or been hit, or its line has
+   * reached its station. Until then a conventional fleet advances as one formation (ai.ts, `openingSlot`).
+   */
+  opened?: boolean;
+  /** When it did (battle seconds). */
+  openedAt?: number;
+  /** Whether one of the fleet's warships has been hit: such a fleet does not hold its fire for a volley. */
+  underFire?: boolean;
+  /** While the fleet comes on as one formation beyond its guns: the sprint its anchor and every hull in formation share (1: none). */
+  approachSprint?: number;
+  /** How fast the fleet's anchor moved along its heading in the last decision (units a second): a hull in formation aims that far ahead of its place. */
+  advanceSpeed?: number;
 }
 
 // -------------------------------------------------------------------- Events

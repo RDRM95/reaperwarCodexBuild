@@ -69,9 +69,12 @@ describe('dreadnoughts against a Sovereign under canon rules', () => {
       const { destroyedAt, lost } = trial('canon_me3', 8, seed, 'fighting', 300);
       // Measured over seven seeds: destroyed at 78 to 96 s, three dreadnoughts lost every time. Before (seed 45):
       // all eight lost, the Sovereign left with 71 % of its hull.
-      expect(destroyedAt, `seed ${seed}`).toBeGreaterThan(60);
+      // 78 to 96 s while their guns reached 50 km. From 74 km all eight are firing from the start: 48 to 80 s.
+      expect(destroyedAt, `seed ${seed}`).toBeGreaterThan(40);
       expect(destroyedAt, `seed ${seed}`).toBeLessThan(130);
-      expect(lost, `seed ${seed}`).toBeGreaterThanOrEqual(2);
+      // Since 26 Nov 2026 the dreadnoughts open from 74 km, outside its beam's 54: over these seeds they lose one
+      // to three (it was three every time).
+      expect(lost, `seed ${seed}`).toBeGreaterThanOrEqual(1);
       expect(lost, `seed ${seed}`).toBeLessThanOrEqual(5);
     }
   });
@@ -93,7 +96,8 @@ describe('dreadnoughts against a Sovereign under Annihilation rules', () => {
       const { destroyedAt, lost } = trial('reaper_hardcore', 24, seed, 'fighting', 300);
       // Measured over seven seeds: destroyed at 42 to 53 s with 7 to 10 dreadnoughts lost. Sixteen manage it in
       // four seeds of seven, losing 11 to 15.
-      expect(destroyedAt, `seed ${seed}`).toBeGreaterThan(30);
+      // 42 to 53 s while the gun reached 50 km; from 74 km the twenty-four are all firing sooner (measured 29 s, seed 1).
+      expect(destroyedAt, `seed ${seed}`).toBeGreaterThan(22);
       expect(destroyedAt, `seed ${seed}`).toBeLessThan(80);
       expect(lost, `seed ${seed}`).toBeGreaterThanOrEqual(5);
       expect(lost, `seed ${seed}`).toBeLessThanOrEqual(13);

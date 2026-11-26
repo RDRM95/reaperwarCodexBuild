@@ -75,8 +75,13 @@ describe('battle simulation', () => {
     apex.run();
     const a = assessReapers(canon);
     const b = assessReapers(apex);
-    expect(['NEGLIGIBLE', 'LOW', 'MODERATE', 'ELEVATED']).toContain(a.threatLevel);
+    // Canon read NEGLIGIBLE to ELEVATED here until conventional guns were given their longer reach (26 Nov 2026):
+    // the task force now destroys two of the four capitals before it is destroyed (SEVERE), and all four under
+    // Prime/Apex (CRITICAL). The Reapers still win the canon engagement; see the test above.
+    const levels = ['NEGLIGIBLE', 'LOW', 'MODERATE', 'ELEVATED', 'SEVERE', 'CRITICAL'];
+    expect(levels.slice(0, 5)).toContain(a.threatLevel);
     expect(['SEVERE', 'CRITICAL']).toContain(b.threatLevel);
+    expect(levels.indexOf(b.threatLevel)).toBeGreaterThan(levels.indexOf(a.threatLevel));
     expect(b.reaperCapitalLosses).toBeGreaterThan(a.reaperCapitalLosses);
   });
 

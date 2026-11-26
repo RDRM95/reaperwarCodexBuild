@@ -46,8 +46,10 @@ describe('a depleted fleet', () => {
     // each), under way the whole time, the fleet "approaching" throughout, 384 and 379 shots.
     expect(firstInRange).toBeGreaterThan(0);
     expect(firstInRange).toBeLessThan(40);
-    expect(flown).toBeLessThan(20);
-    expect(moving / ticks).toBeLessThan(0.2);
+    // 14.1 units while a dreadnought's gun reached 50 km; 30.5 with its reach at 74 km (26 Nov 2026): the two hulls
+    // take station further off and step round it once. Circling was 139.9.
+    expect(flown).toBeLessThan(40);
+    expect(moving / ticks).toBeLessThan(0.25); // 12 % with a 50 km gun, 21 % with 74 km: the one step round its station
     expect(modeAt100).toBe('hold');
     // Shots were 380 and 381 while dreadnoughts stood beam-on to Reapers and fired their broadsides; bow-on, with
     // the main gun, they are 311 and 296 (in range at 17 s, 14.6 units flown, under way 13 % of the time).

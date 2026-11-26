@@ -22,7 +22,7 @@ import type { FactionId } from '@/data/types';
 import { WEAPONS, getWeapon } from '@/data/weapons';
 import { applyRulesToShip, applyRulesToWeapon, cloneRules, type EffectiveWeapon, type RuleSet } from '@/timelines/rules';
 import { assertLoreCompatible } from '@/timelines/lore';
-import { CLOSING_SPRINT, fireOn, fleetDecision, movementGoal, shipDecision, type AiContext } from './ai';
+import { CLOSING_SPRINT, fireOn, fleetDecision, formationLineZ, holdsFormation, movementGoal, openingSlot, shipDecision, type AiContext } from './ai';
 import { hardcoreReaperBeamDamage } from './reaperHardcore';
 import { applyDamage, applyProjectileDamage, hitProbability } from './damage';
 import { assignSlots } from './formations';
@@ -33,7 +33,7 @@ import { beamContactLocal, glanceMultiplier, spreadProjectileAim, worldHullConta
 import { SeparationField } from './separation';
 import { ProjectileBroadphase } from './projectileBroadphase';
 import { WeaponTargetField } from './weaponTargetField';
-import { HadesVolleyCoordinator } from './volleys';
+import { HadesVolleyCoordinator, OpeningVolleyCoordinator, isOpeningBattery } from './volleys';
 import { ShipNameGenerator } from './shipNames';
 import {
   batteryIntent, inWeaponArc, isCapitalShip, isCommandedBattery, PrimaryVolleyControl,
@@ -127,6 +127,8 @@ export class BattleSimulation implements AiContext {
   private heavyLossesAnnounced = new Set<Side>();
   private engagementAnnounced = new Set<string>();
   private hadesVolleys = new HadesVolleyCoordinator();
+  /** Each fleet's first volley, by kind of gun (volleys.ts). */
+  readonly openingVolleys = new OpeningVolleyCoordinator();
   private separationField?: SeparationField;
   private weaponTargetField?: WeaponTargetField;
   private capitalsOnField: { tick: number; A?: boolean; B?: boolean } = { tick: -1 };
@@ -194,8 +196,10 @@ export class BattleSimulation implements AiContext {
     );
     for (const s of created) s.slot = slots.get(s.id) ?? v3();
     this.clearOfOtherFleets(fleet, created);
+    // A conventional fleet deploys as it will advance: its screen close to its gun line.
+    this.assignOpeningStations(fleet, created);
     for (const s of created) {
-      const world = this.slotWorld(fleet, s.slot);
+      const world = this.slotWorld(fleet, s.openingSlot ?? s.slot);
       s.pos = world;
       s.prevPos = clone(world);
       s.heading = clone(fleet.heading);
@@ -247,6 +251,46 @@ export class BattleSimulation implements AiContext {
           if (!blocked(world, ship.radiusKm, placed.length)) break;
         }
       }
+      placed.push({ pos: world, radius: ship.radiusKm });
+    }
+  }
+
+  /**
+   * The places a conventional fleet's hulls keep until it has joined the battle: the screen drawn in to its gun
+   * line (ai.ts, `openingSlot`). Drawing ranks together can put one hull in another's place, so each hull that is
+   * moved takes the nearest station to its drawn-in place that is clear of every hull already placed, its own
+   * fleet's and any other's, largest hulls first: the same rule, and the same clearance, as `clearOfOtherFleets`.
+   */
+  private assignOpeningStations(fleet: FleetState, mine: ShipState[]): void {
+    for (const s of mine) s.openingSlot = undefined;
+    if (!holdsFormation(fleet)) return;
+    const hulls = mine.filter(s => s.role !== 'fighter');
+    const lineZ = formationLineZ(hulls), own = new Set(mine);
+    const placed: { pos: Vec3; radius: number }[] = this.ships.filter(s => s.alive && !s.escaped && !own.has(s)).map(s => ({ pos: s.pos, radius: s.radiusKm }));
+    const moved: { ship: ShipState; index: number; to: Vec3 }[] = [];
+    hulls.forEach((ship, index) => {
+      const to = openingSlot(ship.slot, lineZ);
+      if (to === ship.slot) placed.push({ pos: this.slotWorld(fleet, ship.slot), radius: ship.radiusKm });
+      else moved.push({ ship, index, to });
+    });
+    const blocked = (pos: Vec3, radius: number): boolean => {
+      for (const other of placed) {
+        const reach = (radius + other.radius) * DEPLOYMENT_CLEARANCE;
+        const dx = pos.x - other.pos.x, dy = pos.y - other.pos.y, dz = pos.z - other.pos.z;
+        if (dx * dx + dy * dy + dz * dz < reach * reach) return true;
+      }
+      return false;
+    };
+    moved.sort((a, b) => b.ship.radiusKm - a.ship.radiusKm || a.index - b.index);
+    for (const { ship, to } of moved) {
+      let slot = to, world = this.slotWorld(fleet, slot);
+      const step = Math.max(0.08, ship.lengthKm * 1.1);
+      for (let attempt = 1; blocked(world, ship.radiusKm); attempt++) {
+        const angle = attempt * 2.399963229728653, reach = Math.sqrt(attempt) * step;
+        slot = v3(to.x + Math.cos(angle) * reach, to.y + Math.sin(attempt * 1.7) * step * 0.35, to.z + Math.sin(angle) * reach);
+        world = this.slotWorld(fleet, slot);
+      }
+      ship.openingSlot = slot;
       placed.push({ pos: world, radius: ship.radiusKm });
     }
   }
@@ -570,6 +614,7 @@ export class BattleSimulation implements AiContext {
         if (volleyRemaining > 1e-8) {
           if (!this.primaryVolleys.allows(this.time, ship.fleetId, ship, w)) reason = 'coordinating';
         } else if (held) reason = 'held';
+        else if (this.openingVolleys.holding(this.time, ship.fleetId, ship, w)) reason = 'coordinating';
         else if (fleet.orders.focusFire && this.hadesVolleys.secondsUntilRelease(this.time, ship.fleetId, ship, w) > 1e-8) reason = 'coordinating';
       }
       return { reason, cooldown, range: w.def.range, distance: targetDistance, targetId: intended?.id };
@@ -632,6 +677,7 @@ export class BattleSimulation implements AiContext {
       fleetSlotSeed(this.config.seed, fleet.spec.id),
     );
     for (const s of mine) s.slot = slots.get(s.id) ?? s.slot;
+    this.assignOpeningStations(fleet, mine);
   }
 
   // ------------------------------------------------------------------- loop
@@ -872,6 +918,7 @@ export class BattleSimulation implements AiContext {
           const dmg = w.def.damage * dt * (w.beamGlance ?? 1);
           const impact = hardcoreReaperBeamDamage(this.rules, ship, target, w.def, dmg);
           const out = applyDamage(target, impact, w.def, this.rng, this.time);
+          this.struck(target);
           ship.stats.damageDealt += out.hullDamage + out.barrierDamage;
           if (out.barriersCollapsed) this.emit({ t: this.time, type: 'barriers_down', shipId: target.id });
           if (out.subsystem) this.emit({ t: this.time, type: 'subsystem_disabled', shipId: target.id, subsystem: out.subsystem.name, level: out.subsystem.level });
@@ -906,6 +953,32 @@ export class BattleSimulation implements AiContext {
   }
 
   /** Largest distance of any of a hull's mounts from its centre (a mount's world position is the centre plus its rotated offset). */
+  /** A warship has been hit: its fleet is in the battle and does not hold its fire. A fighter's loss is not the fleet's. */
+  private struck(target: ShipState): void {
+    if (target.role === 'fighter') return;
+    const fleet = this.fleets.get(target.fleetId);
+    if (!fleet) return;
+    fleet.underFire = true;
+    this.open(fleet);
+  }
+
+  /** The fleet has joined the battle: its hulls leave the order of the approach for their own stations. */
+  private open(fleet: FleetState): void {
+    if (fleet.opened) return;
+    fleet.opened = true;
+    fleet.openedAt = this.time;
+  }
+
+  /** The guns of one kind in a fleet's opening battery: loaded spinal mounts on hulls still fighting. */
+  private openingGuns(fleetId: string, weaponId: string): number {
+    let guns = 0;
+    for (const ship of this.ships) {
+      if (ship.fleetId !== fleetId || !ship.alive || ship.escaped || ship.withdrawing) continue;
+      for (const w of ship.weapons) if (w.def.id === weaponId && (w.ammo === undefined || w.ammo > 0) && isOpeningBattery(ship, w)) guns++;
+    }
+    return guns;
+  }
+
   private mountReach(ship: ShipState): number {
     let reach = this.mountReaches.get(ship.id);
     if (reach === undefined) {
@@ -1007,10 +1080,16 @@ export class BattleSimulation implements AiContext {
     }
     // A manual command releases ready spinal mounts immediately. It never
     // resets a cooldown, creates a firing solution, or moves the HADES clock.
+    // The fleet's first volley: its spinal guns of one kind hold until most of them bear, then fire together. A
+    // gun reaches this line only when it is loaded with a target in range and in its arc, so one that cannot bear
+    // holds nobody; the player's own release opens the battery at once.
+    if (manualWindow) this.openingVolleys.open(this.time, fleet.spec.id, w);
+    else if (!this.openingVolleys.canFire(this.time, fleet.spec.id, ship, w, !!fleet.underFire, () => this.openingGuns(fleet.spec.id, def.id))) return;
     if (!manualWindow && fleet.orders.focusFire && !this.hadesVolleys.canFire(this.time, fleet.spec.id, ship, w)) return;
     if (manualWindow) this.primaryVolleys.fired(fleet.spec.id, ship, w);
 
     // Fire.
+    if (!def.antiSmall && ship.role !== 'fighter') this.open(fleet);
     const reloadJitter = 0.95 + 0.1 * this.rng.next();
     w.cooldown = def.cooldown * (this.rules.strictLore && def.id === 'alliance_dn_main' ? 1 : reloadJitter);
     ship.heat += def.heat;
@@ -1142,6 +1221,7 @@ export class BattleSimulation implements AiContext {
 
   private applyHit(shooter: ShipState, target: ShipState, weapon: EffectiveWeapon, damage: number, pos: Vec3, glancing = false): void {
     const out = applyProjectileDamage(target, damage, weapon, this.rng, this.time);
+    this.struck(target);
     shooter.stats.hits++;
     shooter.stats.damageDealt += out.hullDamage + out.barrierDamage;
     this.emit({

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BattleSimulation } from '@/simulation/battle';
 import { buildCustomBattle } from '@/scenarios';
-import { HadesVolleyCoordinator, isHadesSpinal } from '@/simulation/volleys';
+import { HadesVolleyCoordinator, OPENING_STAGGER_SECONDS, isHadesSpinal } from '@/simulation/volleys';
 
 function battery(rulesId = 'prime_apex') {
   const sim = new BattleSimulation(buildCustomBattle({
@@ -50,10 +50,16 @@ describe('coordinated HADES salvos', () => {
       gun(i).cooldown = 0;
       ships[i].aiTimer = 0;
     }
-    sim.step();
+    // No HADES clock holds them. Since 26 Nov 2026 a fleet's first shots are its opening volley (volleys.ts): all
+    // three guns bear, so the battery is released in the first tick and each gun fires at its own moment within
+    // the stagger. They used to fire in that one tick.
+    while (sim.time < OPENING_STAGGER_SECONDS + 0.11) sim.step();
     const mainIds = new Set(ships.map((_, i) => gun(i).def.id));
     const shots = sim.events.filter(e => e.type === 'weapon_fired' && mainIds.has(e.weaponId));
     expect(shots.length).toBe(ships.length);
+    expect(new Set(shots.map(e => e.type === 'weapon_fired' && e.shipId)).size).toBe(ships.length);
+    expect(sim.openingVolleys.released).toHaveLength(1);
+    expect(sim.openingVolleys.released[0].t).toBeLessThanOrEqual(0.051);
   });
 
   it('assembles a fleet salvo and releases ready mounts together', () => {

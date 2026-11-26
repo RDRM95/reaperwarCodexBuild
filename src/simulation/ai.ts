@@ -223,11 +223,11 @@ export function engagementBand(ship: ShipState, range = shipEngagementRange(ship
   }
 }
 
-function formationCore(ships: ShipState[]): ShipState[] {
+function formationCore(ships: readonly ShipState[]): ShipState[] {
   const capitals = ships.filter(s => s.role === 'dreadnought' || s.role === 'reaper_capital');
   if (capitals.length) return capitals;
   const cruisers = ships.filter(s => s.role === 'cruiser' || s.role === 'reaper_destroyer');
-  return cruisers.length ? cruisers : ships;
+  return cruisers.length ? cruisers : [...ships];
 }
 
 /** Value-weighted principal range of the battle line, rather than the longest
@@ -493,6 +493,44 @@ export function altitudeLane(ctx: AiContext, fleet: FleetState): { lane: number;
   return cached;
 }
 
+/**
+ * Before a conventional fleet has joined the battle its screen keeps close to its gun line: no hull's station is
+ * more than `OPENING_SCREEN_LEAD` ahead of the line, plus `OPENING_SCREEN_DEPTH` of whatever its place in the
+ * formation is beyond that.
+ *
+ * A formation puts its frigates 25 km ahead of its dreadnoughts, and a frigate ran on at once to its own short
+ * range: at the Battle of Earth the screen was 40 km ahead of the line within ten seconds. The Reapers therefore
+ * met the screen at 55 km while the dreadnoughts were over 100 km off, and a gun line that out-ranges a Reaper
+ * never fired first. The fleet now comes on as a fleet, its dreadnoughts open at their range with the screen
+ * still outside the Reapers', and the screen runs on when the fleet has opened or been hit.
+ */
+export const OPENING_SCREEN_LEAD = 5 * S;
+export const OPENING_SCREEN_DEPTH = 0.2;
+/** However deep the screen, it is drawn in to within this of the lead: a fleet of a thousand hulls has a screen 60 km deep. */
+export const OPENING_SCREEN_DEPTH_LIMIT = 5 * S;
+
+/** Over this long after a fleet has opened its hulls come up to their full closing sprint. */
+export const OPENING_RELEASE_SECONDS = 8;
+
+/** A hull's place in its formation while its fleet has not yet joined the battle. `lineZ` is how far forward the fleet's gun line stands in the formation. */
+export function openingSlot(slot: Vec3, lineZ: number): Vec3 {
+  const ahead = slot.z - lineZ - OPENING_SCREEN_LEAD;
+  return ahead > 0 ? v3(slot.x, slot.y, lineZ + OPENING_SCREEN_LEAD + Math.min(OPENING_SCREEN_DEPTH_LIMIT, ahead * OPENING_SCREEN_DEPTH)) : slot;
+}
+
+/**
+ * How far forward in its formation a fleet's gun line stands: the foremost place in its line. A large fleet's line
+ * is many ranks deep (160 dreadnoughts stand over 100 km of depth); measured from its middle, the leading ranks
+ * themselves were "ahead of the line" and were drawn back with the screen.
+ */
+export function formationLineZ(members: readonly ShipState[]): number {
+  const core = formationCore(members.filter(s => s.role !== 'fighter'));
+  return core.length ? core.reduce((front, s) => Math.max(front, s.slot.z), -Infinity) : 0;
+}
+
+/** Whether a fleet advances as one formation: a conventional fleet that has not yet joined the battle. */
+export const holdsFormation = (fleet: FleetState): boolean => fleet.spec.faction !== 'reaper' && !fleet.opened;
+
 /** The nearest and farthest a Reaper capital chooses to fight, as shares of its engagement range. */
 export const REAPER_PRESS = [0.52, 0.86] as const;
 const presses = new WeakMap<ShipState, number>();
@@ -607,6 +645,7 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
   const desiredRange = range * preferredFactor;
   const slowest = Math.min(...core.map(s => s.maxSpeed * (0.25 + 0.75 * s.subsystems.engines)));
   let desired: Vec3 | undefined;
+  fleet.approachSprint = 1;
   const o = fleet.orders;
   const noRetreat = fleet.spec.faction === 'reaper';
   const withdrawing = !noRetreat && (o.order === 'withdraw' || o.order === 'retreat');
@@ -626,6 +665,12 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
       if (!stopLongChase && fleet.engagementMode !== 'approach' && dist > resumeRange)
         fleet.engagementMode = 'approach';
       if (fleet.engagementMode === 'approach' && dist <= desiredRange) fleet.engagementMode = 'hold';
+      // A line on its station has joined the battle whether or not a gun has spoken.
+      if (fleet.engagementMode === 'hold' && !fleet.opened) { fleet.opened = true; fleet.openedAt = ctx.time; }
+      // A fleet coming on as one formation sprints as one: every hull's sprint, by how far the line is beyond its
+      // guns. A hull used to sprint by itself for its own range, which is how a screen came to be 40 km ahead.
+      if (fleet.engagementMode === 'approach' && holdsFormation(fleet))
+        fleet.approachSprint = 1 + (CLOSING_SPRINT - 1) * Math.min(1, Math.max(0, dist / range - 1) / (SPRINT_FULL_AT - 1));
       if (fleet.engagementMode === 'approach') {
         // Canon-style fleet closure: the whole line follows a gentle, stable
         // lateral approach lane, rather than converging on one central point.
@@ -666,9 +711,10 @@ export function fleetDecision(ctx: AiContext, fleet: FleetState, dt: number): vo
     // outside beam range for an entire battle.
     const receding = validEnemy(representative, focus) && dot(focus.vel, normalize(sub(focus.pos, fleet.anchor))) > slowest * 0.5;
     const pace = receding && attackOrder(fleet) ? 1 : 0.85;
-    const step = Math.min(dist, slowest * pace * catchup * dt);
+    const step = Math.min(dist, slowest * pace * catchup * dt * (fleet.approachSprint ?? 1));
     if (dist > 1e-6) fleet.anchor = add(fleet.anchor, scale(delta, step / dist));
-  }
+    fleet.advanceSpeed = dist > 1e-6 && dt > 0 ? (step / dist) * dot(delta, fleet.heading) / dt : 0;
+  } else fleet.advanceSpeed = 0;
 
   // Once the line is on station, freeze its basis. Individual hulls still
   // track targets; rotating a world-space line every tick causes orbital pursuit.
@@ -887,7 +933,9 @@ function fighterAttackGoal(ctx: AiContext, ship: ShipState, target: ShipState, r
 export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState): MovementGoal {
   const candidate = ship.targetId ? ctx.getShip(ship.targetId) : undefined;
   const target = validEnemy(ship, candidate) ? candidate : undefined;
-  const slotPos = slotToWorld(fleet.anchor, fleet.heading, ship.slot);
+  // A conventional fleet that has not yet joined the battle comes on as one formation, its screen close to its line.
+  const inFormation = holdsFormation(fleet) && ship.role !== 'fighter';
+  const slotPos = slotToWorld(fleet.anchor, fleet.heading, inFormation && ship.openingSlot ? ship.openingSlot : ship.slot);
   const noRetreat = ship.faction === 'reaper';
   if (ship.role === 'fighter' && (!fleet.orders.fightersDeployed || ship.rearming) && ship.carrierId) {
     const carrier = ctx.getShip(ship.carrierId);
@@ -908,6 +956,18 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
   }
   const engaging = attackOrder(fleet) || (noRetreat && ['withdraw', 'retreat'].includes(fleet.orders.order));
   if (!target || (!engaging && ship.role !== 'fighter')) return { position: slotPos, speedFraction: 1, face: target ? combatFacing(ship, target, slotPos) : undefined };
+  // No hull leaves the formation for its own range before the fleet has opened: it keeps its place and lays its guns.
+  if (inFormation) {
+    // Its place is moving. A hull steering for where its place is trails it by its own stopping time, and the fleet
+    // waits for hulls that trail: the formation crawled. It steers for where its place will be when it gets there.
+    const sprint = fleet.approachSprint ?? 1;
+    const ahead = Math.max(0, fleet.advanceSpeed ?? 0) * ship.maxSpeed * sprint / Math.max(1e-9, ship.acceleration * sprint);
+    let position = add(slotPos, scale(fleet.heading, ahead));
+    // A hull ahead of its place lets the formation come up to it: it does not turn back to meet it.
+    const behind = dot(sub(position, ship.pos), fleet.heading);
+    if (behind < 0) position = add(position, scale(fleet.heading, -behind));
+    return { position, speedFraction: 1, face: combatFacing(ship, target, slotPos), sprint };
+  }
 
   // The hull's range is that of the battery it presents to this target.
   aspectAgainst(ship, target);
@@ -1006,5 +1066,8 @@ export function movementGoal(ctx: AiContext, ship: ShipState, fleet: FleetState)
     const toEnemy = normalize(sub(target.pos, ship.pos));
     if (dot(sub(position, ship.pos), toEnemy) < -1e-6) position = ship.pos;
   }
-  return { position, speedFraction: 1, face: combatFacing(ship, target, position), sprint: closingSprint(ship, dist, range) };
+  // A fleet that has just opened lets its screen go by degrees. Released all at once from the close order of the
+  // approach, the screens of two fleets side by side crossed at twice their combat speed and two frigates touched.
+  const released = noRetreat || fleet.openedAt === undefined ? 1 : Math.min(1, Math.max(0, (ctx.time - fleet.openedAt) / OPENING_RELEASE_SECONDS));
+  return { position, speedFraction: 1, face: combatFacing(ship, target, position), sprint: 1 + (closingSprint(ship, dist, range) - 1) * released };
 }

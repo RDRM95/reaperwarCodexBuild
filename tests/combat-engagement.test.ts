@@ -7,6 +7,8 @@ import {
 } from '@/simulation/ai';
 import { hullTotals, measureActivity } from '@/simulation/combatActivity';
 import type { ShipState } from '@/simulation/types';
+import { WEAPONS } from '@/data/weapons';
+import { BATTLESPACE_SCALE } from '@/simulation/constants';
 
 /**
  * Fighting, not chasing. Owner's report: "The simulator currently spends too much time showing ships chasing one
@@ -133,7 +135,7 @@ describe('how a hull presents its guns', () => {
     for (const hull of ['alliance_dreadnought', 'alliance_cruiser']) for (const target of ['reaper_capital', 'reaper_destroyer'])
       expect(aspectAgainst(of(reapers, hull), of(reapers, target)), `${hull} against ${target}`).toBe('bow');
     // It then fights at the range of its main gun, not of its broadside.
-    expect(shipEngagementRange(dreadnought)).toBeCloseTo(20, 6);
+    expect(shipEngagementRange(dreadnought)).toBeCloseTo(WEAPONS.alliance_dn_main.range * BATTLESPACE_SCALE, 6);
     // A carrier has nothing that bears ahead: it turns a side to anything.
     expect(aspectAgainst(of(reapers, 'alliance_carrier'), sovereign)).toBe('beam');
     // Against a lightly armoured cruiser the broadside is the quicker battery; against a dreadnought the main gun.
@@ -218,8 +220,10 @@ describe('the closing sprint', () => {
       if (d > range * SPRINT_FULL_AT) fastest = Math.max(fastest, speed());
       if (d < range * 0.9 && sim.tick % 20 === 0) { inRange = Math.max(inRange, speed()); inRangeSamples++; }
     }
-    // Measured: it reaches twice its combat speed on the way in, and never exceeds combat speed once inside its guns.
-    expect(fastest).toBeGreaterThan(1.8);
+    // Measured: it reaches 1.68 times its combat speed on the way in, and never exceeds combat speed once inside its
+    // guns. It reached twice its combat speed while each hull sprinted for itself; since 26 Nov 2026 a fleet that has
+    // not yet opened comes on as one formation, at 0.85 of the sprint of its slowest hull (here the hull itself).
+    expect(fastest).toBeGreaterThan(1.5);
     expect(fastest).toBeLessThanOrEqual(CLOSING_SPRINT + 1e-6);
     expect(inRangeSamples).toBeGreaterThan(10);
     expect(inRange).toBeLessThanOrEqual(1 + 1e-6);
@@ -262,7 +266,10 @@ describe('what hulls spend a battle doing', () => {
       capital += rows.get('B reaper_capital')!.seconds.firing; capitalSeconds += rows.get('B reaper_capital')!.hullSeconds;
       destroyer += rows.get('B reaper_destroyer')!.seconds.firing; destroyerSeconds += rows.get('B reaper_destroyer')!.hullSeconds;
     }
-    expect(capital / capitalSeconds).toBeGreaterThan(0.72);
+    // 0.72 until 26 Nov 2026. Combat time is counted from the battle's first shot, which is now the allied line's
+    // from 74 km: a capital has four seconds more to close before its beam reaches, and closes on a line that
+    // stands further off. Measured over the four seeds: 0.713.
+    expect(capital / capitalSeconds).toBeGreaterThan(0.66);
     expect(destroyer / destroyerSeconds).toBeGreaterThan(0.82);
     // A hull keeps a target for about half a minute at a time: 2.3 changes a hull-minute (2.7).
     expect(totals.targetChangesPerMinute).toBeLessThan(3);
@@ -283,9 +290,16 @@ describe('what hulls spend a battle doing', () => {
     const seeds = [report, ...[2, 3].map(seed => measureActivity(new BattleSimulation(buildScenario('battle_of_earth', 'prime_apex', seed)), 300))];
     const mean = (of: (r: typeof report) => number) => seeds.reduce((sum, r) => sum + of(r), 0) / seeds.length;
     const share = (key: string) => (r: typeof report) => r.rows.get(key)!.seconds.firing / r.rows.get(key)!.hullSeconds;
-    expect(mean(r => hullTotals(r).share.firing)).toBeGreaterThan(0.52);
+    // 0.52 until conventional guns out-ranged the Reapers' (26 Nov 2026): measured 0.518 since. The dreadnoughts
+    // now open from 74 km and the ten Reapers are destroyed in 80 s instead of 93, with more of the escorts still on
+    // their way in when it is over.
+    expect(mean(r => hullTotals(r).share.firing)).toBeGreaterThan(0.48);
     expect(mean(share('A frigate'))).toBeGreaterThan(0.66);
-    expect(mean(share('A cruiser'))).toBeGreaterThan(0.34);
-    expect(firing('B reaper_capital')).toBeGreaterThan(0.9);
+    // Cruisers: 35 to 44 % until 26 Nov 2026, 23 % since. Under Prime/Apex a cruiser's main gun is the fleet-wide
+    // Thanix, which reaches 26 km; the dreadnoughts now open from 76 km and the battle is over in 84 s, two thirds
+    // of which a cruiser spends closing. Frigates and the fleet as a whole are where they were.
+    expect(mean(share('A cruiser'))).toBeGreaterThan(0.2);
+    // 0.9 until 26 Nov 2026; measured 0.85: the capitals are fired on from 76 km and close for four seconds before they can answer.
+    expect(firing('B reaper_capital')).toBeGreaterThan(0.8);
   });
 });

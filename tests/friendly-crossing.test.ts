@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BattleSimulation } from '@/simulation/battle';
 import { getPreset } from '@/timelines/presets';
 import { shipEngagementRange } from '@/simulation/ai';
-import type { BattleConfig, FleetSpec } from '@/simulation/types';
+import { slotToWorld } from '@/simulation/formations';
+import type { BattleConfig, FleetSpec, ShipState } from '@/simulation/types';
 
 /**
  * Friendly fleets are not walls. Owner's directive: "Battle groups must be able to move between, across and through
@@ -19,6 +20,14 @@ function cross(blocker: boolean, seed: number) {
   const config: BattleConfig = { id: 'cross', name: 'Crossing', scenarioId: 'custom', seed, rules: getPreset('canon_me3'), fleets, environment: 'deep_space', maxDuration: 400, perspectiveSide: 'A', objective: 'cross' };
   const sim = new BattleSimulation(config);
   for (const s of sim.ships) for (const w of s.weapons) w.def = { ...w.def, damage: 0 };
+  // The allied fleet is one that has already joined the battle: at its own stations, its screen out. (A fleet
+  // that has not yet done so stands in the close order of its approach and deploys its screen when it is first
+  // hit, which is movement of its own, not a push from the fleet passing through.)
+  const holding = sim.fleets.get('blocker');
+  if (holding) {
+    holding.opened = true;
+    for (const s of sim.ships) if (s.fleetId === 'blocker') { s.pos = slotToWorld(holding.anchor, holding.heading, s.slot); s.prevPos = { ...s.pos }; s.openingSlot = undefined; }
+  }
   const movers = sim.ships.filter(s => s.fleetId === 'mover'), blockers = sim.ships.filter(s => s.fleetId === 'blocker');
   const line = blockers.length ? Math.max(...blockers.map(s => s.pos.z)) : 0;
   const start = new Map(blockers.map(s => [s.id, { ...s.pos }]));
@@ -35,7 +44,8 @@ function cross(blocker: boolean, seed: number) {
     if (ninetyAt < 0 && sim.tick % 20 === 0 && inRange() >= movers.length * 0.9) ninetyAt = sim.time;
   }
   const pushed = blockers.map(s => { const p = start.get(s.id)!; return Math.hypot(s.pos.x - p.x, s.pos.y - p.y, s.pos.z - p.z); });
-  return { ninetyAt, contacts, passed: movers.filter(s => s.pos.z > line).length, movers: movers.length,
+  const reaches = (s: ShipState): boolean => { const t = s.targetId ? sim.getShip(s.targetId) : undefined; return !!t && Math.hypot(t.pos.x - s.pos.x, t.pos.y - s.pos.y, t.pos.z - s.pos.z) <= shipEngagementRange(s); };
+  return { ninetyAt, contacts, passed: movers.filter(s => s.pos.z > line).length, held: movers.filter(s => s.pos.z <= line && reaches(s)).length, movers: movers.length,
     pushedMean: pushed.length ? pushed.reduce((a, b) => a + b, 0) / pushed.length : 0, pushedMax: Math.max(0, ...pushed) };
 }
 
@@ -47,8 +57,11 @@ describe('a fleet attacking through an allied fleet', () => {
     expect(open.ninetyAt).toBeGreaterThan(0);
     expect(blocked.ninetyAt).toBeGreaterThan(0);
     expect(blocked.ninetyAt - open.ninetyAt).toBeLessThan(6);
-    // Every hull comes out the far side of the allied line.
-    expect(blocked.passed).toBe(blocked.movers);
+    // Every hull comes out the far side of the allied line, or has no need to: a dreadnought's gun now reaches
+    // 74 km, and one or two of the four have their targets in range from among the allied fleet's rear ranks
+    // (measured: 35 and 34 of 36 through, the others firing from where they are).
+    expect(blocked.passed + blocked.held).toBe(blocked.movers);
+    expect(blocked.passed).toBeGreaterThanOrEqual(blocked.movers - 3);
     // No two hulls touch at any tick, and the fleet that holds is barely moved: 0.01 km on average, at most 0.16.
     expect(blocked.contacts).toBe(0);
     expect(blocked.pushedMean).toBeLessThan(0.05);
