@@ -93,7 +93,7 @@ export const SANDBOX_WEAPONS: Record<string, WeaponDef> = {
 export const SKYNET_WEAPONS: Record<string, WeaponDef> = {
   skynet_hunter_cannon: orbitalWeapon('skynet_hunter_cannon', 'Hunter-Killer orbital cannon (AU extrapolation)', { damage: 300, cooldown: 3.2, range: 45, penetration: 0.9, heat: 11, arc: 25 }),
   skynet_harvester_cannon: orbitalWeapon('skynet_harvester_cannon', 'Harvester heavy accelerator (AU extrapolation)', { damage: 2000, cooldown: 7, range: 68, penetration: 1.2, heat: 25, arc: 14 }),
-  skynet_missile: orbitalWeapon('skynet_missile', 'Autonomous orbital missile (AU extrapolation)', { kind: 'missile', damageType: 'warhead', damage: 480, cooldown: 9, range: 54, projectileSpeed: 4.8, missileHp: 70, magazine: 12, penetration: 0.8, heat: 8, arc: 180 }),
+  skynet_missile: orbitalWeapon('skynet_missile', 'Autonomous orbital missile (AU extrapolation)', { kind: 'missile', damageType: 'warhead', damage: 480, cooldown: 9, range: 54, projectileSpeed: 4.8, missileHp: 70, magazine: 12, penetration: 0.8, heat: 8, arc: 180, warhead: 'nuclear' }),
   skynet_point_defence: orbitalWeapon('skynet_point_defence', 'Machine defensive laser (AU extrapolation)', { kind: 'gardian', damageType: 'laser', damage: 36, cooldown: 0.35, range: 7, projectileSpeed: Infinity, heat: 1.5, burst: { shots: 10, recovery: 2.5 }, antiSmall: true, antiCapital: false, arc: 360 }),
 };
 

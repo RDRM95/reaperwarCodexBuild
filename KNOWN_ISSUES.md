@@ -12,7 +12,11 @@
 - Beam cylinders are flat-shaded; very close to the camera they look like ribbons.
 - Level of detail hides detail meshes and glow sprites by distance and draws far ships as points; there are no intermediate simplified hull meshes, so mid-range ships still cost two draw calls each (about 590 draw calls for a 206-ship Final Battle in the tactical view).
 
+- Nuclear detonations: no Mass Effect faction's ship carries an external nuclear warhead (only two crossover/AU missiles are drawn as one); one pooled lamp lights hulls, so of two detonations at once one does; shafts of light through plating do not follow the hull's shape; no scarring is left.
+
 ## Simulation
+
+- Conventional spinal guns now out-range Reaper beams, which hurts Reapers more under canon rules than before (still Reaper victories). Under Prime/Apex a cruiser's main gun is the 26 km Thanix and takes no part in the long-range opening. Fleets of a thousand hulls deploy too deep for more than their leading ranks to join the opening volley.
 
 - Torpedo magazines are finite (8 per tube, 2 per fighter) and fighters rearm alongside their carrier, but carriers themselves never run out of torpedoes to issue; mass accelerator rounds are treated as unlimited (canon describes very large slug magazines).
 - Fighters under canon rules still die quickly to Reaper point defence; the new burst recovery helps only marginally.

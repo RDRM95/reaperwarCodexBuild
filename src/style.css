@@ -585,3 +585,9 @@ body.theatre-idle, body.theatre-idle * { cursor: none !important; }
 .cockpit[data-style="optic"] .cockpit-read.target { bottom: 22%; }
 .cockpit[data-style="optic"] .cockpit-title { top: 20%; }
 @keyframes cockpit-sweep { to { transform: rotate(360deg); } }
+
+/* Interference across the picture while its exposure recovers from a detonation's flash (src/ui/app.ts). */
+#ui > .sensor-interference { pointer-events: none; }
+.sensor-interference { position: absolute; inset: 0; z-index: 3; opacity: 0; mix-blend-mode: screen;
+  background: repeating-linear-gradient(to bottom, rgba(210, 228, 255, 0.5) 0 1px, transparent 1px 3px), linear-gradient(to bottom, transparent 0 38%, rgba(220, 235, 255, 0.35) 40% 41%, transparent 43% 71%, rgba(220, 235, 255, 0.25) 72% 72.6%, transparent 74%); }
+@media (prefers-reduced-motion: reduce) { .sensor-interference { display: none; } }

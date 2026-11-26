@@ -1235,9 +1235,10 @@ export class BattleSimulation implements AiContext {
       hullDamage: out.hullDamage,
       pos,
       glancing,
+      weaponId: weapon.id,
     });
     if (out.internalDetonated) this.emit({ t: this.time, type: 'hades_detonation', shipId: shooter.id, targetId: target.id, weaponId: weapon.id,
-      internalDamage: out.internalWarheadDamage ?? 0, payloadDamage: damage * (weapon.internalWarheadFraction ?? 0), pos: clone(target.pos) });
+      internalDamage: out.internalWarheadDamage ?? 0, payloadDamage: damage * (weapon.internalWarheadFraction ?? 0), pos: clone(target.pos), entry: clone(pos) });
     if (out.barriersCollapsed) this.emit({ t: this.time, type: 'barriers_down', shipId: target.id });
     if (out.subsystem) this.emit({ t: this.time, type: 'subsystem_disabled', shipId: target.id, subsystem: out.subsystem.name, level: out.subsystem.level });
     if (out.destroyed) this.destroyShip(target, shooter);

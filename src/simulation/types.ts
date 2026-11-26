@@ -305,12 +305,13 @@ export type BattleEvent =
   | { t: number; type: 'battle_start'; name: string }
   | { t: number; type: 'ship_deployed'; shipId: string; classId: string; faction: FactionId; side: Side; name: string }
   | { t: number; type: 'fleet_arrived'; fleetId: string }
-  | { t: number; type: 'hades_detonation'; shipId: string; targetId: string; weaponId: string; internalDamage: number; payloadDamage: number; pos: Vec3 }
+  /** A penetrator's warhead went off inside `targetId`, which the round had reached. `pos` is the hull's centre, `entry` where the round struck. */
+  | { t: number; type: 'hades_detonation'; shipId: string; targetId: string; weaponId: string; internalDamage: number; payloadDamage: number; pos: Vec3; entry?: Vec3 }
   /** A round with a blast went off at `pos`: `caught` enemy hulls besides the one struck were inside `radius`, `destroyed` of them were destroyed. */
   | { t: number; type: 'blast'; shipId: string; weaponId: string; pos: Vec3; radius: number; caught: number; destroyed: number }
   | { t: number; type: 'primary_volley_issued'; fleetId: string; side: Side }
   | { t: number; type: 'weapon_fired'; shipId: string; weaponId: string; targetId: string; weaponIndex: number; kind: string }
-  | { t: number; type: 'projectile_impact'; shipId: string; targetId: string; damage: number; damageType: DamageType; barrierDamage: number; hullDamage: number; pos: Vec3; glancing?: boolean }
+  | { t: number; type: 'projectile_impact'; shipId: string; targetId: string; damage: number; damageType: DamageType; barrierDamage: number; hullDamage: number; pos: Vec3; glancing?: boolean; weaponId?: string }
   | { t: number; type: 'barrier_damaged'; shipId: string; remaining: number }
   | { t: number; type: 'barriers_down'; shipId: string }
   | { t: number; type: 'subsystem_disabled'; shipId: string; subsystem: keyof Subsystems; level: number }

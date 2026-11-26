@@ -46,6 +46,7 @@ import { TargetTelemetry } from './screens/gunneryOverlay';
 import { CockpitOverlay } from './screens/cockpitOverlay';
 import { gunCamStep, type GunCamState } from './gunCam';
 import { CHASE_VIEWS } from '@/rendering/cockpit';
+import { detonationTier } from '@/rendering/nuclear';
 import { Theatre } from './screens/theatre';
 import { primaryGunneryMount,isMainGunShot } from '@/rendering/gunnery';
 
@@ -82,6 +83,9 @@ export class BattleController {
   hud: Hud;
   readonly gunneryOverlay:TargetTelemetry;
   readonly cockpitOverlay: CockpitOverlay;
+  /** Interference across the picture while the exposure is recovering from a flash (sensors, not eyes: none in a reduced-flash session). */
+  private readonly sensorWash: HTMLElement;
+  private sensorWashShown = 0;
   /** The tactical overlay's cut-out while on a modelled bridge (a CSS clip-path), to set it only when it changes. */
   private overlayClip = '';
   /** The automatic gun camera (see gunCam.ts): on or off, where it is in a cut, and whether the gun has just fired. Toggled with G. */
@@ -142,6 +146,12 @@ export class BattleController {
       this.sim = new BattleSimulation(config);
     }
     this.view = new BattleView(canvas, this.sim, app.prefs.graphics);
+    this.view.onDetonation = (moment, distance) => {
+      // Heard when it goes off, which for a penetrator is a beat after its strike. Distances as for every other sound.
+      const { plan } = moment;
+      if (plan.kind === 'external') audio.play('nuclear_external', distance / 10, Math.min(1, 0.6 + 0.12 * plan.tier));
+      else if (plan.tier >= 2) audio.play('nuclear_internal', distance / 10, Math.min(1, 0.35 + 0.2 * plan.tier));
+    };
     this.view.onBreakup = (role, position) => {
       const cue = deathSounds(role);
       if (cue.atBreakup) audio.play(cue.atBreakup, position.distanceTo(this.view.rig.camera.position) / 10, cue.intensity);
@@ -158,6 +168,8 @@ export class BattleController {
     this.hud = createHud(app, this);
     this.gunneryOverlay = new TargetTelemetry(app.ui);
     this.cockpitOverlay = new CockpitOverlay(app.ui);
+    this.sensorWash = el('div', { class: 'sensor-interference', 'aria-hidden': 'true' });
+    app.ui.appendChild(this.sensorWash);
     this.theatre = new Theatre(app.ui, this);
     this.areaBox.className = 'select-box';
     this.areaBox.style.display = 'none';
@@ -542,7 +554,9 @@ export class BattleController {
         break;
       }
       case 'hades_detonation':
-        audio.play('hades_internal', dist(e.pos), Math.min(1, Math.sqrt(e.payloadDamage / 1000)));
+        // An escort's round is the short knock it always was; from a dreadnought's up, the warhead is heard as one
+        // when it goes off (the view tells us when: a beat after the strike). See onDetonation below.
+        if (detonationTier(e.payloadDamage) < 2) audio.play('hades_internal', dist(e.pos), Math.min(1, Math.sqrt(e.payloadDamage / 1000)));
         break;
       case 'projectile_impact': {
         if (e.damage < 100) break;
@@ -648,6 +662,9 @@ export class BattleController {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     this.overlay.draw(this.view, w, h, this.view.rig.mode);
+    // A flash that has pulled the exposure well down leaves the picture's sensors noisy while they recover.
+    const wash = this.view.exposureDip > 0.16 ? Math.round(Math.min(0.5, (this.view.exposureDip - 0.16) * 0.9) * 50) / 50 : 0;
+    if (wash !== this.sensorWashShown) { this.sensorWashShown = wash; this.sensorWash.style.opacity = String(wash); }
     // On a modelled bridge the labels belong in its windows, not on its walls.
     const clip = this.view.windowClip(w, h);
     if (clip !== this.overlayClip) { this.overlayClip = clip; this.app.overlayCanvas.style.clipPath = clip; }
@@ -972,6 +989,7 @@ export class BattleController {
     document.body.classList.remove('hud-none');
     this.gunneryOverlay.root.remove();
     this.cockpitOverlay.root.remove();
+    this.sensorWash.remove();
     this.app.overlayCanvas.style.clipPath = '';
     this.theatre.dispose();
     this.areaBox.remove();

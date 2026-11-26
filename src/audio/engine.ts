@@ -22,6 +22,8 @@ export type SoundId =
   | 'ma_small'
   | 'ma_large'
   | 'hades_internal'
+  | 'nuclear_internal'
+  | 'nuclear_external'
   | 'thanix'
   | 'reaper_beam'
   | 'impact_barrier'
@@ -38,7 +40,17 @@ export interface AudioSettings {
   sfx: number;
   music: number;
   muted: boolean;
+  /**
+   * Silent vacuum: nothing that happens outside the ship is heard, because nothing carries it. What is left is
+   * what a crew would hear: the interface, and in the gun sight the ship's own guns and the blows on its own hull,
+   * which come through the structure. Off (the default): the simulated observer hears the battle, as a film does.
+   */
+  vacuum?: boolean;
 }
+
+/** Sounds made outside the listener's own ship: silent with `vacuum` on. */
+const OUTSIDE: ReadonlySet<SoundId> = new Set<SoundId>(['oculus_pulse', 'ma_small', 'ma_large', 'hades_internal', 'nuclear_internal', 'nuclear_external', 'thanix', 'reaper_beam',
+  'impact_barrier', 'impact_hull', 'explosion_small', 'explosion_large', 'reaper_death', 'reaper_death_small', 'gardian', 'torpedo']);
 
 export class AudioEngine {
   private ctx?: AudioContext;
@@ -133,14 +145,16 @@ export class AudioEngine {
    */
   play(id: SoundId, distance = 0, intensity = 1): void {
     if (!this.ctx || !this.sfxBus || this.settings.muted) return;
+    if (this.settings.vacuum && OUTSIDE.has(id)) return;
     const now = this.ctx.currentTime;
     if (now - this.budgetTime > 0.1) {
       this.budgetTime = now;
       this.budget = 0;
     }
-    if (this.budget > 10 && !id.startsWith('gunner_')) return;
+    // A nuclear detonation is heard whatever else is sounding: it is the loudest thing in the battle.
+    if (this.budget > 10 && !id.startsWith('gunner_') && !id.startsWith('nuclear_')) return;
     const last = this.lastPlay.get(id) ?? -1;
-    const minGap = id.startsWith('ui') ? 0.03 : id === 'gardian' ? 0.08 : 0.05;
+    const minGap = id.startsWith('ui') ? 0.03 : id === 'gardian' ? 0.08 : id.startsWith('nuclear_') ? 0.12 : 0.05;
     if (now - last < minGap) return;
     this.lastPlay.set(id, now);
     this.budget++;
@@ -234,6 +248,25 @@ export class AudioEngine {
         this.noise(0.055, 'highpass', 2600, 1, 0.3 * att, bus);
         this.tone('sine', 78, 23, 1.5, 0.55 * att, bus, 0.16);
         this.noise(1.2, 'lowpass', 280, 0.6, 0.55 * att, bus, 0.16, 1.2);
+        break;
+      case 'nuclear_internal':
+        // A warhead inside a hull: the crack of the round going in, a beat, then a thud with almost no top to it
+        // (it is heard through a hull, not through air) and the long groan of structure taking it.
+        this.noise(0.04, 'highpass', 3800, 1, 0.34 * att, bus);
+        this.tone('sine', 62, 17, 2.4, 0.85 * att, bus, 0.15);
+        this.tone('triangle', 124, 31, 1.1, 0.3 * att, bus, 0.15);
+        this.noise(2.4, 'lowpass', 190, 0.7, 0.75 * att, bus, 0.15, 2.3);
+        this.noise(1.6, 'bandpass', 420, 6, 0.16 * att, bus, 0.55, 1.5);
+        break;
+      case 'nuclear_external':
+        // A warhead in the open: a click as the flash saturates the pickup, nothing for an instant, then everything
+        // at once from the bottom up, and a roar that takes seconds to fall away.
+        this.noise(0.012, 'highpass', 6000, 1, 0.5 * att, bus);
+        this.tone('sine', 44, 13, 3.6, 1.0 * att, bus, 0.09);
+        this.tone('sawtooth', 88, 22, 1.4, 0.34 * att, bus, 0.09);
+        this.noise(3.4, 'lowpass', 150, 0.5, 1.0 * att, bus, 0.09, 3.2);
+        this.noise(1.1, 'bandpass', 900, 0.7, 0.42 * att, bus, 0.1, 1.0);
+        this.noise(2.6, 'lowpass', 70, 0.9, 0.6 * att, bus, 0.7, 2.4);
         break;
       case 'thanix':
         this.noise(1.6, 'bandpass', 700, 3, 0.35 * att, bus, 0, 1.4);

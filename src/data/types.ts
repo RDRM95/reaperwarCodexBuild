@@ -64,6 +64,11 @@ export interface WeaponDef {
    * `armourShred` of its armour at the centre, falling the same way. The hull struck takes the round itself.
    */
   blast?: { radius: number; damage: number; armourShred: number };
+  /**
+   * What the weapon's warhead is, where that changes how its strike is drawn: a nuclear warhead that goes off
+   * against whatever stops it. Presentation only: the simulation's damage is the weapon's `damage` and nothing else.
+   */
+  warhead?: 'nuclear';
   /** Whether this weapon can target fighters/missiles. */
   antiSmall: boolean;
   /** Prefer firing at larger targets. */

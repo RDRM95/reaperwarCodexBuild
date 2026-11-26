@@ -8,6 +8,7 @@ import type { BattleEvent, ShipState } from '@/simulation/types';
 import { getFaction } from '@/data/factions';
 import { CameraRig, type CameraSubject, type CinematicFrame, type ShotMove } from './cameras';
 import { EffectsSystem } from './effects';
+import type { DetonationMoment } from './nuclear';
 import { buildEnvironment, disposeEnvironment, type EnvironmentBuild } from './environment';
 import { KM } from './geometry';
 import { instantiateShip, getShipTemplate, type BuiltShip } from './ships';
@@ -68,10 +69,18 @@ export interface GraphicsSettings {
   lod?: boolean;
   /** A modelled bridge round the cockpit camera on a warship (default on). Off: the flat window frame. */
   interiors?: boolean;
+  /** Accessibility: detonation flashes at three tenths of their brightness and exposure that barely moves. */
+  reducedFlash?: boolean;
+  /** Accessibility: how much the camera is shaken by blasts, 0 (not at all) to 1 (default). */
+  cameraShake?: number;
 }
 
 const INITIAL_FAR_POINTS = 2048;
 const INTERIOR_KEEP_SECONDS = 30;
+/** A detonation smaller than this in the picture (its size over its distance) is drawn as its flash alone. */
+export const DETONATION_DETAIL_ANGLE = 0.0016;
+/** With the reduced-flash setting: this much of every flash's brightness and of every dip in exposure. */
+export const REDUCED_FLASH = 0.3;
 
 /** How wide the gun camera's own beam is drawn, as a share of its width from any other camera. */
 export const OWN_BEAM_IN_SIGHT = 0.4;
@@ -132,6 +141,11 @@ export class BattleView {
   drawCalls = 0;
   /** Triangles of the scene pass in the last frame. */
   triangles = 0;
+  /** Called when a nuclear detonation goes off (a penetrator's is a beat after its strike): `distance` from the camera in render units. */
+  onDetonation?: (moment: DetonationMoment, distance: number) => void;
+  /** How far the exposure is pulled down by the last flash (0 to 1 of it), and the seconds it takes to come back. */
+  exposureDip = 0;
+  private exposureRecovery = 1;
   /** Called when a staged death reaches its breakup (render units), so the explosion is heard when it is seen. */
   onBreakup?: (role: string, position: THREE.Vector3) => void;
   /** Post-processing chain when bloom is on; the scene renders straight to the canvas otherwise. */
@@ -197,6 +211,9 @@ export class BattleView {
       this.bloom = createBloomPipeline(this.renderer, this.scene, this.rig.camera, bloom);
       this.effects.setHdrScene(bloom.beamBoost);
     }
+    this.effects.onDetonation = (moment) => this.detonationSeen(moment);
+    this.effects.nuclear.flashScale = settings.reducedFlash ? REDUCED_FLASH : 1;
+    this.rig.shakeScale = Math.min(1, Math.max(0, settings.cameraShake ?? 1));
     this.bind(sim);
   }
 
@@ -504,6 +521,12 @@ export class BattleView {
     this.effects.setBeams(beams);
     this.effects.setPointDefence(sim.flashes, KM);
     this.effects.update(dt);
+    // The exposure comes back by itself after a flash has pulled it down: quickly at first, as an iris opens.
+    if (this.exposureDip > 0) {
+      this.exposureDip *= Math.exp(-dt * 3 / Math.max(0.2, this.exposureRecovery));
+      if (this.exposureDip < 0.004) this.exposureDip = 0;
+    }
+    this.renderer.toneMappingExposure = TONE_EXPOSURE * (1 - this.exposureDip);
 
     // Camera.
     this.cine.age += dt;
@@ -678,6 +701,20 @@ export class BattleView {
           const t = this.sim.getShip(e.targetId);
           const v = t ? this.visuals.get(t.id) : undefined;
           const pos = new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM);
+          // A nuclear warhead goes off against whatever stopped it: the barrier where one held, the plating where none did.
+          const shooter = e.weaponId ? this.sim.getShip(e.shipId) : undefined;
+          if (t && shooter?.weapons.some((w) => w.def.id === e.weaponId && w.def.warhead === 'nuclear')) {
+            const centre = this.tmpB.set(t.pos.x * KM, t.pos.y * KM, t.pos.z * KM);
+            const outward = pos.clone().sub(centre);
+            if (outward.lengthSq() < 1e-6) outward.set(shooter.pos.x * KM, shooter.pos.y * KM, shooter.pos.z * KM).sub(centre);
+            const length = v?.built.lengthUnits ?? getShipTemplate(t.classId).lengthUnits;
+            // A missile is reported at its own place, a kilometre off; the warhead is drawn at the surface it met.
+            const surface = centre.clone().addScaledVector(outward.clone().normalize(), Math.min(outward.length(), length * 0.5));
+            if (v && e.barrierDamage > 3) this.effects.barriers.hit(t.id, t.classId, v.built.group, surface, e.barrierDamage * 3);
+            this.effects.externalDetonation(surface, outward, e.damage, e.hullDamage, length, new THREE.Vector3(t.vel.x, t.vel.y, t.vel.z).multiplyScalar(KM),
+              this.hullAnchor(t.id), this.detonationDetail(surface, e.damage));
+            break;
+          }
           if (v && e.barrierDamage > 3) this.effects.barriers.hit(t!.id, t!.classId, v.built.group, pos, e.barrierDamage);
           this.effects.impact(pos, e.barrierDamage, e.hullDamage, v ? v.built.lengthUnits * 0.55 : 2, () => (v && !v.removed ? v.built.group.position : undefined), e.damageType, e.glancing);
           break;
@@ -694,9 +731,13 @@ export class BattleView {
           const ship = this.sim.getShip(e.targetId);
           const visual = ship ? this.visuals.get(ship.id) : undefined;
           if (!ship || visual?.removed) break;
-          this.effects.hadesBurst(new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM),
-            visual?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits,
-            e.payloadDamage, new THREE.Vector3(ship.heading.x, ship.heading.y, ship.heading.z), new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM));
+          // The simulation has confirmed it: the round reached the hull and its warhead went off inside.
+          const centre = new THREE.Vector3(e.pos.x * KM, e.pos.y * KM, e.pos.z * KM);
+          const length = visual?.built.lengthUnits ?? getShipTemplate(ship.classId).lengthUnits;
+          const entry = e.entry ? new THREE.Vector3(e.entry.x * KM, e.entry.y * KM, e.entry.z * KM)
+            : centre.clone().addScaledVector(this.tmpA.set(ship.heading.x, ship.heading.y, ship.heading.z), -length * 0.3);
+          this.effects.internalDetonation(entry, centre, e.payloadDamage, e.internalDamage, length, new THREE.Vector3(ship.vel.x, ship.vel.y, ship.vel.z).multiplyScalar(KM),
+            this.hullAnchor(ship.id), this.detonationDetail(centre, e.payloadDamage));
           break;
         }
         case 'barriers_down': {
@@ -734,6 +775,41 @@ export class BattleView {
           break;
       }
     }
+  }
+
+  /** Where a hull's centre is drawn now, for an effect that stays with it; undefined once the hull is gone. */
+  private hullAnchor(shipId: string): () => THREE.Vector3 | undefined {
+    const at = new THREE.Vector3();
+    return () => {
+      const visual = this.visuals.get(shipId);
+      if (visual && !visual.removed && visual.built.group.visible) return visual.built.group.position;
+      const ship = this.sim.getShip(shipId);
+      return ship?.alive && !ship.escaped ? at.set(ship.pos.x * KM, ship.pos.y * KM, ship.pos.z * KM) : undefined;
+    };
+  }
+
+  /** How much of a detonation is worth drawing from where the camera is: all of it, or (a few pixels across) its flash alone. */
+  private detonationDetail(position: THREE.Vector3, payload: number): number {
+    const size = 0.8 + 0.8 * Math.log10(1 + Math.max(0, payload) / 40);
+    return size / Math.max(1, position.distanceTo(this.rig.camera.position)) < DETONATION_DETAIL_ANGLE ? 0 : 1;
+  }
+
+  /**
+   * A detonation has gone off. The camera's exposure is pulled down by as much as it fills the picture and comes
+   * back by itself; the camera is knocked if it is close; the bridge's windows are lit; and whoever plays the sound
+   * is told. A detonation behind the camera is still light on everything in front of it, at a third.
+   */
+  private detonationSeen(moment: DetonationMoment): void {
+    const { plan, position } = moment, camera = this.rig.camera;
+    const away = this.tmpA.copy(position).sub(camera.position), distance = Math.max(1, away.length());
+    const apparent = plan.flash.radius / distance;
+    const ahead = away.multiplyScalar(1 / distance).dot(this.tmpB.set(0, 0, -1).applyQuaternion(camera.quaternion)) > 0.2 ? 1 : 0.33;
+    const fill = Math.min(1, apparent * 7) * ahead, reduced = this.settings.reducedFlash ? REDUCED_FLASH : 1;
+    const dip = plan.exposure.dip * fill * reduced;
+    if (dip > this.exposureDip) { this.exposureDip = dip; this.exposureRecovery = plan.exposure.recovery; }
+    if (plan.shake > 0) this.rig.addShake(plan.shake * Math.min(1, (plan.radius * 60) / distance));
+    this.interior?.flash(Math.min(2.4, apparent * 60 * (1 + plan.tier)) * reduced, plan.kind === 'external' ? 0xeaf2ff : 0xffe0b0);
+    this.onDetonation?.(moment, distance);
   }
 
   // ------------------------------------------------------------- cameras

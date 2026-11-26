@@ -2,9 +2,30 @@
 
 Lead engineer's running checkpoint for the handover of 9 November 2026 (priorities P1–P8). Short by design; the evidence lives in the files it names.
 
-## State on 25 Nov 2026 — the bridge; then the fleet combat and weapons brief
+## State on 26 Nov 2026 — the fleet combat and weapons brief
 
 Read this section first. Everything below it is older.
+
+**The owner's brief of 25/26 Nov, "APEX — Fleet combat and weapons visual overhaul":** long-range engagement for conventional mass accelerators; a coordinated opening volley; nuclear detonation effects for vacuum; an external "nuclear battery" told apart from a "nuclear penetrator"; a weapon power hierarchy; sound, silent vacuum, reduced-flash and shake settings; performance held at thousands of ships; rendered verification.
+
+**Concurrent work found and used:** the owner's own branch `fix/organic-opening-volley-range-20261125` (one data-only commit raising spinal gun ranges, untested). Cherry-picked as it stood; it did not by itself change who fires first.
+
+**Done, sections 1 and 2** (`docs/apex/OPENING_VOLLEY_2026-11-26.md`): the ranges; a conventional fleet that has not yet joined the battle comes on as one formation with its screen drawn in (`openingSlot`, `holdsFormation` in `ai.ts`; `assignOpeningStations` in `battle.ts`); the opening volley by fleet and kind of gun (`OpeningVolleyCoordinator`, `volleys.ts`). The allied line now fires first in every standard battle, from 68 to 73 km, 2.5 to 4.4 s before the first beam. Winners unchanged. Measure with `scripts/opening-engagement.ts`.
+
+**Done, sections 3 to 7** (`docs/apex/NUCLEAR_DETONATIONS_2026-11-26.md`): `src/rendering/nuclear.ts` (staged detonations, two draw calls for all), internal from `hades_detonation` only and a beat after the strike, external for weapons marked `warhead: 'nuclear'`; heavier rounds drawn heavier (`heavyShare`); exposure, shake, interference, the bridge lit; two sounds and Silent vacuum; Flashes and Camera shake settings. Frame costs at 489 and 2,129 ships are those of the previous commit.
+
+**Needs the owner:**
+- **There is no external nuclear battery on any Mass Effect faction's ship in this build.** The external detonation is wired to the two missiles that are nuclear in their own fiction (Imperial void torpedo, Skynet orbital missile). An Alliance or Hierarchy nuclear battery would be a new AU weapon on a ship: say which ships.
+- **Canon Reapers are hurt more** by guns that out-range them (Battle of Earth: 6 % of their hull lost → 23 %; Final Battle of Earth 34 % → 65 %). Still Reaper victories. If canon should be as lethal as it was, the lever is accuracy at long range.
+- **Prime/Apex cruisers** carry the 26 km Thanix as their main gun and so miss the opening (firing 23 % of a Battle of Earth, 35 to 44 % before).
+- **Large fleets** (a thousand hulls and up) deploy in battle groups 200 km deep: only the leading ranks can bear, so their volley is small and their lead under a second. A wider, shallower deployment is a formations change, not made.
+- Nothing was seen on a graphics card.
+
+**Chaotic, not regressed:** hull grazes in the Prime/Apex Final Battle of Earth over six seeds were 70 pair-ticks in two seeds and are 29 in three; the pinned seed has none.
+
+## State on 25 Nov 2026 — the bridge
+
+Everything below this line is older than the section above.
 
 **Recovered from the two sessions that had no local clone** (their draft PRs #104 and #105): the cockpit's words are cleared when its ship is lost (`cockpitOverlay.ts`, `tests/cockpit-ship-loss.test.ts`), and CI is pinned to `ubuntu-24.04` (Playwright 1.56 has no Chromium for the newer runner image). The reference-model workflow, which installs the same browser, is pinned too. Both PRs can be closed once this branch is merged.
 
@@ -13,8 +34,6 @@ Read this section first. Everything below it is older.
 **Done** (`docs/apex/BRIDGE_INTERIOR_2026-11-25.md` has all of it): the Cockpit camera on a warship stands on a modelled bridge (`src/rendering/interior/`), drawn in a pass of its own over the battle, six draw calls, nothing when not in use. The seat's three faults are fixed: its lens, its frame (the hull's own up as drawn, `drawnUp` in `attitude.ts`) and its height (measured on each model, `seatFit.ts`). The arrow keys turn the head. A fighter's canopy and a Reaper's optic are as they were.
 
 **Worth knowing beyond this change:** every hull is drawn by the shortest turn from "ahead" to its heading, so a hull heading away from +z is drawn rolled, up to right over. Any camera that sits in or on a hull must use `drawnUp`, not the battle's level. The chase cameras do not (their tests define them level) and that was left alone.
-
-**Then, the same day, a second brief from the owner: "APEX — Fleet combat and weapons visual overhaul"** (long-range engagement, a coordinated opening volley, nuclear detonation effects, battery against penetrator, a weapon power hierarchy, audio and accessibility, performance held). Its state is in the section this one will be followed by, or in the notes it names.
 
 ## State on 16 Nov 2026, 00:45 UTC — the owner's list of 16 Nov; hyper-dreadnoughts first
 

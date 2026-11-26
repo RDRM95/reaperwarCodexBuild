@@ -107,6 +107,8 @@ export const CROSSOVER_WEAPONS: Record<string, WeaponDef> = {
   wh_torpedo: weapon('wh_torpedo', 'Heavy void torpedo (crossover estimate)', {
     kind: 'missile', damageType: 'warhead', damage: 10500, cooldown: 22, range: 96,
     projectileSpeed: 3.2, missileHp: 900, magazine: 8, penetration: 1.4, accuracy: 0.7, heat: 18, arc: 35,
+    // A void torpedo's warhead is a fusion device that goes off against what stops it: drawn as one (nuclear.ts).
+    warhead: 'nuclear',
   }),
   crossover_point_defence: weapon('crossover_point_defence', 'Crossover defensive battery (estimate)', {
     kind: 'gardian', damageType: 'laser', damage: 45, cooldown: 0.45, range: 9,

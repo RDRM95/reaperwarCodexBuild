@@ -66,6 +66,14 @@ export function renderSettings(app: App): HTMLElement {
           p.graphics.interiors = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();
         } }, [el('option', { value: 'on', selected: p.graphics.interiors !== false }, 'On: the Cockpit camera stands on a modelled bridge'), el('option', { value: 'off', selected: p.graphics.interiors === false }, 'Off: a flat window frame')])]),
+        el('label', { class: 'field' }, ['Flashes', el('select', { 'data-action': 'reduced-flash', onchange: (e: Event) => {
+          p.graphics.reducedFlash = (e.target as HTMLSelectElement).value === 'reduced';
+          void app.savePrefs();
+        } }, [el('option', { value: 'full', selected: !p.graphics.reducedFlash }, 'Full: detonations flash and the exposure answers'), el('option', { value: 'reduced', selected: !!p.graphics.reducedFlash }, 'Reduced: three tenths as bright, no interference')])]),
+        el('label', { class: 'field' }, ['Camera shake', el('select', { 'data-action': 'camera-shake', onchange: (e: Event) => {
+          p.graphics.cameraShake = Number((e.target as HTMLSelectElement).value);
+          void app.savePrefs();
+        } }, [el('option', { value: '1', selected: (p.graphics.cameraShake ?? 1) >= 0.75 }, 'Full'), el('option', { value: '0.5', selected: (p.graphics.cameraShake ?? 1) < 0.75 && (p.graphics.cameraShake ?? 1) > 0.25 }, 'Half'), el('option', { value: '0', selected: (p.graphics.cameraShake ?? 1) <= 0.25 }, 'Off')])]),
         el('label', { class: 'field' }, ['Tactical overlay', el('select', { 'data-action': 'overlay-enabled', onchange: (e: Event) => {
           p.showOverlay = (e.target as HTMLSelectElement).value === 'on';
           void app.savePrefs();
@@ -92,6 +100,10 @@ export function renderSettings(app: App): HTMLElement {
           p.audio.muted = (e.target as HTMLSelectElement).value === 'muted';
           void app.savePrefs();
         } }, [el('option', { value: 'on', selected: !p.audio.muted }, 'Sound on'), el('option', { value: 'muted', selected: p.audio.muted }, 'Muted')])]),
+        el('label', { class: 'field' }, ['Sound in space', el('select', { 'data-action': 'vacuum', onchange: (e: Event) => {
+          p.audio.vacuum = (e.target as HTMLSelectElement).value === 'vacuum';
+          void app.savePrefs();
+        } }, [el('option', { value: 'observer', selected: !p.audio.vacuum }, 'Observer: the battle is heard, as in a film'), el('option', { value: 'vacuum', selected: !!p.audio.vacuum }, 'Silent vacuum: only the interface and your own ship')])]),
         slider('Master volume', () => p.audio.master, (v) => (p.audio.master = v)),
         slider('Effects', () => p.audio.sfx, (v) => (p.audio.sfx = v)),
         slider('Ambience', () => p.audio.music, (v) => (p.audio.music = v)),

@@ -9,9 +9,23 @@ import type { ShipRole } from '@/data/types';
 /** Damage per round from which a round is drawn as a main-battery slug. */
 export const MAIN_CALIBRE = 600;
 
+/**
+ * Damage per round from which a main-battery round is heavier than a dreadnought's slug, and the damage of the
+ * heaviest round there is. Between them a round is drawn larger by the logarithm of its damage: the HADES gun's a
+ * little, the Aegis gun's and the NOVA Array's plainly, the KRONOS Lance's most. Every main-battery round used to
+ * be drawn the same from 600 damage to 520,000.
+ */
+export const HEAVY_CALIBRE = 2000;
+export const HEAVIEST_CALIBRE = 520_000;
+
+/** How far a round is from a dreadnought's slug (0) toward the heaviest round there is (1). */
+export function heavyShare(calibre: number): number {
+  return Math.min(1, Math.max(0, Math.log10(Math.max(1, calibre) / HEAVY_CALIBRE) / Math.log10(HEAVIEST_CALIBRE / HEAVY_CALIBRE)));
+}
+
 /** Width (render units, 1 = 100 m) and length factor of a tracer, by damage per round. */
 export function tracerSize(calibre: number): { width: number; length: number } {
-  if (calibre >= MAIN_CALIBRE) return { width: 1.1, length: 1.3 };
+  if (calibre >= MAIN_CALIBRE) { const heavy = heavyShare(calibre); return { width: 1.1 + 0.7 * heavy, length: 1.3 + 0.8 * heavy }; }
   // A light round is a fine streak; it thickens and lengthens toward the main calibre without reaching it.
   const weight = Math.max(0, Math.min(1, calibre / MAIN_CALIBRE));
   // Sized so that main-battery rounds take about half the picture tracers cover; they took an eighth.
@@ -55,7 +69,7 @@ export function engineGlowSize(lengthUnits: number, role: ShipRole, reaper: bool
  * second. Light guns now flash in proportion to their round, as their tracers are drawn.
  */
 export function muzzleFlashSize(calibre: number, gunneryView: boolean): number {
-  if (calibre >= MAIN_CALIBRE) return gunneryView ? 1.8 : 3.6;
+  if (calibre >= MAIN_CALIBRE) return (gunneryView ? 1.8 : 3.6) * (1 + 0.6 * heavyShare(calibre));
   const weight = Math.max(0, Math.min(1, calibre / MAIN_CALIBRE));
   return (0.14 + 0.7 * weight) * (gunneryView ? 0.625 : 1);
 }

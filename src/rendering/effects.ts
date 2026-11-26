@@ -5,6 +5,7 @@ import { KM } from './geometry';
 import { HullBarriers } from './barriers';
 import { breakupVelocity } from './breakup';
 import { FragmentBatch, SparkBatch } from './effectBatches';
+import { NuclearDetonations, planDetonation, type DetonationMoment } from './nuclear';
 
 /**
  * Pooled visual effects: tracer projectiles, beams, impact flashes, barrier
@@ -81,6 +82,10 @@ export class EffectsSystem {
   private ringPool: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>[] = [];
   private readonly nuclearRingGeometry = new THREE.TorusGeometry(1, 0.025, 5, 64);
   get nuclearRingCount(): number { return this.nuclearRings.length; }
+  /** Nuclear detonations: flash, vapour, light through plating (nuclear.ts). One draw call for all of them, two with light inside hulls. */
+  readonly nuclear = new NuclearDetonations();
+  /** Told of each detonation at the moment it goes off (a penetrator's is a beat after its strike). */
+  onDetonation?: (moment: DetonationMoment) => void;
 
   // Tracers (instanced).
   private readonly tracerMax = 1024;
@@ -143,7 +148,8 @@ export class EffectsSystem {
     this.missileMesh.count = 0;
     this.group.add(this.missileMesh);
 
-    this.group.add(this.flashLight, this.barriers.group);
+    this.group.add(this.flashLight, this.barriers.group, this.nuclear.group);
+    this.nuclear.onDetonation = (moment) => this.detonated(moment);
     for (const batch of this.sparkBatches) this.group.add(batch.mesh);
   }
 
@@ -200,27 +206,58 @@ export class EffectsSystem {
     }
   }
 
-  /** Confirmed internal HADES burst: white flash, expanding shock ring and
-   * incandescent vent jets. Render work is capped during mass battery salvos. */
+  /**
+   * A HADES penetrator's warhead going off inside a hull: only ever called for a detonation the simulation has
+   * confirmed (the round reached the hull). `entry` is where the round struck and `centre` the hull's centre: the
+   * warhead goes off between them, deeper for a heavier round, a beat after the strike. See nuclear.ts for what is
+   * drawn; nothing is drawn outside the hull but the light that gets out of it.
+   */
+  internalDetonation(entry: THREE.Vector3, centre: THREE.Vector3, payloadDamage: number, hullDamage: number, targetLength: number, velocity = new THREE.Vector3(),
+    anchor?: () => THREE.Vector3 | undefined, detail = 1): void {
+    const plan = planDetonation('internal', payloadDamage, targetLength, hullDamage);
+    const outward = entry.clone().sub(centre);
+    if (outward.lengthSq() < 1e-9) outward.set(0, 0, -1);
+    const depth = 0.3 + 0.1 * plan.tier;
+    this.nuclear.detonate(plan, entry.clone().lerp(centre, depth), outward, velocity, anchor, detail);
+  }
+
+  /** The old name and arguments (a burst at a hull's centre, travelling along `heading`), kept for the effects QA script. */
   hadesBurst(position: THREE.Vector3, length: number, payloadDamage: number, heading: THREE.Vector3, velocity = new THREE.Vector3()): void {
-    if (this.sparks.length >= 900) return;
-    const yieldScale = Math.min(1.5, Math.sqrt(Math.max(0, payloadDamage) / 1000));
-    const size = Math.max(0.3, Math.min(6, length * 0.22) * yieldScale);
-    this.addSpark(this.sparkBatches.length - 1, position, velocity.clone(), 0.14, size, size * 0.5, size * 2.5, 0xffffff);
-    if (payloadDamage >= 200 && this.nuclearRings.length < 12) {
-      const mesh = this.ringPool.pop() ?? new THREE.Mesh(this.nuclearRingGeometry, new THREE.MeshBasicMaterial({ color: 0xcfeaff, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-      mesh.visible = true; mesh.position.copy(position); mesh.scale.setScalar(size * 0.4);
-      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), heading.clone().normalize());
-      mesh.material.color.setHex(0xcfeaff);
-      this.group.add(mesh); this.nuclearRings.push({ mesh, life: 0.85, size, span: 0.85 });
-      this.flashLight.position.copy(position); this.flashLight.color.setHex(0xffb070); this.flashLight.intensity = Math.max(this.flashLight.intensity, size * 6); this.flashLightLife = 0.2;
+    this.internalDetonation(position.clone().addScaledVector(heading.clone().normalize(), -length * 0.3), position, payloadDamage, payloadDamage, length, velocity);
+  }
+
+  /**
+   * A nuclear warhead going off against a barrier or a hull (a weapon marked `warhead: 'nuclear'`): the flash and
+   * the cloud of vapour stand off the surface that stopped it. `outward` points from the hull toward where the
+   * warhead came from.
+   */
+  externalDetonation(position: THREE.Vector3, outward: THREE.Vector3, payloadDamage: number, hullDamage: number, targetLength: number, velocity = new THREE.Vector3(),
+    anchor?: () => THREE.Vector3 | undefined, detail = 1): void {
+    this.nuclear.detonate(planDetonation('external', payloadDamage, targetLength, hullDamage), position, outward, velocity, anchor, detail);
+  }
+
+  /** At the moment a detonation goes off: its fragments, and its claim on the pooled light. Then whoever is listening (the camera, the bridge, the sound). */
+  private detonated(moment: DetonationMoment): void {
+    const { plan, position, outward, velocity } = moment;
+    // Fragments are of the hull: white-hot and fast, cooling to orange as they slow. None where no hull was reached.
+    const room = Math.max(0, 900 - this.sparks.length);
+    const count = Math.min(plan.fragments.count, room);
+    for (let i = 0; i < count; i++) {
+      const way = new THREE.Vector3(this.rng.gaussian(), this.rng.gaussian(), this.rng.gaussian()).normalize();
+      // Thrown away from the hull more than into it.
+      if (way.dot(outward) < 0 && i % 3 !== 0) way.negate();
+      const speed = plan.fragments.speed * (0.5 + this.rng.next());
+      const hot = i % 2 === 0;
+      this.spark(position.clone().addScaledVector(way, plan.radius * 0.2), way.multiplyScalar(speed).add(velocity), hot ? 0.45 + this.rng.next() * 0.4 : 1.0 + this.rng.next() * 1.3,
+        plan.radius * (hot ? 0.12 : 0.09), plan.radius * 0.015, this.fireTex, hot ? 0xfff2d6 : 0xffa24a);
     }
-    for (let i = 0; i < (payloadDamage >= 200 ? 10 : 3); i++) {
-      const jet = new THREE.Vector3(this.rng.gaussian(), this.rng.gaussian(), this.rng.gaussian()).normalize();
-      const origin = position.clone().addScaledVector(jet, Math.min(size * 0.5, length * 0.08));
-      this.spark(origin, jet.multiplyScalar(size * 1.8).add(velocity), 1.0 + this.rng.next() * 1.4, size * 0.22, size * 0.04, this.fireTex, 0xffd6a0);
-      if (i < 3) this.spark(origin, velocity.clone().add(new THREE.Vector3(0, size * 0.18, 0)), 2.0 + this.rng.next(), size * 0.4, size * 1.6, this.smokeTex, 0x8f99a6);
+    if (plan.light.intensity > this.flashLight.intensity) {
+      this.flashLight.position.copy(position).addScaledVector(outward, plan.radius * (plan.kind === 'external' ? 0.6 : 1.2));
+      this.flashLight.color.setHex(plan.kind === 'external' ? 0xf4f8ff : 0xffe2b8);
+      this.flashLight.intensity = plan.light.intensity * this.nuclear.flashScale;
+      this.flashLightLife = plan.light.life;
     }
+    this.onDetonation?.(moment);
   }
 
   /** The discharge of a gun whose round carries a blast: a flash in the round's own colour and a ring thrown back off the muzzle. */
@@ -528,6 +565,7 @@ export class EffectsSystem {
     }
     this.debris = keepD;
     this.barriers.update(dt);
+    this.nuclear.update(dt);
     if (this.flashLightLife > 0) {
       this.flashLightLife -= dt;
       this.flashLight.intensity *= Math.max(0, 1 - dt * 3);
@@ -566,6 +604,7 @@ export class EffectsSystem {
    */
   setHdrScene(boost: number): void {
     this.barriers.hdr = true;
+    this.nuclear.setHdr(boost);
     this.beamCoreMatReaper.color.setRGB(1.0 * boost, 0.42 * boost, 0.3 * boost);
     this.beamCoreMatThanix.color.setRGB(0.4 * boost, 0.62 * boost, 1.0 * boost);
   }
@@ -599,6 +638,7 @@ export class EffectsSystem {
     this.fragments = [];
     this.drawFragments();
     this.barriers.clear();
+    this.nuclear.clear();
     for (const ring of this.nuclearRings) { this.group.remove(ring.mesh); ring.mesh.visible = false; this.ringPool.push(ring.mesh); }
     this.nuclearRings = [];
     this.setBeams([]);

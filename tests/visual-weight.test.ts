@@ -3,7 +3,7 @@ import { buildScenario } from '@/scenarios';
 import { BattleSimulation } from '@/simulation/battle';
 import {
   explosionSize, explosionSmoke, farPointBrightness, HEAVY_HIT, impactSize, impactSparks, MAIN_CALIBRE, muzzleFlashSize,
-  BELT_CALIBRE, BELT_INTERVAL, pointDefenceBrightness, SMALL_CRAFT_LENGTH, tracerShown, tracerSize,
+  BELT_CALIBRE, BELT_INTERVAL, HEAVIEST_CALIBRE, HEAVY_CALIBRE, heavyShare, pointDefenceBrightness, SMALL_CRAFT_LENGTH, tracerShown, tracerSize,
 } from '@/rendering/visualWeight';
 import { getShipTemplate } from '@/rendering/ships';
 import { WEAPONS } from '@/data/weapons';
@@ -24,7 +24,15 @@ const before = (calibre: number) => (calibre >= MAIN_CALIBRE ? { width: 1.1, len
 describe('visual weight of weapon fire', () => {
   it('a main-battery slug is drawn as it was; lighter rounds are finer the lighter they are', () => {
     expect(tracerSize(MAIN_CALIBRE)).toEqual({ width: 1.1, length: 1.3 });
-    expect(tracerSize(40000)).toEqual({ width: 1.1, length: 1.3 });
+    // A dreadnought's slug and everything up to twice it are one size; the guns built to kill capital ships are drawn
+    // larger by the logarithm of their damage (26 Nov 2026: every round from 600 to 520,000 used to be this size).
+    expect(tracerSize(1000)).toEqual({ width: 1.1, length: 1.3 });
+    expect(tracerSize(HEAVY_CALIBRE)).toEqual({ width: 1.1, length: 1.3 });
+    const ladder = [WEAPONS.alliance_dn_main, WEAPONS.cerberus_hades_spinal, WEAPONS.aegis_nova_command, WEAPONS.valkyrie_nova, WEAPONS.kronos_lance].map((w) => tracerSize(w.damage).width);
+    for (let i = 1; i < ladder.length; i++) expect(ladder[i]).toBeGreaterThan(ladder[i - 1]);
+    expect(ladder[4]).toBeCloseTo(1.8, 6);
+    expect(ladder[4] / ladder[0]).toBeLessThan(1.7); // heavier, not a different kind of thing: its warhead is what tells them apart
+    expect(heavyShare(600)).toBe(0); expect(heavyShare(HEAVIEST_CALIBRE)).toBe(1); expect(heavyShare(1e9)).toBe(1);
     const fighter = tracerSize(WEAPONS.fighter_gun.damage), frigate = tracerSize(88), cruiser = tracerSize(199);
     // A fighter's cannon (6 damage a round): an 8 m streak where it was 45 m.
     expect(fighter.width).toBeLessThan(0.1);
@@ -77,7 +85,12 @@ describe('visual weight of weapon fire', () => {
     // fire under half its area.
     expect(mainNow / allNow).toBeGreaterThan(2 * mainBefore / allBefore);
     expect(allNow / allBefore).toBeLessThan(0.45);
-    expect(mainNow).toBeCloseTo(mainBefore, 6);
+    // Main rounds were exactly what they had been until 26 Nov 2026. A round heavier than a dreadnought's slug is now
+    // drawn larger by the logarithm of its damage, and under Prime/Apex the dreadnoughts' hyper-mass accelerator
+    // (4,000 a round) is one: measured 16 % more area for the main guns. A canon dreadnought's slug is unchanged.
+    expect(mainNow).toBeGreaterThanOrEqual(mainBefore);
+    expect(mainNow).toBeLessThan(mainBefore * 1.3);
+    expect(tracerSize(WEAPONS.alliance_dn_main.damage)).toEqual(before(WEAPONS.alliance_dn_main.damage));
     expect(fighterNow / allNow).toBeLessThan(0.08);
     // Drawn round for round they would take about three times as much of the picture (how much that is moves with
     // how many fighters are firing at the looks: 15 % and 17 % at this seed as battles changed).
@@ -104,7 +117,9 @@ describe('visual weight of flashes', () => {
 
   it('main guns flash as they did; lighter guns flash in proportion to their round', () => {
     expect(muzzleFlashSize(MAIN_CALIBRE, false)).toBe(3.6);
-    expect(muzzleFlashSize(40000, false)).toBe(3.6);
+    expect(muzzleFlashSize(1000, false)).toBe(3.6);
+    expect(muzzleFlashSize(WEAPONS.valkyrie_nova.damage, false)).toBeGreaterThan(3.6 * 1.4);
+    expect(muzzleFlashSize(WEAPONS.kronos_lance.damage, false)).toBeCloseTo(3.6 * 1.6, 6);
     expect(muzzleFlashSize(900, true)).toBe(1.8);
     const fighter = muzzleFlashSize(WEAPONS.fighter_gun.damage, false), frigate = muzzleFlashSize(88, false), cruiser = muzzleFlashSize(199, false);
     // A fighter's cannon: a flash that grows to 19 m, where it grew to 156 m.

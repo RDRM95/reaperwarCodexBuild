@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — long range, the opening volley, nuclear detonations
+
+- Conventional spinal guns out-range the Reaper beam (a dreadnought's 74 km, a cruiser's 60, against 54) and a fleet opens with them together: each kind of forward spinal gun in a fleet holds until most bear, then fires within 0.7 s, each gun at its own moment. A fleet that has not yet joined the battle comes on as one formation with its screen drawn in to its gun line. Reapers are unchanged. Measured: the allied line fires first in every standard battle (it never did); canon battles are still Reaper victories, with the Reapers hurt more. See `docs/apex/OPENING_VOLLEY_2026-11-26.md`.
+- Nuclear detonations have their own picture in vacuum: a flash, luminous vapour that cools in a second or two, fragments where hull was struck, the camera's exposure answering. A HADES penetrator's warhead goes off a beat after the strike, inside the hull, as light through the plating, in five tiers that differ in kind; an external warhead (the two missiles that carry one) stands off the surface that stopped it. Two draw calls for all of them. See `docs/apex/NUCLEAR_DETONATIONS_2026-11-26.md`.
+- The guns built to kill capital ships are drawn heavier in flight and at the muzzle (HADES gun, Aegis, NOVA Array, KRONOS Lance).
+- New sounds for nuclear detonations. Settings → Audio → Sound in space: Observer or Silent vacuum.
+- Settings → Graphics → Flashes (Full or Reduced) and Camera shake (Full, Half, Off).
+
 ## Unreleased — the bridge
 
 - The Cockpit camera on a warship stands on a modelled bridge: a commanding officer's deck and rail, a helm pit, crew stations, windows round the bow, in three sizes and seven navies' fittings. Its displays and tactical plot read the ship; its lamps answer damage and the ship's own guns. Six draw calls while in use, none otherwise. Settings → Graphics → Bridge interiors turns it off. See `docs/apex/BRIDGE_INTERIOR_2026-11-25.md`.

@@ -281,8 +281,11 @@ export class CameraRig {
 
   }
 
+  /** How much of any shake is kept, 0 to 1: the camera-shake setting. */
+  shakeScale = 1;
+
   addShake(amount: number): void {
-    this.shake = Math.min(1, this.shake + amount);
+    this.shake = Math.min(1, this.shake + amount * this.shakeScale);
   }
 
   // --- Input hooks (called by the controller).

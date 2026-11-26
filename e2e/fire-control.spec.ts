@@ -167,10 +167,17 @@ test('a real HADES penetrating impact drives the nuclear flash and shock-ring re
       weapon: { ...gun.def, damage: 2000 }, pos: { x: target.pos.x, y: target.pos.y, z: target.pos.z - target.radiusKm - 0.1 },
       prevPos: { ...target.pos }, vel: { x: 0, y: 0, z: gun.def.projectileSpeed }, ttl: 2, intendedTargetId: target.id });
     b.sim.step(); b.view.update(0.01, 1); b.view.render();
+    // The warhead goes off a beat after the strike (26 Nov 2026): at the strike it is waiting and nothing is drawn.
+    const nuclear = b.view.effects.nuclear, waiting = nuclear.waiting, early = nuclear.liveParts;
+    let heard = 0;
+    const listen = b.view.onDetonation; b.view.onDetonation = (m: any, d: number) => { heard++; listen?.(m, d); }; // eslint-disable-line @typescript-eslint/no-explicit-any
+    for (let i = 0; i < 12; i++) b.view.update(0.02, 1);
+    b.view.render();
     return { detonations: b.sim.events.filter(e => e.type === 'hades_detonation').length, rings: b.view.effects.nuclearRingCount,
-      glError: b.view.renderer.getContext().getError() };
+      waiting, early, heard, parts: nuclear.liveParts > 3, glError: b.view.renderer.getContext().getError() };
   });
-  expect(result).toEqual({ detonations: 1, rings: 1, glError: 0 });
+  // No ring of the kind a blast wave is drawn with: light inside the hull and shafts of it through the plating.
+  expect(result).toEqual({ detonations: 1, rings: 0, waiting: 1, early: 0, heard: 1, parts: true, glError: 0 });
   await page.screenshot({ path: testInfo.outputPath('hades-internal-detonation.png') });
   expect(errors).toEqual([]);
 });

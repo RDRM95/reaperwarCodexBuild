@@ -246,6 +246,17 @@ export class InteriorView {
     this.active = false;
   }
 
+  /**
+   * Something outside has lit the windows: a detonation in the battle. `strength` is how bright it is from here
+   * (1 is the ship's own main gun firing); the room's lamp at the windows takes it if it is the brightest thing
+   * lighting them, and it dies away as every flash here does.
+   */
+  flash(strength: number, colour: number): void {
+    if (!this.active || strength <= this.light.flash) return;
+    this.light.flash = Math.min(2.4, strength);
+    this.light.flashColour = colour;
+  }
+
   /** The windows' outlines in a picture of this size, as a CSS `clip-path`: for what is drawn over the battle and belongs in the windows. */
   windowClip(width: number, height: number): string {
     if (!this.active || !this.bridge) return '';
